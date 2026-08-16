@@ -4,13 +4,15 @@
 // Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
 }
 
 datasource db {
   provider = "postgresql"
 }
+
 model Problem {
   id              Int      @id
   title           String
@@ -22,5 +24,6 @@ model Problem {
   createdAt       DateTime @map("created_at")
   updatedAt       DateTime @map("updated_at")
 
+  @@index([difficultyLevel])
   @@map("problems")
 }
