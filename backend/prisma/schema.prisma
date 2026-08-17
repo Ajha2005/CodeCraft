@@ -19,6 +19,7 @@ model User {
   name         String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  submissions  Submission[]
 }
 
 model Problem {
@@ -31,6 +32,26 @@ model Problem {
   testCases       Json     @map("test_cases")
   createdAt       DateTime @map("created_at")
   updatedAt       DateTime @map("updated_at")
+  submissions  Submission[]
   @@index([difficultyLevel])
   @@map("problems")
+}
+
+model Submission {
+  id          String   @id @default(uuid())
+  userId      String
+  problemId   Int
+  code        String
+  language    String
+  verdict     String   @default("PENDING")
+  totalPassed Int      @default(0)
+  totalTests  Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id])
+  problem Problem @relation(fields: [problemId], references: [id])
+
+  @@index([userId])
+  @@index([problemId])
+  @@map("submissions")
 }
