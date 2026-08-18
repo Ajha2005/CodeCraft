@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import Editor from '@monaco-editor/react'
 import './App.css'
 
 const API_BASE = 'http://localhost:3000'
@@ -23,6 +24,13 @@ interface ProblemListResponse {
   offset: number
 }
 
+interface SubmissionResult {
+  id: string
+  verdict: string
+  totalPassed: number
+  totalTests: number
+}
+
 function App() {
   const [problems, setProblems] = useState<ProblemSummary[]>([])
   const [total, setTotal] = useState(0)
@@ -32,6 +40,12 @@ function App() {
   const [selectedProblem, setSelectedProblem] = useState<ProblemDetail | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const [userId, setUserId] = useState('7cca2cb9-3acc-4606-9b13-0c639c94a330')
+  const [code, setCode] = useState('def solve(*args, **kwargs):\n    pass\n')
+  const [submitting, setSubmitting] = useState(false)
+  const [submissionResult, setSubmissionResult] = useState<SubmissionResult | null>(null)
+  const [submitError, setSubmitError] = useState('')
 
   useEffect(() => {
     if (selectedProblem) return
@@ -61,6 +75,9 @@ function App() {
   function openProblem(id: number) {
     setLoading(true)
     setError('')
+    setSubmissionResult(null)
+    setSubmitError('')
+    setCode('def solve(*args, **kwargs):\n    pass\n')
 
     fetch(`${API_BASE}/problems/${id}`)
       .then((res) => {
@@ -72,9 +89,57 @@ function App() {
       .finally(() => setLoading(false))
   }
 
+  function pollSubmission(id: string) {
+    const interval = setInterval(() => {
+      fetch(`${API_BASE}/submissions/${id}`)
+        .then((res) => res.json())
+        .then((data: SubmissionResult) => {
+          setSubmissionResult(data)
+          if (data.verdict !== 'PENDING') {
+            clearInterval(interval)
+          }
+        })
+        .catch(() => clearInterval(interval))
+    }, 1000)
+  }
+
+  function handleSubmit() {
+    if (!selectedProblem) return
+    setSubmitting(true)
+    setSubmitError('')
+    setSubmissionResult(null)
+
+    fetch(`${API_BASE}/submissions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId,
+        problemId: selectedProblem.id,
+        language: 'python',
+        code,
+      }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`)
+        return res.json()
+      })
+      .then((data: SubmissionResult) => {
+        setSubmissionResult(data)
+        pollSubmission(data.id)
+      })
+      .catch((err) => setSubmitError(err.message))
+      .finally(() => setSubmitting(false))
+  }
+
+  function verdictColor(verdict: string) {
+    if (verdict === 'AC') return 'text-green-600'
+    if (verdict === 'PENDING') return 'text-yellow-600'
+    return 'text-red-600'
+  }
+
   if (selectedProblem) {
     return (
-      <div className="max-w-3xl mx-auto p-6 text-left">
+      <div className="max-w-5xl mx-auto p-6 text-left">
         <button
           onClick={() => setSelectedProblem(null)}
           className="mb-4 text-sm underline"
@@ -101,6 +166,48 @@ function App() {
             <li key={i} className="text-sm">{c}</li>
           ))}
         </ul>
+
+        <h2 className="text-lg font-medium mb-2">Your Solution</h2>
+        <div className="flex items-center gap-2 mb-2">
+          <label className="text-sm opacity-70">User ID (temp, no auth wired yet):</label>
+          <input
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
+            className="border rounded px-2 py-1 text-sm flex-1"
+          />
+        </div>
+
+        <div className="border rounded overflow-hidden mb-3">
+          <Editor
+            height="300px"
+            defaultLanguage="python"
+            value={code}
+            onChange={(value) => setCode(value || '')}
+            theme="vs-dark"
+            options={{ fontSize: 14, minimap: { enabled: false } }}
+          />
+        </div>
+
+        <button
+          onClick={handleSubmit}
+          disabled={submitting}
+          className="px-4 py-2 rounded bg-black text-white text-sm disabled:opacity-50 mb-4"
+        >
+          {submitting ? 'Submitting…' : 'Submit'}
+        </button>
+
+        {submitError && <p className="text-red-500 mb-4">{submitError}</p>}
+
+        {submissionResult && (
+          <div className="border rounded p-4">
+            <p className={`font-semibold ${verdictColor(submissionResult.verdict)}`}>
+              Verdict: {submissionResult.verdict}
+            </p>
+            <p className="text-sm opacity-70">
+              Passed: {submissionResult.totalPassed} / {submissionResult.totalTests}
+            </p>
+          </div>
+        )}
       </div>
     )
   }
