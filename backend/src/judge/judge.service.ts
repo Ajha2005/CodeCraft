@@ -23,10 +23,8 @@ export class JudgeService {
     const args = Object.entries(input)
       .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
       .join(', ');
-
     return `
 ${studentCode}
-
 import json
 result = solve(${args})
 print(json.dumps(result))
@@ -40,16 +38,29 @@ print(json.dumps(result))
   ) {
     const wrapper = this.buildPythonWrapper(studentCode, input);
     const result = await this.runCode(wrapper, 'python', '3.10.0');
-
     const actualOutput = result.run.stdout?.trim();
     const expected = JSON.stringify(expectedOutput);
+    const stderr = result.run.stderr;
+    const signal = result.run.signal;
+
+    let status: 'AC' | 'WA' | 'TLE' | 'RE';
+    if (signal === 'SIGKILL' || result.run.status === 'TO') {
+      status = 'TLE';
+    } else if (stderr && stderr.trim().length > 0) {
+      status = 'RE';
+    } else if (actualOutput === expected) {
+      status = 'AC';
+    } else {
+      status = 'WA';
+    }
 
     return {
-      passed: actualOutput === expected,
+      passed: status === 'AC',
+      status,
       input,
       actualOutput,
       expectedOutput: expected,
-      stderr: result.run.stderr,
+      stderr,
     };
   }
 
@@ -68,7 +79,17 @@ print(json.dumps(result))
     }
 
     const totalPassed = results.filter((r) => r.passed).length;
-    const verdict = totalPassed === testCases.length ? 'AC' : 'WA';
+
+    let verdict: 'AC' | 'WA' | 'TLE' | 'RE' = 'AC';
+    if (totalPassed === testCases.length) {
+      verdict = 'AC';
+    } else {
+      const hasRE = results.some((r) => r.status === 'RE');
+      const hasTLE = results.some((r) => r.status === 'TLE');
+      if (hasRE) verdict = 'RE';
+      else if (hasTLE) verdict = 'TLE';
+      else verdict = 'WA';
+    }
 
     return {
       verdict,
