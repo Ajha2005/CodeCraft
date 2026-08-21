@@ -13,9 +13,9 @@ export class SubmissionsProcessor extends WorkerHost {
   }
 
   async process(job: Job): Promise<any> {
-    const { submissionId, code, testCases } = job.data;
+    const { submissionId, code, testCases, language } = job.data;
 
-    const judgeResult = await this.judgeService.runAllTestCases(code, testCases);
+    const judgeResult = await this.judgeService.runAllTestCases(code, testCases, language);
 
     await this.prisma.submission.update({
       where: { id: submissionId },

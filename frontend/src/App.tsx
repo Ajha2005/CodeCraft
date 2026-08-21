@@ -15,6 +15,7 @@ interface ProblemDetail extends ProblemSummary {
   examples: { input: unknown; output: unknown }[]
   constraints: string[]
   testCases: { input: unknown; expected_output: unknown }[]
+  boilerplate: Record<string, string>
 }
 
 interface ProblemListResponse {
@@ -38,6 +39,7 @@ function App() {
   const [limit] = useState(20)
   const [difficulty, setDifficulty] = useState('')
   const [selectedProblem, setSelectedProblem] = useState<ProblemDetail | null>(null)
+  const [language, setLanguage] = useState('python')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -84,7 +86,10 @@ function App() {
         if (!res.ok) throw new Error(`Request failed: ${res.status}`)
         return res.json()
       })
-      .then((data: ProblemDetail) => setSelectedProblem(data))
+      .then((data: ProblemDetail) => {
+        setSelectedProblem(data)
+        setCode(data.boilerplate[language] || 'def solve(*args, **kwargs):\n    pass\n')
+      })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
   }
@@ -115,7 +120,7 @@ function App() {
       body: JSON.stringify({
         userId,
         problemId: selectedProblem.id,
-        language: 'python',
+        language,
         code,
       }),
     })
@@ -177,10 +182,27 @@ function App() {
           />
         </div>
 
+        <div className="flex items-center gap-2 mb-2">
+          <label className="text-sm opacity-70">Language:</label>
+          <select
+            value={language}
+            onChange={(e) => {
+              const newLang = e.target.value
+              setLanguage(newLang)
+              if (selectedProblem) {
+                setCode(selectedProblem.boilerplate[newLang] || '')
+              }
+            }}
+            className="border rounded px-2 py-1 text-sm"
+          >
+            <option value="python">Python</option>
+            <option value="c++">C++</option>
+          </select>
+        </div>
         <div className="border rounded overflow-hidden mb-3">
           <Editor
             height="300px"
-            defaultLanguage="python"
+            language={language === 'c++' ? 'cpp' : language}
             value={code}
             onChange={(value) => setCode(value || '')}
             theme="vs-dark"

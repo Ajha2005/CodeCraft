@@ -31,6 +31,7 @@ export class SubmissionsService {
     await this.submissionsQueue.add('judge', {
       submissionId: submission.id,
       code,
+      language,
       testCases: problem.testCases,
     });
 
