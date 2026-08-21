@@ -1,0 +1,29 @@
+site_name: CodeCraft
+site_description: A Gamified DSA Practice Platform for Thapar Institute of Engineering & Technology
+repo_url: https://github.com/Ajha2005/CodeCraft
+repo_name: CodeCraft
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+  features:
+    - navigation.tabs
+    - navigation.top
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Product Vision: vision.md
+  - Requirements: requirements.md
+  - System Architecture: architecture.md
+  - Database Design: database-design.md
+  - Problem Dataset: dataset.md
+  - Territory & Scoring: scoring.md
+  - Anti-Cheating System: anti-cheating.md
+  - Real-Time Contests: contests.md
+  - Security: security.md
+  - Roadmap: roadmap.md
+  - Team & Progress: team-progress.md
