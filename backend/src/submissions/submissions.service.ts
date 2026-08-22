@@ -17,7 +17,6 @@ export class SubmissionsService {
     if (!problem) {
       throw new Error('Problem not found');
     }
-
     const submission = await this.prisma.submission.create({
       data: {
         userId,
@@ -27,14 +26,14 @@ export class SubmissionsService {
         verdict: 'PENDING',
       },
     });
-
     await this.submissionsQueue.add('judge', {
       submissionId: submission.id,
       code,
       language,
       testCases: problem.testCases,
+      userId,
+      problemId,
     });
-
     return submission;
   }
 

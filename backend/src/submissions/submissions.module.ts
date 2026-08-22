@@ -5,11 +5,13 @@ import { SubmissionsController } from './submissions.controller';
 import { SubmissionsProcessor } from './submissions.processor';
 import { PrismaModule } from '../prisma/prisma.module';
 import { JudgeModule } from '../judge/judge.module';
+import { ScoringModule } from '../scoring/scoring.module';
 
 @Module({
   imports: [
     PrismaModule,
     JudgeModule,
+    ScoringModule,
     BullModule.registerQueue({
       name: 'submissions',
     }),

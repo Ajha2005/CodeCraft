@@ -1,17 +1,15 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 // Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
-provider     = "prisma-client"
+  provider     = "prisma-client"
   output       = "../generated/prisma"
   moduleFormat = "cjs"
 }
-
 datasource db {
   provider = "postgresql"
 }
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -19,7 +17,10 @@ model User {
   name         String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-  submissions  Submission[]
+
+  submissions        Submission[]
+  territoryOwnerships TerritoryOwnership[]
+  dailyProgress      DailyProgress[]
 }
 
 model Problem {
@@ -32,7 +33,9 @@ model Problem {
   testCases       Json     @map("test_cases")
   createdAt       DateTime @map("created_at")
   updatedAt       DateTime @map("updated_at")
-  submissions  Submission[]
+
+  submissions Submission[]
+
   @@index([difficultyLevel])
   @@map("problems")
 }
@@ -51,7 +54,65 @@ model Submission {
   user    User    @relation(fields: [userId], references: [id])
   problem Problem @relation(fields: [problemId], references: [id])
 
+  performanceScore PerformanceScore?
+
   @@index([userId])
   @@index([problemId])
   @@map("submissions")
+}
+
+model PerformanceScore {
+  id                String   @id @default(uuid())
+  submissionId      String   @unique
+  difficultyWeight  Float
+  correctness       Float
+  attemptsPenalty   Float
+  timeEfficiency    Float
+  totalScore        Float
+  createdAt         DateTime @default(now())
+
+  submission Submission @relation(fields: [submissionId], references: [id])
+
+  @@map("performance_scores")
+}
+
+model Territory {
+  id        String   @id @default(uuid())
+  name      String
+  tier      String   @default("OUTPOST")
+  baseValue Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ownerships TerritoryOwnership[]
+
+  @@map("territories")
+}
+
+model TerritoryOwnership {
+  id           String    @id @default(uuid())
+  territoryId  String
+  userId       String
+  sourceType   String    @default("solve")
+  assignedAt   DateTime  @default(now())
+  closedAt     DateTime?
+
+  territory Territory @relation(fields: [territoryId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@index([territoryId])
+  @@index([userId])
+  @@map("territory_ownerships")
+}
+
+model DailyProgress {
+  id              String   @id @default(uuid())
+  userId          String
+  date            DateTime @db.Date
+  qualifyingCount Int      @default(0)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, date])
+  @@map("daily_progress")
 }
