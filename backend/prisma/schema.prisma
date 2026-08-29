@@ -12,6 +12,7 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -19,4 +20,135 @@ model User {
   name         String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  territoryCellOwnerships TerritoryCellOwnership[]
+  submissions        Submission[]
+  territoryOwnerships TerritoryOwnership[]
+  dailyProgress      DailyProgress[]
+}
+
+model Problem {
+  id              Int      @id
+  title           String
+  description     String
+  difficultyLevel String   @map("difficulty_level")
+  examples        Json
+  constraints     Json
+  testCases       Json     @map("test_cases")
+  createdAt       DateTime @map("created_at")
+  updatedAt       DateTime @map("updated_at")
+
+  submissions Submission[]
+
+  @@index([difficultyLevel])
+  @@map("problems")
+}
+
+model Submission {
+  id          String   @id @default(uuid())
+  userId      String
+  problemId   Int
+  code        String
+  language    String
+  verdict     String   @default("PENDING")
+  totalPassed Int      @default(0)
+  totalTests  Int      @default(0)
+  createdAt   DateTime @default(now())
+  pointsAwarded   Boolean  @default(false)
+  noPointsReason  String?  // 'ALREADY_SOLVED' | 'DAILY_LIMIT' | null
+  user    User    @relation(fields: [userId], references: [id])
+  problem Problem @relation(fields: [problemId], references: [id])
+
+  performanceScore PerformanceScore?
+
+  @@index([userId])
+  @@index([problemId])
+  @@map("submissions")
+}
+
+model PerformanceScore {
+  id                String   @id @default(uuid())
+  submissionId      String   @unique
+  difficultyWeight  Float
+  correctness       Float
+  attemptsPenalty   Float
+  timeEfficiency    Float
+  totalScore        Float
+  createdAt         DateTime @default(now())
+
+  submission Submission @relation(fields: [submissionId], references: [id])
+
+  @@map("performance_scores")
+}
+
+model Territory {
+ id         String   @id @default(uuid())
+  name       String
+  tier       String   @default("OUTPOST")
+  baseValue  Float    @default(0)
+  svgPathId  String   @unique
+  ownerColor String?  @default("#94a3b8")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  ownerships TerritoryOwnership[]
+  cells TerritoryCell[]  
+  @@map("territories") 
+
+}
+
+model TerritoryOwnership {
+  id           String    @id @default(uuid())
+  territoryId  String
+  userId       String
+  sourceType   String    @default("solve")
+  assignedAt   DateTime  @default(now())
+  closedAt     DateTime?
+
+  territory Territory @relation(fields: [territoryId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@index([territoryId])
+  @@index([userId])
+  @@map("territory_ownerships")
+}
+
+model DailyProgress {
+  id              String   @id @default(uuid())
+  userId          String
+  date            DateTime @db.Date
+  qualifyingCount Int      @default(0)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, date])
+  @@map("daily_progress")
+}
+
+model TerritoryCell {
+  id          String   @id @default(uuid())
+  territoryId String
+  row         Int
+  col         Int
+
+  territory  Territory               @relation(fields: [territoryId], references: [id])
+  ownerships TerritoryCellOwnership[]
+
+  @@unique([territoryId, row, col])
+  @@index([territoryId])
+  @@map("territory_cells")
+}
+
+model TerritoryCellOwnership {
+  id         String    @id @default(uuid())
+  cellId     String
+  userId     String
+  sourceType String
+  createdAt  DateTime  @default(now())
+  closedAt   DateTime?
+
+  cell TerritoryCell @relation(fields: [cellId], references: [id])
+  user User          @relation(fields: [userId], references: [id])
+
+  @@index([cellId])
+  @@index([userId])
+  @@map("territory_cell_ownerships")
 }

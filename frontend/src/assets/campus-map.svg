@@ -1,0 +1,48 @@
+<svg width="3018" height="1597" viewBox="0 0 3018 1597" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path id="faculty-residence" data-tier="OUTPOST" d="M0.50618 26.5L332.506 38.9073V938.44L11.5062 955.5L0.50618 26.5Z" stroke="black"/>
+<path id="m-hostel" data-tier="SETTLEMENT" d="M555.006 1022H62.5062V1314.5H555.006V1022Z" stroke="black"/>
+<path id="d-hostel" data-tier="STRONGHOLD" d="M332.506 1343H94.5062V1590H332.506V1343Z" stroke="black"/>
+<path id="j-hostel" data-tier="CITADEL" d="M1050.51 1024H839.506V1291H1050.51V1024Z" stroke="black"/>
+<path id="b-hostel" data-tier="OUTPOST" d="M1050.51 1358H831.506V1579H1050.51V1358Z" stroke="black"/>
+<path id="synth-track" data-tier="SETTLEMENT" d="M638.006 546H373.006V946H638.006V546Z" stroke="black"/>
+<path id="cos-market" data-tier="STRONGHOLD" d="M855.256 564.5H657.256V928.5H855.256V564.5Z" stroke="black"/>
+<path id="fete-area" data-tier="CITADEL" d="M1267.01 579H878.006V947.5H1267.01V579Z" stroke="black"/>
+<path id="cricket-ground" data-tier="OUTPOST" d="M1238.51 302.5H898.506V564.5H1238.51V302.5Z" stroke="black"/>
+<path id="k-hostel" data-tier="SETTLEMENT" d="M1245.01 65.5H962.006V256H1245.01V65.5Z" stroke="black"/>
+<path id="sports-complex" data-tier="STRONGHOLD" d="M1597.51 585H1329.01V930H1597.51V585Z" stroke="black"/>
+<path id="l-hostel" data-tier="CITADEL" d="M1826.51 47H1628.51V391H1826.51V47Z" stroke="black"/>
+<path id="eg-hostel" data-tier="OUTPOST" d="M1799.51 614H1620.01V958.5H1799.51V614Z" stroke="black"/>
+<path id="ni-hostel" data-tier="SETTLEMENT" d="M1995.01 609H1831.51V941H1995.01V609Z" stroke="black"/>
+<path id="polytech" data-tier="STRONGHOLD" d="M2181.01 5H1869.51V162.5H2181.01V5Z" stroke="black"/>
+<path id="lt" data-tier="CITADEL" d="M2264.01 744H2092.01V866H2264.01V744Z" stroke="black"/>
+<path id="pg2-hostel" data-tier="OUTPOST" d="M1485.51 1323H1340.51V1572H1485.51V1323Z" stroke="black"/>
+<path id="nirvana" data-tier="SETTLEMENT" d="M1799.51 1016H1342.01V1286H1799.51V1016Z" stroke="black"/>
+<path id="tan-g-block" data-tier="STRONGHOLD" d="M2244.51 1006.5H1888.51V1333.5H2244.51V1006.5Z" stroke="black"/>
+<path id="bcd-block" data-tier="CITADEL" d="M2618.01 1001.5H2292.01V1263.5H2618.01V1001.5Z" stroke="black"/>
+<path id="ef-block" data-tier="OUTPOST" d="M2726.01 1004.5H2627.51V1222.5H2726.01V1004.5Z" stroke="black"/>
+<path id="tslas" data-tier="SETTLEMENT" d="M2996.51 299H2621.51V685H2996.51V299Z" stroke="black"/>
+<path id="mech" data-tier="STRONGHOLD" d="M2789.51 724H2452.51V957H2789.51V724Z" stroke="black"/>
+<path id="elc-building" data-tier="CITADEL" d="M2999.51 709H2809.51V949H2999.51V709Z" stroke="black"/>
+<path id="library" data-tier="OUTPOST" d="M2275.01 867.5C2268.17 869.333 2241.11 879.1 2187.51 903.5V954H2424.01V882L2369.01 844L2275.01 867.5Z" stroke="black"/>
+<path id="gods-plan" data-tier="SETTLEMENT" d="M808.006 1024H571.506V1323H808.006V1024Z" stroke="black"/>
+<path id="guest-house" data-tier="STRONGHOLD" d="M2250.01 1351.5H1777.01V1581H2250.01V1351.5Z" stroke="black"/>
+<path id="main-audi" data-tier="CITADEL" d="M2579.01 1283H2297.01V1572H2579.01V1283Z" stroke="black"/>
+<path id="parking" data-tier="OUTPOST" d="M2662.01 1303.5H2608.51V1570H2726.51V1240H2684.51L2662.01 1303.5Z" stroke="black"/>
+<path id="main-gate" data-tier="SETTLEMENT" d="M3017.01 1009H2747.01V1567.5L3017.01 1575.5V1009Z" stroke="black"/>
+<path id="csed" data-tier="STRONGHOLD" d="M2281.01 582.5H2082.01V718H2281.01V582.5Z" stroke="black"/>
+<path id="venture-lab" data-tier="CITADEL" d="M2605.01 300.5H2418.51V647.5H2605.01V300.5Z" stroke="black"/>
+<path id="forest-area" data-tier="OUTPOST" d="M931.006 0.5H389.506V521H868.506L862.506 266.5H931.006V0.5Z" stroke="black"/>
+<path id="coming-soon" data-tier="SETTLEMENT" d="M2260.51 262.5V6.5H2998.01V262.5H2260.51Z" stroke="black"/>
+<path id="treatment-area" data-tier="STRONGHOLD" d="M1553.01 46.5H1322.51V545H1553.01V46.5Z" stroke="black"/>
+<path id="staff-quarter-1" data-tier="CITADEL" d="M2184.01 184H1873.01V326H2184.01V184Z" stroke="black"/>
+<path id="staff-quarter-2" data-tier="OUTPOST" d="M1845.01 406H1627.01V551H1845.01V406Z" stroke="black"/>
+<path id="health-centre" data-tier="SETTLEMENT" d="M2244.51 345.5H1882.01V511H2244.51V345.5Z" stroke="black"/>
+<path id="waterbody" data-tier="STRONGHOLD" d="M2435.51 730H2286.01V826.5H2435.51V730Z" stroke="black"/>
+<path id="lp" data-tier="CITADEL" d="M2176.51 882.5H2009.01V952H2176.51V882.5Z" stroke="black"/>
+<path id="c-hostel" data-tier="OUTPOST" d="M547.006 1357.5H361.506V1596H547.006V1357.5Z" stroke="black"/>
+<path id="o-hostel" data-tier="SETTLEMENT" d="M797.006 1340.5H583.506V1585H797.006V1340.5Z" stroke="black"/>
+<path id="pg1-hostel" data-tier="STRONGHOLD" d="M1634.01 1323.5H1502.01V1576.5H1634.01V1323.5Z" stroke="black"/>
+<path id="q-hostel" data-tier="CITADEL" d="M1763.51 1332H1654.01V1582H1763.51V1332Z" stroke="black"/>
+<path id="a-hostel" data-tier="OUTPOST" d="M1280.01 1354.5H1069.51V1576.5H1280.01V1354.5Z" stroke="black"/>
+<path id="h-hostel" data-tier="SETTLEMENT" d="M1272.01 1026H1072.51V1290H1272.01V1026Z" stroke="black"/>
+</svg>

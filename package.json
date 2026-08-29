@@ -1,0 +1,5 @@
+{
+  "devDependencies": {
+    "point-in-svg-polygon": "^1.0.25"
+  }
+}

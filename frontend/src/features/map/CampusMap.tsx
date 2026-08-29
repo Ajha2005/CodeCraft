@@ -1,0 +1,233 @@
+import { useEffect, useRef } from 'react';
+import type { TerritoryDto } from '../../types/territory';
+import type { TerritoryCellDto } from '../../lib/api';
+
+interface CampusMapProps {
+  svgMarkup: string;
+  territories: Record<string, TerritoryDto>;
+  cellsByTerritory: Record<string, TerritoryCellDto[]>;
+  showCellDetail: boolean;
+  onTerritoryClick?: (territory: TerritoryDto) => void;
+  onTerritoryHover?: (territory: TerritoryDto | null) => void;
+}
+
+const TIER_STROKE_WIDTH: Record<string, string> = {
+  OUTPOST: '1',
+  SETTLEMENT: '1.5',
+  STRONGHOLD: '2',
+  CITADEL: '2.5',
+};
+
+const BRASS = '#C9A227';
+const STONE_FILL = '#2B323D';
+const STONE_STROKE = '#4A5568';
+const LABEL_UNCLAIMED_COLOR = '#CBD5E1';
+const LABEL_CLAIMED_COLOR = '#0A0E14';
+const MIN_LABEL_WIDTH = 45;
+const MIN_LABEL_HEIGHT = 24;
+const CELL_SIZE = 18.5; // must match generate-grid.ts
+
+function truncateToFit(name: string, boxWidth: number, fontSize: number): string {
+  const approxCharWidth = fontSize * 0.58;
+  const maxChars = Math.floor(boxWidth / approxCharWidth);
+  if (name.length <= maxChars) return name;
+  if (maxChars <= 1) return '';
+  return name.slice(0, maxChars - 1).trimEnd() + '…';
+}
+
+export function CampusMap({
+  svgMarkup,
+  territories,
+  cellsByTerritory,
+  showCellDetail,
+  onTerritoryClick,
+  onTerritoryHover,
+}: CampusMapProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Whole-building fill/stroke — base layer, always applied.
+  // Fill is suppressed once cell detail is showing (cells cover it instead).
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    for (const [svgPathId, territory] of Object.entries(territories)) {
+      const pathEl = container.querySelector<SVGPathElement>(`#${CSS.escape(svgPathId)}`);
+      if (!pathEl) continue;
+
+      pathEl.style.stroke = STONE_STROKE;
+      pathEl.style.strokeWidth = TIER_STROKE_WIDTH[territory.tier] ?? '1';
+      pathEl.style.fill = showCellDetail ? 'none' : STONE_FILL;
+      pathEl.style.fillOpacity = '1';
+    }
+  }, [territories, showCellDetail]);
+
+  // Decorations: CITADEL corner brackets + name labels.
+  // Only shown zoomed OUT (!showCellDetail) — once cells are visible,
+  // per-building labels/reticles would just clutter the cell view.
+  useEffect(() => {
+    const container = containerRef.current;
+    const svg = container?.querySelector('svg');
+    if (!container || !svg) return;
+
+    svg.querySelectorAll('[data-decoration]').forEach((el) => el.remove());
+
+
+    for (const [svgPathId, territory] of Object.entries(territories)) {
+      const pathEl = container.querySelector<SVGPathElement>(`#${CSS.escape(svgPathId)}`);
+      if (!pathEl) continue;
+
+      const box = pathEl.getBBox();
+
+      if (territory.tier === 'CITADEL') {
+        const len = Math.min(box.width, box.height) * 0.18;
+        const corners = [
+          [box.x, box.y, 1, 1],
+          [box.x + box.width, box.y, -1, 1],
+          [box.x, box.y + box.height, 1, -1],
+          [box.x + box.width, box.y + box.height, -1, -1],
+        ] as const;
+
+        const reticle = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        reticle.setAttribute('data-decoration', `${svgPathId}-reticle`);
+        reticle.setAttribute('pointer-events', 'none');
+
+        for (const [x, y, dx, dy] of corners) {
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          line.setAttribute('d', `M ${x} ${y + len * dy} L ${x} ${y} L ${x + len * dx} ${y}`);
+          line.setAttribute('stroke', BRASS);
+          line.setAttribute('stroke-width', '2');
+          line.setAttribute('fill', 'none');
+          reticle.appendChild(line);
+        }
+        svg.appendChild(reticle);
+      }
+
+            if (box.width >= MIN_LABEL_WIDTH && box.height >= MIN_LABEL_HEIGHT) {
+        const fontSize = Math.min(14, Math.max(8, box.height * 0.16));
+        const label = truncateToFit(territory.name, box.width - 6, fontSize);
+        if (!label) continue;
+
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('data-decoration', `${svgPathId}-label`);
+        text.setAttribute('x', String(box.x + box.width / 2));
+        text.setAttribute('y', String(box.y + box.height / 2));
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'middle');
+        text.setAttribute('pointer-events', 'none');
+        text.setAttribute('font-family', "'Rajdhani', sans-serif");
+        text.setAttribute('font-weight', '600');
+        text.setAttribute('font-size', String(fontSize));
+        text.setAttribute('fill', showCellDetail ? '#F1F5F9' : (territory.ownerId ? LABEL_CLAIMED_COLOR : LABEL_UNCLAIMED_COLOR));
+        text.setAttribute('stroke', '#0A0E14');
+        text.setAttribute('stroke-width', '3');
+        text.setAttribute('paint-order', 'stroke');
+        text.textContent = label;
+        svg.appendChild(text);
+      }
+    }
+  }, [territories, showCellDetail]);
+
+  // Cell-level rendering — only when zoomed in enough.
+  useEffect(() => {
+    const container = containerRef.current;
+    const svg = container?.querySelector('svg');
+    if (!container || !svg) return;
+
+    svg.querySelectorAll('[data-cell-layer]').forEach((el) => el.remove());
+    svg.querySelectorAll('[data-cell-clip]').forEach((el) => el.remove());
+
+    if (!showCellDetail) return;
+    console.log('showCellDetail is true, cellsByTerritory keys:', Object.keys(cellsByTerritory));
+
+      for (const [svgPathId, territory] of Object.entries(territories)) {
+    const pathEl = container.querySelector<SVGPathElement>(`#${CSS.escape(svgPathId)}`);
+    const cells = cellsByTerritory[territory.id];
+    console.log(svgPathId, 'territory.id=', territory.id, 'pathEl found=', !!pathEl, 'cells found=', cells?.length ?? 0);
+    if (!pathEl || !cells || cells.length === 0) continue;
+
+      const box = pathEl.getBBox();
+      const clipId = `clip-${svgPathId}`;
+
+      const defs =
+        svg.querySelector('defs') ??
+        (() => {
+          const d = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+          svg.insertBefore(d, svg.firstChild);
+          return d;
+        })();
+
+      const clipPath = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath');
+      clipPath.setAttribute('id', clipId);
+      clipPath.setAttribute('data-cell-clip', svgPathId);
+      const clipUse = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+      clipUse.setAttribute('href', `#${svgPathId}`);
+      clipPath.appendChild(clipUse);
+      defs.appendChild(clipPath);
+
+      const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      group.setAttribute('data-cell-layer', svgPathId);
+      group.setAttribute('clip-path', `url(#${clipId})`);
+
+      for (const cell of cells) {
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', String(box.x + cell.col * CELL_SIZE));
+        rect.setAttribute('y', String(box.y + cell.row * CELL_SIZE));
+        rect.setAttribute('width', String(CELL_SIZE));
+        rect.setAttribute('height', String(CELL_SIZE));
+        rect.setAttribute('fill', cell.ownerId ? cell.ownerColor : STONE_FILL);
+        rect.setAttribute('fill-opacity', cell.ownerId ? '0.7' : '1');
+        rect.setAttribute('stroke', '#1a1e26');
+        rect.setAttribute('stroke-width', '0.5');
+        group.appendChild(rect);
+      }
+
+      svg.appendChild(group);
+    }
+  }, [territories, cellsByTerritory, showCellDetail]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleClick = (e: MouseEvent) => {
+      const target = (e.target as SVGElement).closest('path');
+      if (!target?.id) return;
+      const territory = territories[target.id];
+      if (territory && onTerritoryClick) onTerritoryClick(territory);
+    };
+
+    const handleMouseOver = (e: MouseEvent) => {
+      const target = (e.target as SVGElement).closest('path');
+      if (!target?.id) return;
+      const territory = territories[target.id];
+      if (territory && onTerritoryHover) onTerritoryHover(territory);
+    };
+
+    const handleMouseOut = () => {
+      if (onTerritoryHover) onTerritoryHover(null);
+    };
+
+    container.addEventListener('click', handleClick);
+    container.addEventListener('mouseover', handleMouseOver);
+    container.addEventListener('mouseout', handleMouseOut);
+
+    return () => {
+      container.removeEventListener('click', handleClick);
+      container.removeEventListener('mouseover', handleMouseOver);
+      container.removeEventListener('mouseout', handleMouseOut);
+    };
+  }, [territories, onTerritoryClick, onTerritoryHover]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="[&_svg]:w-full [&_svg]:h-auto [&_path]:transition-all [&_path]:duration-300 [&_path]:cursor-pointer"
+      style={{
+        background:
+          'repeating-linear-gradient(135deg, #0A0E14, #0A0E14 12px, #10161F 12px, #10161F 24px)',
+      }}
+      dangerouslySetInnerHTML={{ __html: svgMarkup }}
+    />
+  );
+}
