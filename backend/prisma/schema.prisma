@@ -1,14 +1,11 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 // Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
-provider     = "prisma-client"
+  provider     = "prisma-client"
   output       = "../generated/prisma"
   moduleFormat = "cjs"
 }
-
 datasource db {
   provider = "postgresql"
 }
@@ -20,11 +17,11 @@ model User {
   name         String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
   territoryCellOwnerships TerritoryCellOwnership[]
   submissions        Submission[]
   territoryOwnerships TerritoryOwnership[]
   dailyProgress      DailyProgress[]
-
 }
 
 model Problem {
@@ -92,8 +89,7 @@ model Territory {
   updatedAt  DateTime @updatedAt
   ownerships TerritoryOwnership[]
   cells TerritoryCell[]  
-  @@map("territories") 
-
+  @@map("territories")
 }
 
 model TerritoryOwnership {
@@ -153,3 +149,4 @@ model TerritoryCellOwnership {
   @@index([userId])
   @@map("territory_cell_ownerships")
 }
+

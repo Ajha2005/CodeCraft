@@ -136,69 +136,66 @@ export class SubmissionsProcessor extends WorkerHost {
   }
 
   private async assignTerritory(userId: string, tier: string) {
-  // Prefer any unclaimed cell in any territory of this tier
-  const unclaimedCell = await this.prisma.territoryCell.findFirst({
-    where: {
-      territory: { tier },
-      ownerships: { none: { closedAt: null } },
-    },
-    include: { territory: true },
-  });
+    // Prefer any unclaimed cell in any territory of this tier
+    const unclaimedCell = await this.prisma.territoryCell.findFirst({
+      where: {
+        territory: { tier },
+        ownerships: { none: { closedAt: null } },
+      },
+      include: { territory: true },
+    });
 
-  if (unclaimedCell) {
+    if (unclaimedCell) {
+      await this.prisma.territoryCellOwnership.create({
+        data: { cellId: unclaimedCell.id, userId, sourceType: 'solve' },
+      });
+      this.logger.log(
+        `Assigned unclaimed ${tier} cell ${unclaimedCell.id} (territory ${unclaimedCell.territoryId}) to user ${userId}`,
+      );
+      this.territoryGateway.broadcastCellUpdate({
+        territoryId: unclaimedCell.territoryId,
+        cellId: unclaimedCell.id,
+        row: unclaimedCell.row,
+        col: unclaimedCell.col,
+        ownerId: userId,
+        ownerColor: getColorForUser(userId),
+      });
+      return;
+    }
+
+    // Nothing unclaimed anywhere in this tier — contest a cell owned by someone else.
+    // Skip cells the user already owns themselves (no point re-capturing your own cell).
+    const contested = await this.prisma.territoryCell.findFirst({
+      where: {
+        territory: { tier },
+        ownerships: { some: { closedAt: null, NOT: { userId } } },
+      },
+      include: { territory: true, ownerships: { where: { closedAt: null } } },
+    });
+
+    if (!contested) {
+      this.logger.error(`No contestable ${tier} cells exist — seed data missing or all cells self-owned.`);
+      return;
+    }
+
+    const openOwnership = contested.ownerships[0];
+    await this.prisma.territoryCellOwnership.update({
+      where: { id: openOwnership.id },
+      data: { closedAt: new Date() },
+    });
     await this.prisma.territoryCellOwnership.create({
-      data: { cellId: unclaimedCell.id, userId, sourceType: 'solve' },
+      data: { cellId: contested.id, userId, sourceType: 'solve' },
     });
     this.logger.log(
-      `Assigned unclaimed ${tier} cell ${unclaimedCell.id} (territory ${unclaimedCell.territoryId}) to user ${userId}`,
+      `User ${userId} captured ${tier} cell ${contested.id} (territory ${contested.territoryId})`,
     );
     this.territoryGateway.broadcastCellUpdate({
-      territoryId: unclaimedCell.territoryId,
-      cellId: unclaimedCell.id,
-      row: unclaimedCell.row,
-      col: unclaimedCell.col,
+      territoryId: contested.territoryId,
+      cellId: contested.id,
+      row: contested.row,
+      col: contested.col,
       ownerId: userId,
       ownerColor: getColorForUser(userId),
     });
-    return;
   }
-
-  // Nothing unclaimed anywhere in this tier — contest a cell owned by someone else.
-  // Skip cells the user already owns themselves (no point re-capturing your own cell).
-  const contested = await this.prisma.territoryCell.findFirst({
-    where: {
-      territory: { tier },
-      ownerships: { some: { closedAt: null, NOT: { userId } } },
-    },
-    include: { territory: true, ownerships: { where: { closedAt: null } } },
-  });
-
-  if (!contested) {
-    this.logger.error(`No contestable ${tier} cells exist — seed data missing or all cells self-owned.`);
-    return;
-  }
-
-  const openOwnership = contested.ownerships[0];
-  await this.prisma.territoryCellOwnership.update({
-    where: { id: openOwnership.id },
-    data: { closedAt: new Date() },
-  });
-  await this.prisma.territoryCellOwnership.create({
-    data: { cellId: contested.id, userId, sourceType: 'solve' },
-  });
-  this.logger.log(
-    `User ${userId} captured ${tier} cell ${contested.id} (territory ${contested.territoryId})`,
-  );
-  this.territoryGateway.broadcastCellUpdate({
-    territoryId: contested.territoryId,
-    cellId: contested.id,
-    row: contested.row,
-    col: contested.col,
-    ownerId: userId,
-    ownerColor: getColorForUser(userId),
-  });
-}
-
-   
-
 }
