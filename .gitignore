@@ -3,4 +3,7 @@ dist
 generated
 
 # Keep environment variables out of version control
-.env
+.envjudge0/*.zip
+judge0/judge0-v1.13.1.zip.1
+judge0/*.zip
+judge0/judge0-v1.13.1.zip.1

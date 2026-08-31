@@ -1,5 +1,10 @@
 import 'dotenv/config';
+
+
 import { PrismaClient } from '../generated/prisma/client';
+
+
+
 import { PrismaPg } from '@prisma/adapter-pg';
 import { parse } from 'csv-parse/sync';
 import * as fs from 'fs';
@@ -16,6 +21,7 @@ function safeParseJson(field: string, rowId: string, fieldName: string) {
     return null;
   }
 }
+
 const TERRITORY_SEED: { svgPathId: string; name: string; tier: string }[] = [
   { svgPathId: 'faculty-residence', name: 'Faculty Residence', tier: 'OUTPOST' },
   { svgPathId: 'm-hostel', name: 'M Hostel', tier: 'SETTLEMENT' },
@@ -82,6 +88,8 @@ async function seedTerritories() {
   }
   console.log(`Territory seed complete: ${created} territories ensured.`);
 }
+
+
 async function main() {
   const csvPath = path.join(__dirname, 'seed-data', 'problems.csv');
   const raw = fs.readFileSync(csvPath, 'utf-8');
@@ -122,10 +130,10 @@ async function main() {
       skipped++;
     }
   }
+
   console.log(`\nSeed complete: ${succeeded} inserted, ${skipped} skipped`);
 
   await seedTerritories();
-  console.log(`\nSeed complete: ${succeeded} inserted, ${skipped} skipped`);
 }
 
 main()
