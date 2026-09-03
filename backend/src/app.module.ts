@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { ProblemsModule } from './problems/problems.module';
 import { JudgeModule } from './judge/judge.module';
 import { SubmissionsModule } from './submissions/submissions.module';
+import { ScoringModule } from './scoring/scoring.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { SubmissionsModule } from './submissions/submissions.module';
     ProblemsModule,
     JudgeModule,
     SubmissionsModule,
+    ScoringModule,
   ],
   controllers: [AppController],
   providers: [AppService],

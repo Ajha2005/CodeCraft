@@ -1,8 +1,17 @@
 import { useEffect, useState } from 'react'
 import Editor from '@monaco-editor/react'
 import './App.css'
+import confetti from 'canvas-confetti'
 
 const API_BASE = 'http://localhost:3000'
+
+interface ScoreResult {
+  difficultyWeight: number
+  correctness: number
+  attemptsPenalty: number
+  timeEfficiency: number
+  totalScore: number
+}
 
 interface ProblemSummary {
   id: number
@@ -32,7 +41,7 @@ interface SubmissionResult {
   totalTests: number
 }
 
-function App() {
+function ProblemsPage() {
   const [problems, setProblems] = useState<ProblemSummary[]>([])
   const [total, setTotal] = useState(0)
   const [offset, setOffset] = useState(0)
@@ -47,6 +56,7 @@ function App() {
   const [code, setCode] = useState('def solve(*args, **kwargs):\n    pass\n')
   const [submitting, setSubmitting] = useState(false)
   const [submissionResult, setSubmissionResult] = useState<SubmissionResult | null>(null)
+  const [scoreResult, setScoreResult] = useState<ScoreResult | null>(null)
   const [submitError, setSubmitError] = useState('')
 
   useEffect(() => {
@@ -78,6 +88,7 @@ function App() {
     setLoading(true)
     setError('')
     setSubmissionResult(null)
+    setScoreResult(null)
     setSubmitError('')
     setCode('def solve(*args, **kwargs):\n    pass\n')
 
@@ -94,6 +105,18 @@ function App() {
       .finally(() => setLoading(false))
   }
 
+  function fireCelebration(submissionId: string) {
+    confetti({
+      particleCount: 150,
+      spread: 90,
+      origin: { y: 0.6 },
+    })
+    fetch(`${API_BASE}/scoring/submission/${submissionId}`)
+      .then((res) => res.json())
+      .then((data: ScoreResult) => setScoreResult(data))
+      .catch(() => {})
+  }
+
   function pollSubmission(id: string) {
     const interval = setInterval(() => {
       fetch(`${API_BASE}/submissions/${id}`)
@@ -102,6 +125,9 @@ function App() {
           setSubmissionResult(data)
           if (data.verdict !== 'PENDING') {
             clearInterval(interval)
+            if (data.verdict === 'AC') {
+              fireCelebration(data.id)
+            }
           }
         })
         .catch(() => clearInterval(interval))
@@ -113,6 +139,7 @@ function App() {
     setSubmitting(true)
     setSubmitError('')
     setSubmissionResult(null)
+    setScoreResult(null)
 
     fetch(`${API_BASE}/submissions`, {
       method: 'POST',
@@ -230,6 +257,16 @@ function App() {
             </p>
           </div>
         )}
+        {submissionResult?.verdict === 'AC' && scoreResult && (
+          <div className="mt-4 border-2 border-green-400 rounded-lg p-4 bg-green-50">
+            <p className="text-lg font-bold text-green-700">🎉 Accepted! +{scoreResult.totalScore.toFixed(1)} pts</p>
+            <div className="text-sm opacity-80 mt-1 space-y-0.5">
+              <p>Difficulty weight: {scoreResult.difficultyWeight}</p>
+              <p>Attempts penalty: -{scoreResult.attemptsPenalty.toFixed(1)}</p>
+              <p>Time efficiency bonus: +{scoreResult.timeEfficiency.toFixed(1)}</p>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -295,4 +332,4 @@ function App() {
   )
 }
 
-export default App
+export default ProblemsPage
