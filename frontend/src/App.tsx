@@ -1,275 +1,29 @@
-import { useEffect, useState } from 'react'
-import Editor from '@monaco-editor/react'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import './App.css'
-
-const API_BASE = 'http://localhost:3000'
-
-interface ProblemSummary {
-  id: number
-  title: string
-  difficultyLevel: string
-}
-
-interface ProblemDetail extends ProblemSummary {
-  description: string
-  examples: { input: unknown; output: unknown }[]
-  constraints: string[]
-  testCases: { input: unknown; expected_output: unknown }[]
-}
-
-interface ProblemListResponse {
-  items: ProblemSummary[]
-  total: number
-  limit: number
-  offset: number
-}
-
-interface SubmissionResult {
-  id: string
-  verdict: string
-  totalPassed: number
-  totalTests: number
-}
+import ProblemsPage from './ProblemsPage'
+import LoginPage from './auth/LoginPage'
+import AuthCallback from './auth/AuthCallback'
+import { AuthProvider } from './auth/AuthContext'
+import ProtectedRoute from './auth/ProtectedRoute'
 
 function App() {
-  const [problems, setProblems] = useState<ProblemSummary[]>([])
-  const [total, setTotal] = useState(0)
-  const [offset, setOffset] = useState(0)
-  const [limit] = useState(20)
-  const [difficulty, setDifficulty] = useState('')
-  const [selectedProblem, setSelectedProblem] = useState<ProblemDetail | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  const [userId, setUserId] = useState('7cca2cb9-3acc-4606-9b13-0c639c94a330')
-  const [code, setCode] = useState('def solve(*args, **kwargs):\n    pass\n')
-  const [submitting, setSubmitting] = useState(false)
-  const [submissionResult, setSubmissionResult] = useState<SubmissionResult | null>(null)
-  const [submitError, setSubmitError] = useState('')
-
-  useEffect(() => {
-    if (selectedProblem) return
-
-    setLoading(true)
-    setError('')
-
-    const params = new URLSearchParams({
-      limit: String(limit),
-      offset: String(offset),
-    })
-    if (difficulty) params.set('difficulty', difficulty)
-
-    fetch(`${API_BASE}/problems?${params}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`Request failed: ${res.status}`)
-        return res.json()
-      })
-      .then((data: ProblemListResponse) => {
-        setProblems(data.items)
-        setTotal(data.total)
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false))
-  }, [offset, limit, difficulty, selectedProblem])
-
-  function openProblem(id: number) {
-    setLoading(true)
-    setError('')
-    setSubmissionResult(null)
-    setSubmitError('')
-    setCode('def solve(*args, **kwargs):\n    pass\n')
-
-    fetch(`${API_BASE}/problems/${id}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`Request failed: ${res.status}`)
-        return res.json()
-      })
-      .then((data: ProblemDetail) => setSelectedProblem(data))
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false))
-  }
-
-  function pollSubmission(id: string) {
-    const interval = setInterval(() => {
-      fetch(`${API_BASE}/submissions/${id}`)
-        .then((res) => res.json())
-        .then((data: SubmissionResult) => {
-          setSubmissionResult(data)
-          if (data.verdict !== 'PENDING') {
-            clearInterval(interval)
-          }
-        })
-        .catch(() => clearInterval(interval))
-    }, 1000)
-  }
-
-  function handleSubmit() {
-    if (!selectedProblem) return
-    setSubmitting(true)
-    setSubmitError('')
-    setSubmissionResult(null)
-
-    fetch(`${API_BASE}/submissions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId,
-        problemId: selectedProblem.id,
-        language: 'python',
-        code,
-      }),
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error(`Request failed: ${res.status}`)
-        return res.json()
-      })
-      .then((data: SubmissionResult) => {
-        setSubmissionResult(data)
-        pollSubmission(data.id)
-      })
-      .catch((err) => setSubmitError(err.message))
-      .finally(() => setSubmitting(false))
-  }
-
-  function verdictColor(verdict: string) {
-    if (verdict === 'AC') return 'text-green-600'
-    if (verdict === 'PENDING') return 'text-yellow-600'
-    return 'text-red-600'
-  }
-
-  if (selectedProblem) {
-    return (
-      <div className="max-w-5xl mx-auto p-6 text-left">
-        <button
-          onClick={() => setSelectedProblem(null)}
-          className="mb-4 text-sm underline"
-        >
-          ← Back to list
-        </button>
-        <h1 className="text-2xl font-semibold mb-1">{selectedProblem.title}</h1>
-        <p className="text-sm mb-4 opacity-70">{selectedProblem.difficultyLevel}</p>
-        <p className="mb-6 whitespace-pre-wrap">{selectedProblem.description}</p>
-
-        <h2 className="text-lg font-medium mb-2">Examples</h2>
-        {selectedProblem.examples.map((ex, i) => (
-          <pre
-            key={i}
-            className="bg-black/5 rounded p-3 mb-3 text-sm overflow-x-auto"
-          >
-{`Input: ${JSON.stringify(ex.input)}\nOutput: ${JSON.stringify(ex.output)}`}
-          </pre>
-        ))}
-
-        <h2 className="text-lg font-medium mb-2">Constraints</h2>
-        <ul className="list-disc pl-5 mb-6">
-          {selectedProblem.constraints.map((c, i) => (
-            <li key={i} className="text-sm">{c}</li>
-          ))}
-        </ul>
-
-        <h2 className="text-lg font-medium mb-2">Your Solution</h2>
-        <div className="flex items-center gap-2 mb-2">
-          <label className="text-sm opacity-70">User ID (temp, no auth wired yet):</label>
-          <input
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            className="border rounded px-2 py-1 text-sm flex-1"
-          />
-        </div>
-
-        <div className="border rounded overflow-hidden mb-3">
-          <Editor
-            height="300px"
-            defaultLanguage="python"
-            value={code}
-            onChange={(value) => setCode(value || '')}
-            theme="vs-dark"
-            options={{ fontSize: 14, minimap: { enabled: false } }}
-          />
-        </div>
-
-        <button
-          onClick={handleSubmit}
-          disabled={submitting}
-          className="px-4 py-2 rounded bg-black text-white text-sm disabled:opacity-50 mb-4"
-        >
-          {submitting ? 'Submitting…' : 'Submit'}
-        </button>
-
-        {submitError && <p className="text-red-500 mb-4">{submitError}</p>}
-
-        {submissionResult && (
-          <div className="border rounded p-4">
-            <p className={`font-semibold ${verdictColor(submissionResult.verdict)}`}>
-              Verdict: {submissionResult.verdict}
-            </p>
-            <p className="text-sm opacity-70">
-              Passed: {submissionResult.totalPassed} / {submissionResult.totalTests}
-            </p>
-          </div>
-        )}
-      </div>
-    )
-  }
-
   return (
-    <div className="max-w-3xl mx-auto p-6 text-left">
-      <h1 className="text-2xl font-semibold mb-4">Problems</h1>
-
-      <div className="flex gap-2 mb-4">
-        {['', 'Easy', 'Medium', 'Hard'].map((d) => (
-          <button
-            key={d || 'all'}
-            onClick={() => {
-              setDifficulty(d)
-              setOffset(0)
-            }}
-            className={`px-3 py-1 rounded text-sm border ${
-              difficulty === d ? 'bg-black text-white' : ''
-            }`}
-          >
-            {d || 'All'}
-          </button>
-        ))}
-      </div>
-
-      {error && <p className="text-red-500 mb-4">{error}</p>}
-      {loading && <p className="mb-4 opacity-60">Loading…</p>}
-
-      <ul className="divide-y divide-black/10 mb-4">
-        {problems.map((p) => (
-          <li key={p.id}>
-            <button
-              onClick={() => openProblem(p.id)}
-              className="w-full text-left py-2 flex justify-between hover:opacity-70"
-            >
-              <span>{p.title}</span>
-              <span className="text-sm opacity-60">{p.difficultyLevel}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
-
-      <div className="flex justify-between items-center text-sm">
-        <button
-          disabled={offset === 0}
-          onClick={() => setOffset(Math.max(0, offset - limit))}
-          className="underline disabled:opacity-30"
-        >
-          Previous
-        </button>
-        <span>
-          {offset + 1}–{Math.min(offset + limit, total)} of {total}
-        </span>
-        <button
-          disabled={offset + limit >= total}
-          onClick={() => setOffset(offset + limit)}
-          className="underline disabled:opacity-30"
-        >
-          Next
-        </button>
-      </div>
-    </div>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <ProblemsPage />
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   )
 }
 
