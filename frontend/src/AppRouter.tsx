@@ -1,6 +1,10 @@
-import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
-import ProblemsPage from './App';
+import { BrowserRouter, Routes, Route, Link, Outlet } from 'react-router-dom';
+import ProblemsPage from './ProblemsPage';
 import ScoringDashboard from './pages/ScoringDashboard';
+import LoginPage from './auth/LoginPage';
+import AuthCallback from './auth/AuthCallback';
+import { AuthProvider } from './auth/AuthContext';
+import ProtectedRoute from './auth/ProtectedRoute';
 
 function Nav() {
   return (
@@ -11,14 +15,28 @@ function Nav() {
   );
 }
 
+function ProtectedLayout() {
+  return (
+    <ProtectedRoute>
+      <Nav />
+      <Outlet />
+    </ProtectedRoute>
+  );
+}
+
 export default function AppRouter() {
   return (
-    <BrowserRouter>
-      <Nav />
-      <Routes>
-        <Route path="/" element={<ProblemsPage />} />
-        <Route path="/scoring" element={<ScoringDashboard />} />
-      </Routes>
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route element={<ProtectedLayout />}>
+            <Route path="/" element={<ProblemsPage />} />
+            <Route path="/scoring" element={<ScoringDashboard />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }

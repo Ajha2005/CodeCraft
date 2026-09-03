@@ -19,9 +19,7 @@ export class AuthService {
     if (existing) {
       throw new ConflictException('Email already registered');
     }
-
     const passwordHash = await bcrypt.hash(dto.password, 10);
-
     const user = await this.prisma.user.create({
       data: {
         email: dto.email,
@@ -29,7 +27,6 @@ export class AuthService {
         name: dto.name,
       },
     });
-
     return this.signToken(user.id, user.email);
   }
 
@@ -37,19 +34,35 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
-    if (!user) {
+    if (!user || !user.passwordHash) {
       throw new UnauthorizedException('Invalid credentials');
     }
-
     const passwordValid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!passwordValid) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+    return this.signToken(user.id, user.email);
+  }
+
+  async loginWithGoogle(googleUser: { email: string; googleId: string; name: string }) {
+    let user = await this.prisma.user.findUnique({
+      where: { email: googleUser.email },
+    });
+
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: {
+          email: googleUser.email,
+          googleId: googleUser.googleId,
+          name: googleUser.name,
+        },
+      });
     }
 
     return this.signToken(user.id, user.email);
   }
 
-  private async signToken(userId: string, email: string) {
+  async signToken(userId: string, email: string) {
     const payload = { sub: userId, email };
     const accessToken = await this.jwtService.signAsync(payload);
     return { accessToken };

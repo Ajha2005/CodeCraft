@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import Editor from '@monaco-editor/react'
-import './App.css'
 import confetti from 'canvas-confetti'
+import { useAuth } from './auth/AuthContext'
 
 const API_BASE = 'http://localhost:3000'
 
@@ -42,6 +42,8 @@ interface SubmissionResult {
 }
 
 function ProblemsPage() {
+  const { user, token, logout } = useAuth()
+
   const [problems, setProblems] = useState<ProblemSummary[]>([])
   const [total, setTotal] = useState(0)
   const [offset, setOffset] = useState(0)
@@ -52,7 +54,6 @@ function ProblemsPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const [userId, setUserId] = useState('7cca2cb9-3acc-4606-9b13-0c639c94a330')
   const [code, setCode] = useState('def solve(*args, **kwargs):\n    pass\n')
   const [submitting, setSubmitting] = useState(false)
   const [submissionResult, setSubmissionResult] = useState<SubmissionResult | null>(null)
@@ -111,7 +112,9 @@ function ProblemsPage() {
       spread: 90,
       origin: { y: 0.6 },
     })
-    fetch(`${API_BASE}/scoring/submission/${submissionId}`)
+    fetch(`${API_BASE}/scoring/submission/${submissionId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
       .then((res) => res.json())
       .then((data: ScoreResult) => setScoreResult(data))
       .catch(() => {})
@@ -119,7 +122,9 @@ function ProblemsPage() {
 
   function pollSubmission(id: string) {
     const interval = setInterval(() => {
-      fetch(`${API_BASE}/submissions/${id}`)
+      fetch(`${API_BASE}/submissions/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
         .then((res) => res.json())
         .then((data: SubmissionResult) => {
           setSubmissionResult(data)
@@ -135,7 +140,7 @@ function ProblemsPage() {
   }
 
   function handleSubmit() {
-    if (!selectedProblem) return
+    if (!selectedProblem || !user) return
     setSubmitting(true)
     setSubmitError('')
     setSubmissionResult(null)
@@ -143,9 +148,12 @@ function ProblemsPage() {
 
     fetch(`${API_BASE}/submissions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify({
-        userId,
+        userId: user.userId,
         problemId: selectedProblem.id,
         language,
         code,
@@ -169,9 +177,19 @@ function ProblemsPage() {
     return 'text-red-600'
   }
 
+  const header = (
+    <div className="flex justify-between items-center mb-4 text-sm">
+      <span className="opacity-70">{user?.email}</span>
+      <button onClick={logout} className="underline">
+        Logout
+      </button>
+    </div>
+  )
+
   if (selectedProblem) {
     return (
       <div className="max-w-5xl mx-auto p-6 text-left">
+        {header}
         <button
           onClick={() => setSelectedProblem(null)}
           className="mb-4 text-sm underline"
@@ -200,14 +218,6 @@ function ProblemsPage() {
         </ul>
 
         <h2 className="text-lg font-medium mb-2">Your Solution</h2>
-        <div className="flex items-center gap-2 mb-2">
-          <label className="text-sm opacity-70">User ID (temp, no auth wired yet):</label>
-          <input
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            className="border rounded px-2 py-1 text-sm flex-1"
-          />
-        </div>
 
         <div className="flex items-center gap-2 mb-2">
           <label className="text-sm opacity-70">Language:</label>
@@ -273,6 +283,7 @@ function ProblemsPage() {
 
   return (
     <div className="max-w-3xl mx-auto p-6 text-left">
+      {header}
       <h1 className="text-2xl font-semibold mb-4">Problems</h1>
 
       <div className="flex gap-2 mb-4">
