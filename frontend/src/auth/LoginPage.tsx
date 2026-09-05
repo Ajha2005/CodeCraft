@@ -62,12 +62,12 @@ function LoginPage() {
 
       <div className="relative flex-1 flex flex-col items-center justify-center text-center px-6">
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[1000px] h-[1000px] rounded-full bg-amber-500/10 blur-3xl" />
+          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[1000px] h-[1000px] rounded-full bg-cyan-500/10 blur-3xl" />
         </div>
 
         <div className="relative z-10 animate-fade-in-up max-w-2xl mx-auto">
           <p
-            className="text-xs tracking-[0.4em] text-amber-500 uppercase mb-8"
+            className="text-xs tracking-[0.4em] text-cyan-400 uppercase mb-8"
             style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700 }}
           >
             Now Live
@@ -78,7 +78,7 @@ function LoginPage() {
             style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, color: '#f1f5f9' }}
           >
             Code
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-orange-400 to-amber-300">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-teal-300 to-cyan-300">
               Craft
             </span>
           </h1>

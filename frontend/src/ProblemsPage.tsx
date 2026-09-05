@@ -249,7 +249,7 @@ function ProblemsPage() {
     <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
       <div className="flex items-center gap-3">
         <div
-          className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-500 to-rose-600 flex items-center justify-center text-sm font-bold text-white shadow-lg"
+          className="w-9 h-9 rounded-full bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center text-sm font-bold text-white shadow-lg"
           style={{ fontFamily: "'Rajdhani', sans-serif" }}
         >
           {(user?.email?.[0] ?? '?').toUpperCase()}
@@ -259,7 +259,7 @@ function ProblemsPage() {
           <div className="flex items-center gap-2 text-xs">
             {user && <StreakBadge userId={user.userId} />}
             {flavorTextEnabled && rank && (
-              <span className="text-amber-400 font-semibold">{rankTitle(rank)}</span>
+              <span className="text-cyan-400 font-semibold">{rankTitle(rank)}</span>
             )}
           </div>
         </div>
@@ -298,7 +298,7 @@ function ProblemsPage() {
                 {selectedProblem.difficultyLevel}
               </span>
               {flavorTextEnabled && DIFFICULTY_TAG[selectedProblem.difficultyLevel] && (
-                <span className="px-2 py-0.5 rounded text-xs border border-amber-600/40 text-amber-400 uppercase tracking-wide">
+                <span className="px-2 py-0.5 rounded text-xs border border-cyan-600/40 text-cyan-400 uppercase tracking-wide">
                   {DIFFICULTY_TAG[selectedProblem.difficultyLevel]}
                 </span>
               )}
@@ -338,7 +338,7 @@ function ProblemsPage() {
                   }}
                   className={`px-3 py-1 rounded text-xs font-medium border transition-colors ${
                     language === lang
-                      ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
+                      ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300'
                       : 'border-slate-700 text-slate-400 hover:border-slate-500'
                   }`}
                 >
@@ -360,7 +360,7 @@ function ProblemsPage() {
             <button
               onClick={handleSubmit}
               disabled={submitting}
-              className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 text-sm font-bold disabled:opacity-50 mb-4 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-lg shadow-amber-900/30"
+              className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-600 text-slate-950 text-sm font-bold disabled:opacity-50 mb-4 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-lg shadow-cyan-900/30"
             >
               {submitting ? 'Deploying…' : '🚀 Deploy Solution'}
             </button>
@@ -433,7 +433,7 @@ function ProblemsPage() {
           </p>
           <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 transition-all duration-700"
+              className="h-full rounded-full bg-gradient-to-r from-cyan-500 via-teal-500 to-emerald-500 transition-all duration-700"
               style={{
                 width: `${solvedPct}%`,
                 backgroundSize: '200% 100%',

@@ -20,7 +20,7 @@ const TIER_STROKE_WIDTH: Record<string, string> = {
   CITADEL: '2.5',
 };
 
-const BRASS = '#C9A227';
+const ACCENT = '#22D3EE';
 const STONE_FILL = '#2B323D';
 const STONE_STROKE = '#4A5568';
 const LABEL_UNCLAIMED_COLOR = '#CBD5E1';
@@ -195,7 +195,7 @@ export function CampusMap({
         for (const [x, y, dx, dy] of corners) {
           const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
           line.setAttribute('d', `M ${x} ${y + len * dy} L ${x} ${y} L ${x + len * dx} ${y}`);
-          line.setAttribute('stroke', BRASS);
+          line.setAttribute('stroke', ACCENT);
           line.setAttribute('stroke-width', '2');
           line.setAttribute('fill', 'none');
           reticle.appendChild(line);
