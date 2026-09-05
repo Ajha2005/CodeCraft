@@ -1,6 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 
-const SOCKET_URL = import.meta.env.VITE_API_BASE;
+const SOCKET_URL = import.meta.env.VITE_API_BASE || 'http://localhost:3000';
 
 // Singleton pattern: one shared connection across the whole app,
 // rather than each component opening its own socket. Matters once

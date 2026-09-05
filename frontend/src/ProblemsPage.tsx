@@ -18,7 +18,7 @@ import {
   verdictFlavor,
 } from './lib/flavorText'
 
-const API_BASE = import.meta.env.VITE_API_BASE
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3000'
 
 const DIFFICULTY_STYLE: Record<string, { text: string; border: string; bg: string; dot: string }> = {
   Easy: { text: 'text-emerald-400', border: 'border-emerald-500/40', bg: 'bg-emerald-500/10', dot: 'bg-emerald-500' },
