@@ -98,6 +98,13 @@ function LoginPage() {
             </p>
           )}
 
+          {error === 'google_auth_failed' && (
+            <p className="text-sm text-red-400 mb-8 bg-red-950/40 border border-red-800/50 rounded-lg py-2 px-4 inline-block">
+              Google sign-in is temporarily unavailable due to a server configuration issue — this isn't
+              about your account. Please try again shortly or contact the site admin.
+            </p>
+          )}
+
           <button
             onClick={handleGoogleLogin}
             className="flex items-center justify-center gap-3 rounded-full px-8 py-3.5 text-sm font-semibold bg-slate-100 text-slate-900 hover:bg-white transition-all hover:scale-[1.03] active:scale-[0.98] animate-glow-pulse mx-auto mb-5"
