@@ -17,9 +17,9 @@ export function LeaderboardPanel() {
   }
 
   return (
-    <div className="p-4 rounded-xl border border-amber-600/30 bg-slate-900/90 backdrop-blur-xl text-white w-64 shadow-[0_0_30px_-12px_rgba(201,162,39,0.4)] animate-pop-in">
+    <div className="p-4 rounded-xl border border-cyan-600/30 bg-slate-900/90 backdrop-blur-xl text-white w-64 shadow-[0_0_30px_-12px_rgba(34,211,238,0.4)] animate-pop-in">
       <h2
-        className="text-xs font-bold mb-3 uppercase tracking-wide text-amber-400"
+        className="text-xs font-bold mb-3 uppercase tracking-wide text-cyan-400"
         style={{ fontFamily: "'Rajdhani', sans-serif" }}
       >
         College Leaderboard
@@ -31,7 +31,7 @@ export function LeaderboardPanel() {
               <span className="w-5 text-center shrink-0">{MEDAL[i] ?? `#${i + 1}`}</span>
               <span className="truncate">{entry.name}</span>
               {flavorTextEnabled && (
-                <span className="text-[10px] text-amber-400/70 uppercase tracking-wide shrink-0">{rankTitle(i + 1)}</span>
+                <span className="text-[10px] text-cyan-400/70 uppercase tracking-wide shrink-0">{rankTitle(i + 1)}</span>
               )}
             </span>
             <span className="font-mono text-emerald-400 shrink-0 ml-2">{entry.score.toFixed(1)}</span>

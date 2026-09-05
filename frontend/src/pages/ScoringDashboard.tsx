@@ -95,7 +95,7 @@ export default function ScoringDashboard() {
 
         <div className="flex flex-wrap items-center justify-between gap-3 mb-6 animate-fade-in-up">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-500 to-rose-600 flex items-center justify-center text-sm font-bold text-white shadow-lg">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center text-sm font-bold text-white shadow-lg">
               {(user?.email?.[0] ?? '?').toUpperCase()}
             </div>
             <div>
@@ -110,7 +110,7 @@ export default function ScoringDashboard() {
           </div>
           {rank && (
             <div className="text-right">
-              <p className="text-3xl font-bold font-mono text-amber-400">#{rank}</p>
+              <p className="text-3xl font-bold font-mono text-cyan-400">#{rank}</p>
               {flavorTextEnabled && <p className="text-xs text-slate-400 uppercase tracking-wide">{rankTitle(rank)}</p>}
             </div>
           )}
@@ -118,10 +118,10 @@ export default function ScoringDashboard() {
 
         {flavorTextEnabled && campaign && (
           <div
-            className="mb-6 rounded-xl border border-amber-600/30 bg-gradient-to-r from-amber-950/40 to-slate-900/60 backdrop-blur p-4 text-sm animate-fade-in-up"
+            className="mb-6 rounded-xl border border-cyan-600/30 bg-gradient-to-r from-cyan-950/40 to-slate-900/60 backdrop-blur p-4 text-sm animate-fade-in-up"
             style={{ animationDelay: '60ms' }}
           >
-            <p className="text-amber-400 font-semibold mb-1 uppercase tracking-wide text-xs">Today's campaign</p>
+            <p className="text-cyan-400 font-semibold mb-1 uppercase tracking-wide text-xs">Today's campaign</p>
             <p className="text-slate-300">
               {campaign.territoriesHeld} {campaign.territoriesHeld === 1 ? 'territory' : 'territories'} held ·{' '}
               <span className="text-emerald-400">{campaign.cellsGainedToday} gained</span> ·{' '}

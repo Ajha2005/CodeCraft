@@ -135,7 +135,7 @@ export function MapFullScreen() {
       </TransformWrapper>
 
       <h2
-        className="absolute top-4 left-4 text-lg tracking-wide text-amber-500 pointer-events-none select-none drop-shadow-[0_0_12px_rgba(245,158,11,0.4)]"
+        className="absolute top-4 left-4 text-lg tracking-wide text-cyan-400 pointer-events-none select-none drop-shadow-[0_0_12px_rgba(34,211,238,0.4)]"
         style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700 }}
       >
         TERRITORY CONTROL — THAPAR CAMPUS
@@ -146,7 +146,7 @@ export function MapFullScreen() {
           {ticker.map((t) => (
             <div
               key={t.id}
-              className="text-xs text-amber-200 bg-black/60 border border-amber-700/40 rounded px-3 py-1.5 backdrop-blur animate-fade-in-up"
+              className="text-xs text-cyan-200 bg-black/60 border border-cyan-700/40 rounded px-3 py-1.5 backdrop-blur animate-fade-in-up"
             >
               {t.text}
             </div>
@@ -156,7 +156,7 @@ export function MapFullScreen() {
 
       <button
         onClick={() => setShowLeaderboard((s) => !s)}
-        className="absolute top-4 right-4 px-3 py-1.5 rounded-lg text-sm font-medium border border-amber-600/40 text-amber-300 bg-black/50 backdrop-blur hover:bg-amber-950/40 hover:border-amber-500/60 transition-colors"
+        className="absolute top-4 right-4 px-3 py-1.5 rounded-lg text-sm font-medium border border-cyan-600/40 text-cyan-300 bg-black/50 backdrop-blur hover:bg-cyan-950/40 hover:border-cyan-500/60 transition-colors"
       >
         🏆 {showLeaderboard ? 'Hide' : 'Show'} leaderboard
       </button>
@@ -192,24 +192,24 @@ export function MapFullScreen() {
         </div>
       )}
 
-      <div className="absolute bottom-6 right-4 flex flex-col gap-1 bg-black/50 backdrop-blur border border-amber-600/30 rounded-lg overflow-hidden">
+      <div className="absolute bottom-6 right-4 flex flex-col gap-1 bg-black/50 backdrop-blur border border-cyan-600/30 rounded-lg overflow-hidden">
         <button
           onClick={zoomIn}
-          className="w-10 h-10 flex items-center justify-center text-slate-200 hover:bg-amber-500/20 hover:text-amber-300 transition-colors border-b border-slate-700 text-lg"
+          className="w-10 h-10 flex items-center justify-center text-slate-200 hover:bg-cyan-500/20 hover:text-cyan-300 transition-colors border-b border-slate-700 text-lg"
           aria-label="Zoom in"
         >
           +
         </button>
         <button
           onClick={zoomOut}
-          className="w-10 h-10 flex items-center justify-center text-slate-200 hover:bg-amber-500/20 hover:text-amber-300 transition-colors border-b border-slate-700 text-lg"
+          className="w-10 h-10 flex items-center justify-center text-slate-200 hover:bg-cyan-500/20 hover:text-cyan-300 transition-colors border-b border-slate-700 text-lg"
           aria-label="Zoom out"
         >
           −
         </button>
         <button
           onClick={resetView}
-          className="w-10 h-10 flex items-center justify-center text-slate-200 hover:bg-amber-500/20 hover:text-amber-300 transition-colors text-xs"
+          className="w-10 h-10 flex items-center justify-center text-slate-200 hover:bg-cyan-500/20 hover:text-cyan-300 transition-colors text-xs"
           aria-label="Reset view"
         >
           ⤢

@@ -44,7 +44,8 @@ export class AuthController {
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
 
     if (!req.user) {
-      return res.redirect(`${frontendUrl}/login?error=domain_not_allowed`);
+      const reason = req.googleAuthFailureReason === 'oauth_error' ? 'google_auth_failed' : 'domain_not_allowed';
+      return res.redirect(`${frontendUrl}/login?error=${reason}`);
     }
 
     const { accessToken } = await this.authService.loginWithGoogle(req.user);

@@ -15,7 +15,7 @@ export function TerritoryLeaderboard({ territory }: TerritoryLeaderboardProps) {
   if (!territory) return null;
 
   return (
-    <div className="p-4 rounded-xl border border-amber-600/30 bg-slate-900/90 backdrop-blur-xl text-white w-72 shadow-[0_0_30px_-12px_rgba(201,162,39,0.4)] animate-pop-in">
+    <div className="p-4 rounded-xl border border-cyan-600/30 bg-slate-900/90 backdrop-blur-xl text-white w-72 shadow-[0_0_30px_-12px_rgba(34,211,238,0.4)] animate-pop-in">
       <h3 className="text-md font-bold text-slate-100" style={{ fontFamily: "'Rajdhani', sans-serif" }}>
         {territory.name}
       </h3>
