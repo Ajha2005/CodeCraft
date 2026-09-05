@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { TerritoryDto } from '../../types/territory';
 import type { TerritoryCellDto } from '../../lib/api';
 import { computeStripeWidths, aggregateOwnership } from './utils/computeStripeWidths';
@@ -24,6 +24,7 @@ const BRASS = '#C9A227';
 const STONE_FILL = '#2B323D';
 const STONE_STROKE = '#4A5568';
 const LABEL_UNCLAIMED_COLOR = '#CBD5E1';
+const LABEL_CELL_DETAIL_COLOR = '#F1F5F9';
 const MIN_LABEL_WIDTH = 45;
 const MIN_LABEL_HEIGHT = 24;
 const CELL_SIZE = 18.5; // must match generate-grid.ts
@@ -45,86 +46,81 @@ export function CampusMap({
   onTerritoryHover,
 }: CampusMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [cellLayerCount, setCellLayerCount] = useState(0);
   const innerHtml = useMemo(() => ({ __html: svgMarkup }), [svgMarkup]);
 
+  // Territory fill (single/multi-owner color, or stone when unclaimed) —
+  // this is the one thing that legitimately needs to change when
+  // showCellDetail toggles, since cell-detail mode hands fill duty to the
+  // per-cell rects below instead.
   useEffect(() => {
-    console.log('[CampusMap] MOUNTED');
-    return () => console.log('[CampusMap] UNMOUNTING');
-  }, []);
+    const container = containerRef.current;
+    const svg = container?.querySelector('svg');
+    if (!container || !svg) return;
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const svg = containerRef.current?.querySelector('svg');
-      const count = svg?.querySelectorAll('[data-cell-layer]').length ?? 0;
-      setCellLayerCount(count);
-    }, 300);
-    return () => clearInterval(interval);
-  }, []);
+    svg.querySelectorAll('[data-stripe-pattern]').forEach((el) => el.remove());
 
- useEffect(() => {
-  const container = containerRef.current;
-  const svg = container?.querySelector('svg');
-  if (!container || !svg) return;
+    const defs =
+      svg.querySelector('defs') ??
+      (() => {
+        const d = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+        svg.insertBefore(d, svg.firstChild);
+        return d;
+      })();
 
-  svg.querySelectorAll('[data-stripe-pattern]').forEach((el) => el.remove());
+    for (const [svgPathId, territory] of Object.entries(territories)) {
+      const pathEl = container.querySelector<SVGPathElement>(`#${CSS.escape(svgPathId)}`);
+      if (!pathEl) continue;
 
-  const defs =
-    svg.querySelector('defs') ??
-    (() => {
-      const d = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-      svg.insertBefore(d, svg.firstChild);
-      return d;
-    })();
+      pathEl.style.stroke = STONE_STROKE;
+      pathEl.style.strokeWidth = TIER_STROKE_WIDTH[territory.tier] ?? '1';
+      pathEl.style.fillOpacity = '1';
 
-  for (const [svgPathId, territory] of Object.entries(territories)) {
-    const pathEl = container.querySelector<SVGPathElement>(`#${CSS.escape(svgPathId)}`);
-    if (!pathEl) continue;
-
-    pathEl.style.stroke = STONE_STROKE;
-    pathEl.style.strokeWidth = TIER_STROKE_WIDTH[territory.tier] ?? '1';
-    pathEl.style.fillOpacity = '1';
-
-    if (showCellDetail) {
-      pathEl.style.fill = 'none';
-      continue;
-    }
-
-    const cells = cellsByTerritory[territory.id] ?? [];
-    const shares = aggregateOwnership(cells);
-
-    if (shares.length === 0) {
-      pathEl.style.fill = STONE_FILL;
-    } else if (shares.length === 1) {
-      pathEl.style.fill = shares[0].color;
-    } else {
-      const patternId = `stripe-${svgPathId}`;
-      const stripes = computeStripeWidths(shares);
-
-      const pattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
-      pattern.setAttribute('id', patternId);
-      pattern.setAttribute('data-stripe-pattern', svgPathId);
-      pattern.setAttribute('patternUnits', 'objectBoundingBox');
-      pattern.setAttribute('width', '1');
-      pattern.setAttribute('height', '1');
-      pattern.setAttribute('patternTransform', 'rotate(45)');
-
-      for (const s of stripes) {
-        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.setAttribute('x', `${s.offset}%`);
-        rect.setAttribute('y', '0');
-        rect.setAttribute('width', `${s.pct}%`);
-        rect.setAttribute('height', '100%');
-        rect.setAttribute('fill', s.color);
-        pattern.appendChild(rect);
+      if (showCellDetail) {
+        pathEl.style.fill = 'none';
+        continue;
       }
 
-      defs.appendChild(pattern);
-      pathEl.style.fill = `url(#${patternId})`;
-    }
-  }
-}, [territories, showCellDetail, cellsByTerritory]);
+      const cells = cellsByTerritory[territory.id] ?? [];
+      const shares = aggregateOwnership(cells);
 
+      if (shares.length === 0) {
+        pathEl.style.fill = STONE_FILL;
+      } else if (shares.length === 1) {
+        pathEl.style.fill = shares[0].color;
+      } else {
+        const patternId = `stripe-${svgPathId}`;
+        const stripes = computeStripeWidths(shares);
+
+        const pattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
+        pattern.setAttribute('id', patternId);
+        pattern.setAttribute('data-stripe-pattern', svgPathId);
+        pattern.setAttribute('patternUnits', 'objectBoundingBox');
+        pattern.setAttribute('width', '1');
+        pattern.setAttribute('height', '1');
+        pattern.setAttribute('patternTransform', 'rotate(45)');
+
+        for (const s of stripes) {
+          const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          rect.setAttribute('x', `${s.offset}%`);
+          rect.setAttribute('y', '0');
+          rect.setAttribute('width', `${s.pct}%`);
+          rect.setAttribute('height', '100%');
+          rect.setAttribute('fill', s.color);
+          pattern.appendChild(rect);
+        }
+
+        defs.appendChild(pattern);
+        pathEl.style.fill = `url(#${patternId})`;
+      }
+    }
+  }, [territories, showCellDetail, cellsByTerritory]);
+
+  // Labels, CITADEL reticles and contested-zone rings — built once per
+  // territory/ownership change. Deliberately does NOT depend on
+  // showCellDetail: rebuilding ~150 DOM nodes on every zoom-threshold
+  // crossing is what caused labels and the contested-ring overlay to
+  // flicker/vanish while zooming. The color-only response to
+  // showCellDetail lives in the separate effect below instead.
   useEffect(() => {
     const container = containerRef.current;
     const svg = container?.querySelector('svg');
@@ -151,36 +147,36 @@ export function CampusMap({
 
       const box = pathEl.getBBox();
 
-      if (!showCellDetail) {
-        const cells = cellsByTerritory[territory.id] ?? [];
-        const shares = aggregateOwnership(cells);
-        if (shares.length > 1) {
-          const ring = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-          ring.setAttribute('data-decoration', `${svgPathId}-contested`);
-          ring.setAttribute('class', 'contested-ring');
-          ring.setAttribute('x', String(box.x - 1.5));
-          ring.setAttribute('y', String(box.y - 1.5));
-          ring.setAttribute('width', String(box.width + 3));
-          ring.setAttribute('height', String(box.height + 3));
-          ring.setAttribute('fill', 'none');
-          ring.setAttribute('stroke', '#F97316');
-          ring.setAttribute('stroke-width', '2');
-          ring.setAttribute('pointer-events', 'none');
-          svg.appendChild(ring);
+      const cells = cellsByTerritory[territory.id] ?? [];
+      const shares = aggregateOwnership(cells);
+      if (shares.length > 1) {
+        const ring = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        ring.setAttribute('data-decoration', `${svgPathId}-contested`);
+        ring.setAttribute('data-cell-detail-hide', 'true');
+        ring.setAttribute('class', 'contested-ring');
+        ring.setAttribute('x', String(box.x - 1.5));
+        ring.setAttribute('y', String(box.y - 1.5));
+        ring.setAttribute('width', String(box.width + 3));
+        ring.setAttribute('height', String(box.height + 3));
+        ring.setAttribute('fill', 'none');
+        ring.setAttribute('stroke', '#F97316');
+        ring.setAttribute('stroke-width', '2');
+        ring.setAttribute('pointer-events', 'none');
+        svg.appendChild(ring);
 
-          const counter = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          counter.setAttribute('data-decoration', `${svgPathId}-contested-count`);
-          counter.setAttribute('x', String(box.x + box.width / 2));
-          counter.setAttribute('y', String(box.y - 3));
-          counter.setAttribute('text-anchor', 'middle');
-          counter.setAttribute('pointer-events', 'none');
-          counter.setAttribute('font-family', "'Rajdhani', sans-serif");
-          counter.setAttribute('font-weight', '700');
-          counter.setAttribute('font-size', '9');
-          counter.setAttribute('fill', '#F97316');
-          counter.textContent = `${shares.length} soldiers eyeing this territory`;
-          svg.appendChild(counter);
-        }
+        const counter = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        counter.setAttribute('data-decoration', `${svgPathId}-contested-count`);
+        counter.setAttribute('data-cell-detail-hide', 'true');
+        counter.setAttribute('x', String(box.x + box.width / 2));
+        counter.setAttribute('y', String(box.y - 3));
+        counter.setAttribute('text-anchor', 'middle');
+        counter.setAttribute('pointer-events', 'none');
+        counter.setAttribute('font-family', "'Rajdhani', sans-serif");
+        counter.setAttribute('font-weight', '700');
+        counter.setAttribute('font-size', '9');
+        counter.setAttribute('fill', '#F97316');
+        counter.textContent = `${shares.length} soldiers eyeing this territory`;
+        svg.appendChild(counter);
       }
 
       if (territory.tier === 'CITADEL') {
@@ -214,6 +210,7 @@ export function CampusMap({
 
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         text.setAttribute('data-decoration', `${svgPathId}-label`);
+        text.setAttribute('data-label', 'true');
         text.setAttribute('x', String(box.x + box.width / 2));
         text.setAttribute('y', String(box.y + box.height / 2));
         text.setAttribute('text-anchor', 'middle');
@@ -222,7 +219,7 @@ export function CampusMap({
         text.setAttribute('font-family', "'Rajdhani', sans-serif");
         text.setAttribute('font-weight', '600');
         text.setAttribute('font-size', String(fontSize));
-        text.setAttribute('fill', showCellDetail ? '#F1F5F9' : LABEL_UNCLAIMED_COLOR);
+        text.setAttribute('fill', LABEL_UNCLAIMED_COLOR);
         text.setAttribute('stroke', '#0A0E14');
         text.setAttribute('stroke-width', '3');
         text.setAttribute('paint-order', 'stroke');
@@ -230,7 +227,23 @@ export function CampusMap({
         svg.appendChild(text);
       }
     }
-  }, [territories, showCellDetail, cellsByTerritory]);
+  }, [territories, cellsByTerritory]);
+
+  // Cheap follow-up for showCellDetail: recolor existing labels and
+  // hide/show the contested-ring overlay in place, without touching
+  // the DOM structure built above.
+  useEffect(() => {
+    const container = containerRef.current;
+    const svg = container?.querySelector('svg');
+    if (!svg) return;
+
+    svg.querySelectorAll<SVGTextElement>('[data-label="true"]').forEach((label) => {
+      label.setAttribute('fill', showCellDetail ? LABEL_CELL_DETAIL_COLOR : LABEL_UNCLAIMED_COLOR);
+    });
+    svg.querySelectorAll<SVGElement>('[data-cell-detail-hide="true"]').forEach((el) => {
+      el.style.display = showCellDetail ? 'none' : '';
+    });
+  }, [showCellDetail]);
 
   // Cell-level rendering — only when zoomed in enough.
   useEffect(() => {
@@ -242,7 +255,6 @@ export function CampusMap({
     svg.querySelectorAll('[data-cell-clip]').forEach((el) => el.remove());
 
     if (!showCellDetail) return;
-    console.log('[cell effect] RUNNING at', new Date().toLocaleTimeString());
 
     for (const [svgPathId, territory] of Object.entries(territories)) {
       try {
@@ -332,19 +344,14 @@ export function CampusMap({
   }, [territories, onTerritoryClick, onTerritoryHover]);
 
   return (
-    <>
-      <div className="absolute top-28 left-4 text-xs text-cyan-400 font-mono bg-black/60 p-2 rounded pointer-events-none z-50">
-        cell layer groups in DOM: {cellLayerCount}
-      </div>
-      <div
-        ref={containerRef}
-        className="[&_svg]:w-full [&_svg]:h-auto [&_path]:transition-all [&_path]:duration-300 [&_path]:cursor-pointer"
-        style={{
-          background:
-            'repeating-linear-gradient(135deg, #0A0E14, #0A0E14 12px, #10161F 12px, #10161F 24px)',
-        }}
-        dangerouslySetInnerHTML={innerHtml}
-      />
-    </>
+    <div
+      ref={containerRef}
+      className="[&_svg]:w-full [&_svg]:h-auto [&_path]:transition-all [&_path]:duration-300 [&_path]:cursor-pointer"
+      style={{
+        background:
+          'repeating-linear-gradient(135deg, #0A0E14, #0A0E14 12px, #10161F 12px, #10161F 24px)',
+      }}
+      dangerouslySetInnerHTML={innerHtml}
+    />
   );
 }

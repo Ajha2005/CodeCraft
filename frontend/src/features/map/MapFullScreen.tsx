@@ -11,8 +11,8 @@ import { EMPTY_ZONE_TAP } from '../../lib/flavorText';
 import type { TerritoryDto } from '../../types/territory';
 import campusMapSvg from '../../assets/campus-map.svg?raw';
 
-const ENTER_CELL_DETAIL = 2.6;
-const EXIT_CELL_DETAIL = 2.3;
+const ENTER_CELL_DETAIL = 3.2;
+const EXIT_CELL_DETAIL = 2.2;
 const MIN_SCALE = 0.6;
 const MAX_SCALE = 12;
 const TICKER_TTL_MS = 8000;
