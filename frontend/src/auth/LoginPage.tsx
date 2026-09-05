@@ -33,7 +33,9 @@ function LoginPage() {
         >
           CodeCraft — Territory Control
         </p>
-        <h1 className="text-xl font-semibold mb-2 text-slate-100">{greeting}</h1>
+        <h1 className="text-xl font-semibold mb-2" style={{ color: '#f1f5f9' }}>
+          {greeting}
+        </h1>
         <p className="text-sm text-slate-400 mb-8">
           Sign in with your @thapar.edu account to continue.
         </p>

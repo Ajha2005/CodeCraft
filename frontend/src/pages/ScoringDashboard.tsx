@@ -77,7 +77,9 @@ export default function ScoringDashboard() {
     <div className="min-h-screen bg-slate-950 text-slate-100 p-8">
       <ToastStack toasts={toasts} dismiss={dismiss} />
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <h1 className="text-3xl font-bold">CodeCraft — Scoring Dashboard</h1>
+        <h1 className="text-3xl font-bold" style={{ color: '#f1f5f9' }}>
+          CodeCraft — Scoring Dashboard
+        </h1>
         {user && <StreakBadge userId={user.userId} />}
       </div>
 
@@ -85,8 +87,8 @@ export default function ScoringDashboard() {
         <div className="mb-6 bg-slate-900 border border-slate-800 rounded-xl p-4 text-sm">
           <p className="text-amber-400 font-medium mb-1">Today's campaign</p>
           <p className="text-slate-300">
-            {campaign.territoriesHeld} territories held · {campaign.cellsGainedToday} gained ·{' '}
-            {campaign.cellsLostToday} lost. Tomorrow's a new front.
+            {campaign.territoriesHeld} {campaign.territoriesHeld === 1 ? 'territory' : 'territories'} held ·{' '}
+            {campaign.cellsGainedToday} gained · {campaign.cellsLostToday} lost. Tomorrow's a new front.
           </p>
         </div>
       )}
@@ -126,7 +128,9 @@ export default function ScoringDashboard() {
         )}
       </div>
 
-      <h2 className="text-xl font-semibold mb-3">Your Territories</h2>
+      <h2 className="text-xl font-semibold mb-3" style={{ color: '#f1f5f9' }}>
+        Your Territories
+      </h2>
       <div className="grid grid-cols-3 gap-4 mb-8">
         {territories.length === 0 && (
           <p className="text-slate-500 col-span-3 italic">
@@ -149,7 +153,9 @@ export default function ScoringDashboard() {
           </div>
         ))}
       </div>
-      <h2 className="text-xl font-semibold mb-3">Solve History</h2>
+      <h2 className="text-xl font-semibold mb-3" style={{ color: '#f1f5f9' }}>
+        Solve History
+      </h2>
       <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-slate-800 text-slate-400">

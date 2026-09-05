@@ -10,7 +10,9 @@ export function LeaderboardPanel() {
 
   return (
     <div className="p-4 bg-slate-800 rounded-lg text-white w-64">
-      <h2 className="text-lg font-semibold mb-3">College Leaderboard</h2>
+      <h2 className="text-lg font-semibold mb-3" style={{ color: '#f1f5f9' }}>
+        College Leaderboard
+      </h2>
       <ol className="space-y-1">
         {entries.map((entry, i) => (
           <li key={entry.userId} className="flex justify-between text-sm">

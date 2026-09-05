@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TerritoryDto } from '../../types/territory';
 import type { TerritoryCellDto } from '../../lib/api';
 import { computeStripeWidths, aggregateOwnership } from './utils/computeStripeWidths';
@@ -46,6 +46,7 @@ export function CampusMap({
 }: CampusMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [cellLayerCount, setCellLayerCount] = useState(0);
+  const innerHtml = useMemo(() => ({ __html: svgMarkup }), [svgMarkup]);
 
   useEffect(() => {
     console.log('[CampusMap] MOUNTED');
@@ -342,7 +343,7 @@ export function CampusMap({
           background:
             'repeating-linear-gradient(135deg, #0A0E14, #0A0E14 12px, #10161F 12px, #10161F 24px)',
         }}
-        dangerouslySetInnerHTML={{ __html: svgMarkup }}
+        dangerouslySetInnerHTML={innerHtml}
       />
     </>
   );
