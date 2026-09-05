@@ -4,11 +4,18 @@ import type { TerritoryCellDto } from '../../lib/api';
 import { computeStripeWidths, aggregateOwnership } from './utils/computeStripeWidths';
 
 
+interface CapturePing {
+  svgPathId: string;
+  nonce: number;
+}
+
 interface CampusMapProps {
   svgMarkup: string;
   territories: Record<string, TerritoryDto>;
   cellsByTerritory: Record<string, TerritoryCellDto[]>;
   showCellDetail: boolean;
+  hoveredSvgPathId?: string | null;
+  capturePing?: CapturePing | null;
   onTerritoryClick?: (territory: TerritoryDto) => void;
   onTerritoryHover?: (territory: TerritoryDto | null) => void;
 }
@@ -27,7 +34,6 @@ const LABEL_UNCLAIMED_COLOR = '#CBD5E1';
 const LABEL_CELL_DETAIL_COLOR = '#F1F5F9';
 const MIN_LABEL_WIDTH = 45;
 const MIN_LABEL_HEIGHT = 24;
-const CELL_SIZE = 18.5; // must match generate-grid.ts
 
 function truncateToFit(name: string, boxWidth: number, fontSize: number): string {
   const approxCharWidth = fontSize * 0.58;
@@ -42,6 +48,8 @@ export function CampusMap({
   territories,
   cellsByTerritory,
   showCellDetail,
+  hoveredSvgPathId,
+  capturePing,
   onTerritoryClick,
   onTerritoryHover,
 }: CampusMapProps) {
@@ -137,6 +145,21 @@ export function CampusMap({
           50% { stroke-opacity: 1; }
         }
         .contested-ring { animation: contested-pulse 1.6s ease-in-out infinite; }
+
+        @keyframes capture-ping-ring {
+          0% { r: 4; stroke-opacity: 1; stroke-width: 4; }
+          100% { r: 90; stroke-opacity: 0; stroke-width: 0.5; }
+        }
+        @keyframes capture-ping-flash {
+          0% { opacity: 0.9; }
+          100% { opacity: 0; }
+        }
+        .capture-ping-ring { animation: capture-ping-ring 1.1s cubic-bezier(0.22, 0.61, 0.36, 1) forwards; }
+        .capture-ping-flash { animation: capture-ping-flash 0.5s ease-out forwards; }
+
+        .territory-hovered {
+          filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.9)) drop-shadow(0 0 14px rgba(34, 211, 238, 0.5));
+        }
       `;
       svg.insertBefore(style, svg.firstChild);
     }
@@ -245,6 +268,66 @@ export function CampusMap({
     });
   }, [showCellDetail]);
 
+  // Hover glow — a cheap class toggle, no DOM rebuild.
+  useEffect(() => {
+    const container = containerRef.current;
+    const svg = container?.querySelector('svg');
+    if (!svg) return;
+
+    svg.querySelectorAll('.territory-hovered').forEach((el) => el.classList.remove('territory-hovered'));
+    if (!hoveredSvgPathId) return;
+
+    const pathEl = container?.querySelector(`#${CSS.escape(hoveredSvgPathId)}`);
+    pathEl?.classList.add('territory-hovered');
+  }, [hoveredSvgPathId]);
+
+  // Capture ping — a brief radar-style ripple at the territory that just
+  // changed hands, so a live capture reads as an event, not just a color
+  // swap. `nonce` changes on every ping even for the same territory, which
+  // is what re-triggers the effect for back-to-back captures.
+  useEffect(() => {
+    const container = containerRef.current;
+    const svg = container?.querySelector('svg');
+    if (!svg || !capturePing) return;
+
+    const pathEl = container?.querySelector<SVGPathElement>(`#${CSS.escape(capturePing.svgPathId)}`);
+    if (!pathEl) return;
+
+    const box = pathEl.getBBox();
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+
+    const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    group.setAttribute('pointer-events', 'none');
+
+    const flash = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    flash.setAttribute('cx', String(cx));
+    flash.setAttribute('cy', String(cy));
+    flash.setAttribute('r', '14');
+    flash.setAttribute('fill', ACCENT);
+    flash.setAttribute('class', 'capture-ping-flash');
+    group.appendChild(flash);
+
+    for (const delay of [0, 0.18]) {
+      const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      ring.setAttribute('cx', String(cx));
+      ring.setAttribute('cy', String(cy));
+      ring.setAttribute('r', '4');
+      ring.setAttribute('fill', 'none');
+      ring.setAttribute('stroke', ACCENT);
+      ring.setAttribute('class', 'capture-ping-ring');
+      ring.style.animationDelay = `${delay}s`;
+      group.appendChild(ring);
+    }
+
+    svg.appendChild(group);
+    const timeout = setTimeout(() => group.remove(), 1400);
+    return () => {
+      clearTimeout(timeout);
+      group.remove();
+    };
+  }, [capturePing]);
+
   // Cell-level rendering — only when zoomed in enough.
   useEffect(() => {
     const container = containerRef.current;
@@ -264,6 +347,17 @@ export function CampusMap({
 
         const box = pathEl.getBBox();
         const clipId = `clip-${svgPathId}`;
+
+        // Cell width/height are derived from this territory's own bbox and
+        // the max row/col it actually has cells for, rather than a shared
+        // pixel constant kept in sync with generate-grid.ts by hand. That
+        // constant drifting from whatever --size actually seeded the DB is
+        // exactly what caused cells to cluster in the top-left corner of a
+        // territory instead of covering its whole shape.
+        const maxCol = cells.reduce((max, c) => Math.max(max, c.col), 0);
+        const maxRow = cells.reduce((max, c) => Math.max(max, c.row), 0);
+        const cellWidth = box.width / (maxCol + 1);
+        const cellHeight = box.height / (maxRow + 1);
 
         const defs =
           svg.querySelector('defs') ??
@@ -287,10 +381,10 @@ export function CampusMap({
 
         for (const cell of cells) {
           const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-          rect.setAttribute('x', String(box.x + cell.col * CELL_SIZE));
-          rect.setAttribute('y', String(box.y + cell.row * CELL_SIZE));
-          rect.setAttribute('width', String(CELL_SIZE));
-          rect.setAttribute('height', String(CELL_SIZE));
+          rect.setAttribute('x', String(box.x + cell.col * cellWidth));
+          rect.setAttribute('y', String(box.y + cell.row * cellHeight));
+          rect.setAttribute('width', String(cellWidth));
+          rect.setAttribute('height', String(cellHeight));
           rect.setAttribute('fill', cell.ownerId ? cell.ownerColor : STONE_FILL);
           rect.setAttribute('fill-opacity', cell.ownerId ? '0.7' : '1');
           rect.setAttribute('stroke', '#1a1e26');
