@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { TerritoryDto } from '../../types/territory';
 import type { TerritoryCellDto } from '../../lib/api';
+import { computeStripeWidths, aggregateOwnership } from './utils/computeStripeWidths';
+
 
 interface CampusMapProps {
   svgMarkup: string;
@@ -59,20 +61,68 @@ export function CampusMap({
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+ useEffect(() => {
+  const container = containerRef.current;
+  const svg = container?.querySelector('svg');
+  if (!container || !svg) return;
 
-    for (const [svgPathId, territory] of Object.entries(territories)) {
-      const pathEl = container.querySelector<SVGPathElement>(`#${CSS.escape(svgPathId)}`);
-      if (!pathEl) continue;
+  svg.querySelectorAll('[data-stripe-pattern]').forEach((el) => el.remove());
 
-      pathEl.style.stroke = STONE_STROKE;
-      pathEl.style.strokeWidth = TIER_STROKE_WIDTH[territory.tier] ?? '1';
-      pathEl.style.fill = showCellDetail ? 'none' : STONE_FILL;
-      pathEl.style.fillOpacity = '1';
+  const defs =
+    svg.querySelector('defs') ??
+    (() => {
+      const d = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+      svg.insertBefore(d, svg.firstChild);
+      return d;
+    })();
+
+  for (const [svgPathId, territory] of Object.entries(territories)) {
+    const pathEl = container.querySelector<SVGPathElement>(`#${CSS.escape(svgPathId)}`);
+    if (!pathEl) continue;
+
+    pathEl.style.stroke = STONE_STROKE;
+    pathEl.style.strokeWidth = TIER_STROKE_WIDTH[territory.tier] ?? '1';
+    pathEl.style.fillOpacity = '1';
+
+    if (showCellDetail) {
+      pathEl.style.fill = 'none';
+      continue;
     }
-  }, [territories, showCellDetail]);
+
+    const cells = cellsByTerritory[territory.id] ?? [];
+    const shares = aggregateOwnership(cells);
+
+    if (shares.length === 0) {
+      pathEl.style.fill = STONE_FILL;
+    } else if (shares.length === 1) {
+      pathEl.style.fill = shares[0].color;
+    } else {
+      const patternId = `stripe-${svgPathId}`;
+      const stripes = computeStripeWidths(shares);
+
+      const pattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
+      pattern.setAttribute('id', patternId);
+      pattern.setAttribute('data-stripe-pattern', svgPathId);
+      pattern.setAttribute('patternUnits', 'objectBoundingBox');
+      pattern.setAttribute('width', '1');
+      pattern.setAttribute('height', '1');
+      pattern.setAttribute('patternTransform', 'rotate(45)');
+
+      for (const s of stripes) {
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', `${s.offset}%`);
+        rect.setAttribute('y', '0');
+        rect.setAttribute('width', `${s.pct}%`);
+        rect.setAttribute('height', '100%');
+        rect.setAttribute('fill', s.color);
+        pattern.appendChild(rect);
+      }
+
+      defs.appendChild(pattern);
+      pathEl.style.fill = `url(#${patternId})`;
+    }
+  }
+}, [territories, showCellDetail, cellsByTerritory]);
 
   useEffect(() => {
     const container = containerRef.current;
