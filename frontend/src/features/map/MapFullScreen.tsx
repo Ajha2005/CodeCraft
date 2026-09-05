@@ -11,11 +11,12 @@ import { EMPTY_ZONE_TAP } from '../../lib/flavorText';
 import type { TerritoryDto } from '../../types/territory';
 import campusMapSvg from '../../assets/campus-map.svg?raw';
 
-const ENTER_CELL_DETAIL = 2.6;
-const EXIT_CELL_DETAIL = 2.3;
+const ENTER_CELL_DETAIL = 3.2;
+const EXIT_CELL_DETAIL = 2.2;
 const MIN_SCALE = 0.6;
 const MAX_SCALE = 12;
 const TICKER_TTL_MS = 8000;
+const NAV_HINT_TTL_MS = 6000;
 
 interface TickerEntry {
   id: string;
@@ -32,6 +33,7 @@ export function MapFullScreen() {
   const [selectedTerritory, setSelectedTerritory] = useState<TerritoryDto | null>(null);
   const [emptyZoneNote, setEmptyZoneNote] = useState(false);
   const [ticker, setTicker] = useState<TickerEntry[]>([]);
+  const [showNavHint, setShowNavHint] = useState(true);
   const transformRef = useRef<ReactZoomPanPinchRef>(null);
   const showCellDetailRef = useRef(false);
 
@@ -51,6 +53,11 @@ export function MapFullScreen() {
       }
     }, 100);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowNavHint(false), NAV_HINT_TTL_MS);
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -78,7 +85,11 @@ export function MapFullScreen() {
   }, [territories, flavorTextEnabled]);
 
   if (territoriesLoading || cellsLoading) {
-    return <div className="w-full h-screen flex items-center justify-center text-gray-400">Loading map…</div>;
+    return (
+      <div className="w-full h-screen flex items-center justify-center hud-grid-bg text-slate-400">
+        Loading map…
+      </div>
+    );
   }
 
   const zoomIn = () => transformRef.current?.zoomIn(0.5, 200, 'easeOut');
@@ -107,6 +118,7 @@ export function MapFullScreen() {
         pinch={{ step: 5 }}
         doubleClick={{ mode: 'zoomIn', step: 0.7, animationTime: 200 }}
         panning={{ velocityDisabled: false, excluded: [] }}
+        onPanningStart={() => setShowNavHint(false)}
       >
         <TransformComponent
           wrapperStyle={{ width: '100%', height: '100%', cursor: 'grab' }}
@@ -123,7 +135,7 @@ export function MapFullScreen() {
       </TransformWrapper>
 
       <h2
-        className="absolute top-4 left-4 text-lg tracking-wide text-amber-500 pointer-events-none select-none"
+        className="absolute top-4 left-4 text-lg tracking-wide text-amber-500 pointer-events-none select-none drop-shadow-[0_0_12px_rgba(245,158,11,0.4)]"
         style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700 }}
       >
         TERRITORY CONTROL — THAPAR CAMPUS
@@ -134,7 +146,7 @@ export function MapFullScreen() {
           {ticker.map((t) => (
             <div
               key={t.id}
-              className="text-xs text-amber-200 bg-black/60 border border-amber-700/40 rounded px-3 py-1.5 backdrop-blur"
+              className="text-xs text-amber-200 bg-black/60 border border-amber-700/40 rounded px-3 py-1.5 backdrop-blur animate-fade-in-up"
             >
               {t.text}
             </div>
@@ -144,9 +156,9 @@ export function MapFullScreen() {
 
       <button
         onClick={() => setShowLeaderboard((s) => !s)}
-        className="absolute top-4 right-4 px-3 py-1.5 rounded text-sm border border-gray-600 text-gray-300 bg-black/40 backdrop-blur hover:bg-black/60 transition-colors"
+        className="absolute top-4 right-4 px-3 py-1.5 rounded-lg text-sm font-medium border border-amber-600/40 text-amber-300 bg-black/50 backdrop-blur hover:bg-amber-950/40 hover:border-amber-500/60 transition-colors"
       >
-        {showLeaderboard ? 'Hide' : 'Show'} leaderboard
+        🏆 {showLeaderboard ? 'Hide' : 'Show'} leaderboard
       </button>
 
       {showLeaderboard && (
@@ -160,7 +172,7 @@ export function MapFullScreen() {
           <TerritoryLeaderboard territory={selectedTerritory} />
           <button
             onClick={() => setSelectedTerritory(null)}
-            className="mt-1 text-xs text-gray-400 hover:text-gray-200 underline block mx-auto"
+            className="mt-1.5 text-xs text-slate-400 hover:text-slate-200 underline block mx-auto"
           >
             Close
           </button>
@@ -168,35 +180,42 @@ export function MapFullScreen() {
       )}
 
       {emptyZoneNote && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded bg-black/70 border border-gray-700 text-sm text-gray-200 backdrop-blur">
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg bg-black/70 border border-slate-700 text-sm text-gray-200 backdrop-blur animate-pop-in">
           {EMPTY_ZONE_TAP}
         </div>
       )}
 
-      <div className="absolute bottom-6 right-4 flex flex-col gap-1 bg-black/40 backdrop-blur border border-gray-700 rounded overflow-hidden">
+      {showNavHint && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none px-4 py-2 rounded-full bg-black/60 border border-slate-700 backdrop-blur text-slate-300 text-sm flex items-center gap-2 animate-pop-in">
+          <span>🖐️</span>
+          <span>Drag to move around · scroll to zoom · double-click to dive in</span>
+        </div>
+      )}
+
+      <div className="absolute bottom-6 right-4 flex flex-col gap-1 bg-black/50 backdrop-blur border border-amber-600/30 rounded-lg overflow-hidden">
         <button
           onClick={zoomIn}
-          className="w-10 h-10 flex items-center justify-center text-gray-200 hover:bg-white/10 transition-colors border-b border-gray-700 text-lg"
+          className="w-10 h-10 flex items-center justify-center text-slate-200 hover:bg-amber-500/20 hover:text-amber-300 transition-colors border-b border-slate-700 text-lg"
           aria-label="Zoom in"
         >
           +
         </button>
         <button
           onClick={zoomOut}
-          className="w-10 h-10 flex items-center justify-center text-gray-200 hover:bg-white/10 transition-colors border-b border-gray-700 text-lg"
+          className="w-10 h-10 flex items-center justify-center text-slate-200 hover:bg-amber-500/20 hover:text-amber-300 transition-colors border-b border-slate-700 text-lg"
           aria-label="Zoom out"
         >
           −
         </button>
         <button
           onClick={resetView}
-          className="w-10 h-10 flex items-center justify-center text-gray-200 hover:bg-white/10 transition-colors text-xs"
+          className="w-10 h-10 flex items-center justify-center text-slate-200 hover:bg-amber-500/20 hover:text-amber-300 transition-colors text-xs"
           aria-label="Reset view"
         >
           ⤢
         </button>
       </div>
-      <div className="absolute bottom-6 left-4 text-xs text-gray-500 font-mono select-none pointer-events-none">
+      <div className="absolute bottom-6 left-4 text-xs text-slate-500 font-mono select-none pointer-events-none">
         {Math.round(scale * 100)}%
       </div>
     </div>

@@ -3,7 +3,9 @@ import Editor from '@monaco-editor/react'
 import confetti from 'canvas-confetti'
 import { useAuth } from './auth/AuthContext'
 import { ToastStack } from './components/ToastStack'
+import { StreakBadge } from './components/StreakBadge'
 import { useToasts } from './lib/useToasts'
+import { fetchUserRank } from './api/client'
 import {
   DIFFICULTY_TAG,
   EMPTY_PROBLEM_LIST,
@@ -11,11 +13,19 @@ import {
   PROBLEM_HOVER_REMATCH,
   PROBLEM_HOVER_UNSOLVED,
   pickRandom,
+  rankTitle,
   streakToast,
   verdictFlavor,
 } from './lib/flavorText'
 
 const API_BASE = import.meta.env.VITE_API_BASE
+
+const DIFFICULTY_STYLE: Record<string, { text: string; border: string; bg: string; dot: string }> = {
+  Easy: { text: 'text-emerald-400', border: 'border-emerald-500/40', bg: 'bg-emerald-500/10', dot: 'bg-emerald-500' },
+  Medium: { text: 'text-amber-400', border: 'border-amber-500/40', bg: 'bg-amber-500/10', dot: 'bg-amber-500' },
+  Hard: { text: 'text-rose-400', border: 'border-rose-500/40', bg: 'bg-rose-500/10', dot: 'bg-rose-500' },
+}
+const DEFAULT_DIFFICULTY_STYLE = { text: 'text-slate-400', border: 'border-slate-600/40', bg: 'bg-slate-500/10', dot: 'bg-slate-500' }
 
 interface ScoreResult {
   difficultyWeight: number
@@ -71,6 +81,7 @@ function ProblemsPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [problemStatus, setProblemStatus] = useState<Record<number, ProblemStatus>>({})
+  const [rank, setRank] = useState<number | null>(null)
 
   const [code, setCode] = useState('def solve(*args, **kwargs):\n    pass\n')
   const [submitting, setSubmitting] = useState(false)
@@ -87,6 +98,10 @@ function ProblemsPage() {
     })
       .then((res) => (res.ok ? res.json() : {}))
       .then((data: Record<number, ProblemStatus>) => setProblemStatus(data))
+      .catch(() => {})
+
+    fetchUserRank(user.userId)
+      .then((data) => setRank(data.rank))
       .catch(() => {})
   }, [user, token])
 
@@ -221,235 +236,314 @@ function ProblemsPage() {
       .finally(() => setSubmitting(false))
   }
 
-  function verdictColor(verdict: string) {
-    if (verdict === 'AC') return 'text-green-600'
-    if (verdict === 'PENDING') return 'text-yellow-600'
-    return 'text-red-600'
+  function verdictStyle(verdict: string) {
+    if (verdict === 'AC') return { text: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/40' }
+    if (verdict === 'PENDING') return { text: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/40' }
+    return { text: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/40' }
   }
 
+  const solvedCount = Object.values(problemStatus).filter((s) => s === 'AC').length
+  const solvedPct = total > 0 ? Math.min(100, Math.round((solvedCount / total) * 100)) : 0
+
   const header = (
-    <div className="flex justify-between items-center mb-4 text-sm">
-      <span className="opacity-70">{user?.email}</span>
-      <button onClick={logout} className="underline">
+    <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
+      <div className="flex items-center gap-3">
+        <div
+          className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-500 to-rose-600 flex items-center justify-center text-sm font-bold text-white shadow-lg"
+          style={{ fontFamily: "'Rajdhani', sans-serif" }}
+        >
+          {(user?.email?.[0] ?? '?').toUpperCase()}
+        </div>
+        <div>
+          <p className="text-sm text-slate-200">{user?.email}</p>
+          <div className="flex items-center gap-2 text-xs">
+            {user && <StreakBadge userId={user.userId} />}
+            {flavorTextEnabled && rank && (
+              <span className="text-amber-400 font-semibold">{rankTitle(rank)}</span>
+            )}
+          </div>
+        </div>
+      </div>
+      <button
+        onClick={logout}
+        className="text-xs px-3 py-1.5 rounded border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 transition-colors"
+      >
         Logout
       </button>
     </div>
   )
 
   if (selectedProblem) {
+    const diffStyle = DIFFICULTY_STYLE[selectedProblem.difficultyLevel] ?? DEFAULT_DIFFICULTY_STYLE
+    const vStyle = submissionResult ? verdictStyle(submissionResult.verdict) : null
+
     return (
-      <div className="max-w-5xl mx-auto p-6 text-left">
-        {header}
-        <ToastStack toasts={toasts} dismiss={dismiss} />
-        <button
-          onClick={() => setSelectedProblem(null)}
-          className="mb-4 text-sm underline"
-        >
-          ← Back to list
-        </button>
-        <h1 className="text-2xl font-semibold mb-1">{selectedProblem.title}</h1>
-        <p className="text-sm mb-4 opacity-70">
-          {selectedProblem.difficultyLevel}
-          {flavorTextEnabled && DIFFICULTY_TAG[selectedProblem.difficultyLevel] && (
-            <span className="ml-2 px-2 py-0.5 rounded text-xs border border-amber-600/50 text-amber-500 uppercase tracking-wide">
-              {DIFFICULTY_TAG[selectedProblem.difficultyLevel]}
-            </span>
-          )}
-        </p>
-        <p className="mb-6 whitespace-pre-wrap">{selectedProblem.description}</p>
-
-        <h2 className="text-lg font-medium mb-2">Examples</h2>
-        {selectedProblem.examples.map((ex, i) => (
-          <pre
-            key={i}
-            className="bg-black/5 rounded p-3 mb-3 text-sm overflow-x-auto"
+      <div className="min-h-screen hud-grid-bg">
+        <div className="max-w-5xl mx-auto p-6 text-left">
+          {header}
+          <ToastStack toasts={toasts} dismiss={dismiss} />
+          <button
+            onClick={() => setSelectedProblem(null)}
+            className="mb-4 text-sm text-slate-400 hover:text-slate-200 transition-colors"
           >
-{`Input: ${JSON.stringify(ex.input)}\nOutput: ${JSON.stringify(ex.output)}`}
-          </pre>
-        ))}
+            ← Back to battlefield
+          </button>
 
-        <h2 className="text-lg font-medium mb-2">Constraints</h2>
-        <ul className="list-disc pl-5 mb-6">
-          {selectedProblem.constraints.map((c, i) => (
-            <li key={i} className="text-sm">{c}</li>
-          ))}
-        </ul>
-
-        <h2 className="text-lg font-medium mb-2">Your Solution</h2>
-
-        <div className="flex items-center gap-2 mb-2">
-          <label className="text-sm opacity-70">Language:</label>
-          <select
-            value={language}
-            onChange={(e) => {
-              const newLang = e.target.value
-              setLanguage(newLang)
-              if (selectedProblem) {
-                setCode(selectedProblem.boilerplate[newLang] || '')
-              }
-            }}
-            className="border rounded px-2 py-1 text-sm"
-          >
-            <option value="python">Python</option>
-            <option value="c++">C++</option>
-          </select>
-        </div>
-        <div className="border rounded overflow-hidden mb-3">
-          <Editor
-            height="300px"
-            language={language === 'c++' ? 'cpp' : language}
-            value={code}
-            onChange={(value) => setCode(value || '')}
-            theme="vs-dark"
-            options={{ fontSize: 14, minimap: { enabled: false } }}
-          />
-        </div>
-
-        <button
-          onClick={handleSubmit}
-          disabled={submitting}
-          className="px-4 py-2 rounded bg-black text-white text-sm disabled:opacity-50 mb-4"
-        >
-          {submitting ? 'Submitting…' : 'Submit'}
-        </button>
-
-        {submitError && <p className="text-red-500 mb-4">{submitError}</p>}
-
-        {submissionResult?.verdict === 'PENDING' && flavorTextEnabled && (
-          <p className="text-sm opacity-70 mb-2 animate-pulse">{runningLine}</p>
-        )}
-
-        {submissionResult && (
-          <div>
-            <p className={`font-semibold ${verdictColor(submissionResult.verdict)}`}>
-              Verdict: {submissionResult.verdict}
-              {flavorTextEnabled && submissionResult.verdict !== 'PENDING' && (
-                <span className="ml-2 font-normal opacity-70">
-                  — {verdictFlavor(submissionResult.verdict)}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 backdrop-blur p-6 mb-6 animate-fade-in-up">
+            <div className="flex items-center gap-2 mb-2">
+              <h1 className="text-2xl font-bold text-slate-100" style={{ fontFamily: "'Rajdhani', sans-serif" }}>
+                {selectedProblem.title}
+              </h1>
+              <span className={`px-2 py-0.5 rounded text-xs border ${diffStyle.border} ${diffStyle.bg} ${diffStyle.text} uppercase tracking-wide font-semibold`}>
+                {selectedProblem.difficultyLevel}
+              </span>
+              {flavorTextEnabled && DIFFICULTY_TAG[selectedProblem.difficultyLevel] && (
+                <span className="px-2 py-0.5 rounded text-xs border border-amber-600/40 text-amber-400 uppercase tracking-wide">
+                  {DIFFICULTY_TAG[selectedProblem.difficultyLevel]}
                 </span>
               )}
-            </p>
-
-            <p>
-              Passed: {submissionResult.totalPassed} / {submissionResult.totalTests}
-            </p>
-
-            {submissionResult.verdict === 'AC' &&
-              submissionResult.pointsAwarded === false && (
-                <p className="text-amber-500 text-sm mt-1">
-                  {submissionResult.noPointsReason === 'ALREADY_SOLVED'
-                    ? "You've already earned points for this problem — no additional territory or score awarded."
-                    : submissionResult.noPointsReason === 'DAILY_LIMIT'
-                    ? "Daily submission limit reached — this solve won't count toward score today."
-                    : "No points awarded for this submission."}
-                </p>
-              )}
-          </div>
-        )}
-        {submissionResult?.verdict === 'AC' && scoreResult && (
-          <div className="mt-4 border-2 border-green-400 rounded-lg p-4 bg-green-50">
-            <p className="text-lg font-bold text-green-700">
-              {flavorTextEnabled ? '🚩 Territory captured!' : '🎉 Accepted!'} +{scoreResult.totalScore.toFixed(1)} pts
-            </p>
-            <div className="text-sm opacity-80 mt-1 space-y-0.5">
-              <p>Difficulty weight: {scoreResult.difficultyWeight}</p>
-              <p>Attempts penalty: -{scoreResult.attemptsPenalty.toFixed(1)}</p>
-              <p>Time efficiency bonus: +{scoreResult.timeEfficiency.toFixed(1)}</p>
             </div>
+            <p className="mb-6 whitespace-pre-wrap text-slate-300 text-sm leading-relaxed">
+              {selectedProblem.description}
+            </p>
+
+            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-2">Examples</h2>
+            {selectedProblem.examples.map((ex, i) => (
+              <pre
+                key={i}
+                className="bg-black/40 border border-slate-800 rounded-lg p-3 mb-3 text-sm overflow-x-auto text-slate-300 font-mono"
+              >
+{`Input: ${JSON.stringify(ex.input)}\nOutput: ${JSON.stringify(ex.output)}`}
+              </pre>
+            ))}
+
+            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-2 mt-4">Constraints</h2>
+            <ul className="list-disc pl-5 text-slate-400">
+              {selectedProblem.constraints.map((c, i) => (
+                <li key={i} className="text-sm">{c}</li>
+              ))}
+            </ul>
           </div>
-        )}
+
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 backdrop-blur p-6 animate-fade-in-up" style={{ animationDelay: '100ms' }}>
+            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-3">Deploy Your Solution</h2>
+
+            <div className="flex items-center gap-2 mb-3">
+              {(['python', 'c++'] as const).map((lang) => (
+                <button
+                  key={lang}
+                  onClick={() => {
+                    setLanguage(lang)
+                    setCode(selectedProblem.boilerplate[lang] || '')
+                  }}
+                  className={`px-3 py-1 rounded text-xs font-medium border transition-colors ${
+                    language === lang
+                      ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
+                      : 'border-slate-700 text-slate-400 hover:border-slate-500'
+                  }`}
+                >
+                  {lang === 'python' ? 'Python' : 'C++'}
+                </button>
+              ))}
+            </div>
+            <div className="border border-slate-800 rounded-lg overflow-hidden mb-4 shadow-lg">
+              <Editor
+                height="300px"
+                language={language === 'c++' ? 'cpp' : language}
+                value={code}
+                onChange={(value) => setCode(value || '')}
+                theme="vs-dark"
+                options={{ fontSize: 14, minimap: { enabled: false } }}
+              />
+            </div>
+
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 text-sm font-bold disabled:opacity-50 mb-4 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-lg shadow-amber-900/30"
+            >
+              {submitting ? 'Deploying…' : '🚀 Deploy Solution'}
+            </button>
+
+            {submitError && <p className="text-rose-400 mb-4 text-sm">{submitError}</p>}
+
+            {submissionResult?.verdict === 'PENDING' && flavorTextEnabled && (
+              <p className="text-sm text-amber-400/80 mb-3 animate-pulse">{runningLine}</p>
+            )}
+
+            {submissionResult && vStyle && (
+              <div className={`rounded-lg border p-4 mb-3 animate-pop-in ${vStyle.border} ${vStyle.bg}`}>
+                <p className={`font-bold ${vStyle.text}`}>
+                  Verdict: {submissionResult.verdict}
+                  {flavorTextEnabled && submissionResult.verdict !== 'PENDING' && (
+                    <span className="ml-2 font-normal text-slate-400">
+                      — {verdictFlavor(submissionResult.verdict)}
+                    </span>
+                  )}
+                </p>
+                <p className="text-sm text-slate-400 mt-1">
+                  Passed: {submissionResult.totalPassed} / {submissionResult.totalTests}
+                </p>
+
+                {submissionResult.verdict === 'AC' &&
+                  submissionResult.pointsAwarded === false && (
+                    <p className="text-amber-400 text-sm mt-2">
+                      {submissionResult.noPointsReason === 'ALREADY_SOLVED'
+                        ? "You've already earned points for this problem — no additional territory or score awarded."
+                        : submissionResult.noPointsReason === 'DAILY_LIMIT'
+                        ? "Daily submission limit reached — this solve won't count toward score today."
+                        : 'No points awarded for this submission.'}
+                    </p>
+                  )}
+              </div>
+            )}
+            {submissionResult?.verdict === 'AC' && scoreResult && (
+              <div className="mt-2 rounded-xl p-4 bg-gradient-to-br from-emerald-950 to-slate-900 border border-emerald-500/40 shadow-[0_0_30px_-10px_rgba(16,185,129,0.5)] animate-pop-in">
+                <p className="text-lg font-bold text-emerald-400">
+                  {flavorTextEnabled ? '🚩 Territory captured!' : '🎉 Accepted!'} +{scoreResult.totalScore.toFixed(1)} pts
+                </p>
+                <div className="text-sm text-slate-400 mt-1 space-y-0.5">
+                  <p>Difficulty weight: {scoreResult.difficultyWeight}</p>
+                  <p>Attempts penalty: -{scoreResult.attemptsPenalty.toFixed(1)}</p>
+                  <p>Time efficiency bonus: +{scoreResult.timeEfficiency.toFixed(1)}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="max-w-3xl mx-auto p-6 text-left">
-      {header}
-      <ToastStack toasts={toasts} dismiss={dismiss} />
-      <h1 className="text-2xl font-semibold mb-4">
-        {flavorTextEnabled ? 'Pick your battlefield' : 'Problems'}
-      </h1>
+    <div className="min-h-screen hud-grid-bg">
+      <div className="max-w-4xl mx-auto p-6 text-left">
+        {header}
+        <ToastStack toasts={toasts} dismiss={dismiss} />
 
-      <div className="flex gap-2 mb-4">
-        {['', 'Easy', 'Medium', 'Hard'].map((d) => (
-          <button
-            key={d || 'all'}
-            onClick={() => {
-              setDifficulty(d)
-              setOffset(0)
-            }}
-            className={`px-3 py-1 rounded text-sm border ${
-              difficulty === d ? 'bg-black text-white' : ''
-            }`}
+        <div className="mb-6 animate-fade-in-up">
+          <h1
+            className="text-3xl font-bold mb-1"
+            style={{ color: '#f1f5f9', fontFamily: "'Rajdhani', sans-serif" }}
           >
-            {d || 'All'}
-          </button>
-        ))}
-      </div>
+            {flavorTextEnabled ? '⚔️ Pick your battlefield' : 'Problems'}
+          </h1>
+          <p className="text-sm text-slate-400 mb-3">
+            {solvedCount} / {total} zones cleared
+          </p>
+          <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 transition-all duration-700"
+              style={{
+                width: `${solvedPct}%`,
+                backgroundSize: '200% 100%',
+                animation: 'shimmer-bar 3s linear infinite',
+              }}
+            />
+          </div>
+        </div>
 
-      {error && <p className="text-red-500 mb-4">{error}</p>}
-      {loading && <p className="mb-4 opacity-60">Loading…</p>}
-
-      {!loading && !error && problems.length === 0 && (
-        <p className="mb-4 opacity-60 italic">
-          {flavorTextEnabled ? EMPTY_PROBLEM_LIST : 'No problems found.'}
-        </p>
-      )}
-
-      <ul className="divide-y divide-black/10 mb-4">
-        {problems.map((p) => {
-          const status = problemStatus[p.id]
-          const hoverTitle = flavorTextEnabled
-            ? status === 'AC'
-              ? undefined
-              : status === 'ATTEMPTED'
-              ? pickRandom(PROBLEM_HOVER_REMATCH)
-              : pickRandom(PROBLEM_HOVER_UNSOLVED)
-            : undefined
-
-          return (
-            <li key={p.id}>
+        <div className="flex gap-2 mb-6 flex-wrap">
+          {(['', 'Easy', 'Medium', 'Hard'] as const).map((d) => {
+            const style = d ? DIFFICULTY_STYLE[d] : null
+            const active = difficulty === d
+            return (
               <button
+                key={d || 'all'}
+                onClick={() => {
+                  setDifficulty(d)
+                  setOffset(0)
+                }}
+                className={`px-3 py-1.5 rounded-full text-sm border font-medium transition-colors ${
+                  active
+                    ? d
+                      ? `${style!.bg} ${style!.border} ${style!.text}`
+                      : 'bg-slate-100 text-slate-900 border-slate-100'
+                    : 'border-slate-700 text-slate-400 hover:border-slate-500'
+                }`}
+              >
+                {d || 'All'}
+                {d && flavorTextEnabled && ` · ${DIFFICULTY_TAG[d]}`}
+              </button>
+            )
+          })}
+        </div>
+
+        {error && <p className="text-rose-400 mb-4 text-sm">{error}</p>}
+        {loading && <p className="mb-4 text-slate-500 text-sm">Loading…</p>}
+
+        {!loading && !error && problems.length === 0 && (
+          <p className="mb-4 text-slate-500 italic text-sm">
+            {flavorTextEnabled ? EMPTY_PROBLEM_LIST : 'No problems found.'}
+          </p>
+        )}
+
+        <div className="grid sm:grid-cols-2 gap-3 mb-6">
+          {problems.map((p, i) => {
+            const status = problemStatus[p.id]
+            const style = DIFFICULTY_STYLE[p.difficultyLevel] ?? DEFAULT_DIFFICULTY_STYLE
+            const hoverTitle = flavorTextEnabled
+              ? status === 'AC'
+                ? undefined
+                : status === 'ATTEMPTED'
+                ? pickRandom(PROBLEM_HOVER_REMATCH)
+                : pickRandom(PROBLEM_HOVER_UNSOLVED)
+              : undefined
+
+            return (
+              <button
+                key={p.id}
                 onClick={() => openProblem(p.id)}
                 title={hoverTitle}
-                className="w-full text-left py-2 flex justify-between items-center hover:opacity-70"
+                style={{ animationDelay: `${Math.min(i, 12) * 40}ms` }}
+                className={`group relative text-left rounded-xl border bg-slate-900/60 backdrop-blur p-4 transition-all hover:-translate-y-0.5 hover:shadow-lg animate-fade-in-up ${
+                  status === 'AC'
+                    ? 'border-emerald-600/40 hover:shadow-emerald-900/30'
+                    : 'border-slate-800 hover:border-slate-600 hover:shadow-black/30'
+                }`}
               >
-                <span className="flex items-center gap-2">
-                  {status === 'AC' && <span className="text-green-600 text-xs">🚩</span>}
-                  {p.title}
-                </span>
-                <span className="text-sm opacity-60 flex items-center gap-2">
-                  {p.difficultyLevel}
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <span className={`w-1.5 h-1.5 rounded-full mt-1.5 ${style.dot}`} />
+                  <span className="flex-1 text-slate-100 font-medium text-sm leading-snug">
+                    {p.title}
+                  </span>
+                  {status === 'AC' && <span className="text-emerald-400 text-sm">🚩</span>}
+                  {status === 'ATTEMPTED' && <span className="text-amber-400 text-sm">⚔️</span>}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`px-2 py-0.5 rounded text-[10px] border ${style.border} ${style.bg} ${style.text} uppercase tracking-wide font-semibold`}>
+                    {p.difficultyLevel}
+                  </span>
                   {flavorTextEnabled && DIFFICULTY_TAG[p.difficultyLevel] && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] border border-amber-600/40 text-amber-600 uppercase tracking-wide">
+                    <span className="text-[10px] text-slate-500 uppercase tracking-wide">
                       {DIFFICULTY_TAG[p.difficultyLevel]}
                     </span>
                   )}
-                </span>
+                </div>
               </button>
-            </li>
-          )
-        })}
-      </ul>
+            )
+          })}
+        </div>
 
-      <div className="flex justify-between items-center text-sm">
-        <button
-          disabled={offset === 0}
-          onClick={() => setOffset(Math.max(0, offset - limit))}
-          className="underline disabled:opacity-30"
-        >
-          Previous
-        </button>
-        <span>
-          {offset + 1}–{Math.min(offset + limit, total)} of {total}
-        </span>
-        <button
-          disabled={offset + limit >= total}
-          onClick={() => setOffset(offset + limit)}
-          className="underline disabled:opacity-30"
-        >
-          Next
-        </button>
+        <div className="flex justify-between items-center text-sm">
+          <button
+            disabled={offset === 0}
+            onClick={() => setOffset(Math.max(0, offset - limit))}
+            className="px-3 py-1.5 rounded border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 disabled:opacity-30 transition-colors"
+          >
+            Previous
+          </button>
+          <span className="text-slate-500">
+            {offset + 1}–{Math.min(offset + limit, total)} of {total}
+          </span>
+          <button
+            disabled={offset + limit >= total}
+            onClick={() => setOffset(offset + limit)}
+            className="px-3 py-1.5 rounded border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 disabled:opacity-30 transition-colors"
+          >
+            Next
+          </button>
+        </div>
       </div>
     </div>
   )
