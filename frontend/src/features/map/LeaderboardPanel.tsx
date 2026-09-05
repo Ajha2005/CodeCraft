@@ -12,7 +12,7 @@ export function LeaderboardPanel() {
         {entries.map((entry, i) => (
           <li key={entry.userId} className="flex justify-between text-sm">
             <span className="text-slate-300">
-              #{i + 1} {entry.userId.slice(0, 8)}
+              #{i + 1} {entry.name}
             </span>
             <span className="font-mono">{entry.score.toFixed(1)}</span>
           </li>

@@ -26,6 +26,7 @@ export async function fetchTerritoryCells(): Promise<TerritoryCellDto[]> {
 
 export interface LeaderboardEntry {
   userId: string;
+  name: string;
   score: number;
 }
 
