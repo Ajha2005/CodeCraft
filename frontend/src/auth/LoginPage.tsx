@@ -64,7 +64,7 @@ function LoginPage() {
             className="text-[11px] tracking-[0.25em] text-slate-400 uppercase"
             style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 600 }}
           >
-            Live campaign — CodeCraft Territory Control
+            Live campaign in progress
           </p>
         </div>
 
@@ -90,10 +90,16 @@ function LoginPage() {
 
           <div className="text-center">
             <p
-              className="text-xs tracking-[0.2em] text-amber-500 mb-3 uppercase"
+              className="text-3xl tracking-wide text-slate-100 mb-1"
               style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700 }}
             >
-              CodeCraft — Territory Control
+              Code<span className="text-amber-400">Craft</span>
+            </p>
+            <p
+              className="text-[11px] tracking-[0.3em] text-amber-500/80 mb-5 uppercase"
+              style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 600 }}
+            >
+              Capture · Hold · Repeat
             </p>
             <h1
               className="text-2xl mb-2 leading-tight"
