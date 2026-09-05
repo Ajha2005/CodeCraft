@@ -131,11 +131,56 @@ export function CampusMap({
 
     svg.querySelectorAll('[data-decoration]').forEach((el) => el.remove());
 
+    if (!svg.querySelector('#contested-pulse-style')) {
+      const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+      style.setAttribute('id', 'contested-pulse-style');
+      style.textContent = `
+        @keyframes contested-pulse {
+          0%, 100% { stroke-opacity: 0.35; }
+          50% { stroke-opacity: 1; }
+        }
+        .contested-ring { animation: contested-pulse 1.6s ease-in-out infinite; }
+      `;
+      svg.insertBefore(style, svg.firstChild);
+    }
+
     for (const [svgPathId, territory] of Object.entries(territories)) {
       const pathEl = container.querySelector<SVGPathElement>(`#${CSS.escape(svgPathId)}`);
       if (!pathEl) continue;
 
       const box = pathEl.getBBox();
+
+      if (!showCellDetail) {
+        const cells = cellsByTerritory[territory.id] ?? [];
+        const shares = aggregateOwnership(cells);
+        if (shares.length > 1) {
+          const ring = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          ring.setAttribute('data-decoration', `${svgPathId}-contested`);
+          ring.setAttribute('class', 'contested-ring');
+          ring.setAttribute('x', String(box.x - 1.5));
+          ring.setAttribute('y', String(box.y - 1.5));
+          ring.setAttribute('width', String(box.width + 3));
+          ring.setAttribute('height', String(box.height + 3));
+          ring.setAttribute('fill', 'none');
+          ring.setAttribute('stroke', '#F97316');
+          ring.setAttribute('stroke-width', '2');
+          ring.setAttribute('pointer-events', 'none');
+          svg.appendChild(ring);
+
+          const counter = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          counter.setAttribute('data-decoration', `${svgPathId}-contested-count`);
+          counter.setAttribute('x', String(box.x + box.width / 2));
+          counter.setAttribute('y', String(box.y - 3));
+          counter.setAttribute('text-anchor', 'middle');
+          counter.setAttribute('pointer-events', 'none');
+          counter.setAttribute('font-family', "'Rajdhani', sans-serif");
+          counter.setAttribute('font-weight', '700');
+          counter.setAttribute('font-size', '9');
+          counter.setAttribute('fill', '#F97316');
+          counter.textContent = `${shares.length} soldiers eyeing this territory`;
+          svg.appendChild(counter);
+        }
+      }
 
       if (territory.tier === 'CITADEL') {
         const len = Math.min(box.width, box.height) * 0.18;
@@ -184,7 +229,7 @@ export function CampusMap({
         svg.appendChild(text);
       }
     }
-  }, [territories, showCellDetail]);
+  }, [territories, showCellDetail, cellsByTerritory]);
 
   // Cell-level rendering — only when zoomed in enough.
   useEffect(() => {

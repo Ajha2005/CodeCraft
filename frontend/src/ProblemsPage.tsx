@@ -1,7 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Editor from '@monaco-editor/react'
 import confetti from 'canvas-confetti'
 import { useAuth } from './auth/AuthContext'
+import { ToastStack } from './components/ToastStack'
+import { useToasts } from './lib/useToasts'
+import {
+  DIFFICULTY_TAG,
+  EMPTY_PROBLEM_LIST,
+  JUDGE_RUNNING,
+  PROBLEM_HOVER_REMATCH,
+  PROBLEM_HOVER_UNSOLVED,
+  pickRandom,
+  streakToast,
+  verdictFlavor,
+} from './lib/flavorText'
 
 const API_BASE = 'http://localhost:3000'
 
@@ -43,8 +55,11 @@ interface SubmissionResult {
   noPointsReason?: string | null
 }
 
+type ProblemStatus = 'AC' | 'ATTEMPTED'
+
 function ProblemsPage() {
-  const { user, token, logout } = useAuth()
+  const { user, token, logout, flavorTextEnabled } = useAuth()
+  const { toasts, push, dismiss } = useToasts()
 
   const [problems, setProblems] = useState<ProblemSummary[]>([])
   const [total, setTotal] = useState(0)
@@ -55,12 +70,25 @@ function ProblemsPage() {
   const [language, setLanguage] = useState('python')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [problemStatus, setProblemStatus] = useState<Record<number, ProblemStatus>>({})
 
   const [code, setCode] = useState('def solve(*args, **kwargs):\n    pass\n')
   const [submitting, setSubmitting] = useState(false)
   const [submissionResult, setSubmissionResult] = useState<SubmissionResult | null>(null)
   const [scoreResult, setScoreResult] = useState<ScoreResult | null>(null)
   const [submitError, setSubmitError] = useState('')
+  const [runningLine, setRunningLine] = useState('')
+  const acStreakRef = useRef(0)
+
+  useEffect(() => {
+    if (!user) return
+    fetch(`${API_BASE}/submissions/status/${user.userId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : {}))
+      .then((data: Record<number, ProblemStatus>) => setProblemStatus(data))
+      .catch(() => {})
+  }, [user, token])
 
   useEffect(() => {
     if (selectedProblem) return
@@ -122,7 +150,12 @@ function ProblemsPage() {
       .catch(() => {})
   }
 
-  function pollSubmission(id: string) {
+  function pollSubmission(id: string, problemId: number) {
+    const runningInterval = setInterval(() => {
+      setRunningLine(pickRandom(JUDGE_RUNNING))
+    }, 1400)
+    setRunningLine(pickRandom(JUDGE_RUNNING))
+
     const interval = setInterval(() => {
       fetch(`${API_BASE}/submissions/${id}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -132,12 +165,27 @@ function ProblemsPage() {
           setSubmissionResult(data)
           if (data.verdict !== 'PENDING') {
             clearInterval(interval)
+            clearInterval(runningInterval)
+
             if (data.verdict === 'AC') {
               fireCelebration(data.id)
+              setProblemStatus((prev) => ({ ...prev, [problemId]: 'AC' }))
+              acStreakRef.current += 1
+              if (acStreakRef.current >= 2 && flavorTextEnabled) {
+                push(streakToast(acStreakRef.current), 'success')
+              }
+            } else {
+              setProblemStatus((prev) =>
+                prev[problemId] === 'AC' ? prev : { ...prev, [problemId]: 'ATTEMPTED' },
+              )
+              acStreakRef.current = 0
             }
           }
         })
-        .catch(() => clearInterval(interval))
+        .catch(() => {
+          clearInterval(interval)
+          clearInterval(runningInterval)
+        })
     }, 1000)
   }
 
@@ -167,7 +215,7 @@ function ProblemsPage() {
       })
       .then((data: SubmissionResult) => {
         setSubmissionResult(data)
-        pollSubmission(data.id)
+        pollSubmission(data.id, selectedProblem.id)
       })
       .catch((err) => setSubmitError(err.message))
       .finally(() => setSubmitting(false))
@@ -192,6 +240,7 @@ function ProblemsPage() {
     return (
       <div className="max-w-5xl mx-auto p-6 text-left">
         {header}
+        <ToastStack toasts={toasts} dismiss={dismiss} />
         <button
           onClick={() => setSelectedProblem(null)}
           className="mb-4 text-sm underline"
@@ -199,7 +248,14 @@ function ProblemsPage() {
           ← Back to list
         </button>
         <h1 className="text-2xl font-semibold mb-1">{selectedProblem.title}</h1>
-        <p className="text-sm mb-4 opacity-70">{selectedProblem.difficultyLevel}</p>
+        <p className="text-sm mb-4 opacity-70">
+          {selectedProblem.difficultyLevel}
+          {flavorTextEnabled && DIFFICULTY_TAG[selectedProblem.difficultyLevel] && (
+            <span className="ml-2 px-2 py-0.5 rounded text-xs border border-amber-600/50 text-amber-500 uppercase tracking-wide">
+              {DIFFICULTY_TAG[selectedProblem.difficultyLevel]}
+            </span>
+          )}
+        </p>
         <p className="mb-6 whitespace-pre-wrap">{selectedProblem.description}</p>
 
         <h2 className="text-lg font-medium mb-2">Examples</h2>
@@ -259,10 +315,19 @@ function ProblemsPage() {
 
         {submitError && <p className="text-red-500 mb-4">{submitError}</p>}
 
+        {submissionResult?.verdict === 'PENDING' && flavorTextEnabled && (
+          <p className="text-sm opacity-70 mb-2 animate-pulse">{runningLine}</p>
+        )}
+
         {submissionResult && (
           <div>
             <p className={`font-semibold ${verdictColor(submissionResult.verdict)}`}>
               Verdict: {submissionResult.verdict}
+              {flavorTextEnabled && submissionResult.verdict !== 'PENDING' && (
+                <span className="ml-2 font-normal opacity-70">
+                  — {verdictFlavor(submissionResult.verdict)}
+                </span>
+              )}
             </p>
 
             <p>
@@ -283,7 +348,9 @@ function ProblemsPage() {
         )}
         {submissionResult?.verdict === 'AC' && scoreResult && (
           <div className="mt-4 border-2 border-green-400 rounded-lg p-4 bg-green-50">
-            <p className="text-lg font-bold text-green-700">🎉 Accepted! +{scoreResult.totalScore.toFixed(1)} pts</p>
+            <p className="text-lg font-bold text-green-700">
+              {flavorTextEnabled ? '🚩 Territory captured!' : '🎉 Accepted!'} +{scoreResult.totalScore.toFixed(1)} pts
+            </p>
             <div className="text-sm opacity-80 mt-1 space-y-0.5">
               <p>Difficulty weight: {scoreResult.difficultyWeight}</p>
               <p>Attempts penalty: -{scoreResult.attemptsPenalty.toFixed(1)}</p>
@@ -298,7 +365,10 @@ function ProblemsPage() {
   return (
     <div className="max-w-3xl mx-auto p-6 text-left">
       {header}
-      <h1 className="text-2xl font-semibold mb-4">Problems</h1>
+      <ToastStack toasts={toasts} dismiss={dismiss} />
+      <h1 className="text-2xl font-semibold mb-4">
+        {flavorTextEnabled ? 'Pick your battlefield' : 'Problems'}
+      </h1>
 
       <div className="flex gap-2 mb-4">
         {['', 'Easy', 'Medium', 'Hard'].map((d) => (
@@ -320,18 +390,46 @@ function ProblemsPage() {
       {error && <p className="text-red-500 mb-4">{error}</p>}
       {loading && <p className="mb-4 opacity-60">Loading…</p>}
 
+      {!loading && !error && problems.length === 0 && (
+        <p className="mb-4 opacity-60 italic">
+          {flavorTextEnabled ? EMPTY_PROBLEM_LIST : 'No problems found.'}
+        </p>
+      )}
+
       <ul className="divide-y divide-black/10 mb-4">
-        {problems.map((p) => (
-          <li key={p.id}>
-            <button
-              onClick={() => openProblem(p.id)}
-              className="w-full text-left py-2 flex justify-between hover:opacity-70"
-            >
-              <span>{p.title}</span>
-              <span className="text-sm opacity-60">{p.difficultyLevel}</span>
-            </button>
-          </li>
-        ))}
+        {problems.map((p) => {
+          const status = problemStatus[p.id]
+          const hoverTitle = flavorTextEnabled
+            ? status === 'AC'
+              ? undefined
+              : status === 'ATTEMPTED'
+              ? pickRandom(PROBLEM_HOVER_REMATCH)
+              : pickRandom(PROBLEM_HOVER_UNSOLVED)
+            : undefined
+
+          return (
+            <li key={p.id}>
+              <button
+                onClick={() => openProblem(p.id)}
+                title={hoverTitle}
+                className="w-full text-left py-2 flex justify-between items-center hover:opacity-70"
+              >
+                <span className="flex items-center gap-2">
+                  {status === 'AC' && <span className="text-green-600 text-xs">🚩</span>}
+                  {p.title}
+                </span>
+                <span className="text-sm opacity-60 flex items-center gap-2">
+                  {p.difficultyLevel}
+                  {flavorTextEnabled && DIFFICULTY_TAG[p.difficultyLevel] && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] border border-amber-600/40 text-amber-600 uppercase tracking-wide">
+                      {DIFFICULTY_TAG[p.difficultyLevel]}
+                    </span>
+                  )}
+                </span>
+              </button>
+            </li>
+          )
+        })}
       </ul>
 
       <div className="flex justify-between items-center text-sm">

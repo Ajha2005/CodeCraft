@@ -67,4 +67,29 @@ export class AuthService {
     const accessToken = await this.jwtService.signAsync(payload);
     return { accessToken };
   }
+
+  async getProfile(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, name: true, flavorTextEnabled: true },
+    });
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+    return {
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+      flavorTextEnabled: user.flavorTextEnabled,
+    };
+  }
+
+  async updateSettings(userId: string, flavorTextEnabled: boolean) {
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: { flavorTextEnabled },
+      select: { flavorTextEnabled: true },
+    });
+    return user;
+  }
 }

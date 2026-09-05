@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Get, UseGuards, Req, Res } from '@nestjs/common';
+import { Body, Controller, Post, Get, Patch, UseGuards, Req, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
@@ -23,7 +23,13 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Get('me')
   getProfile(@Req() req: any) {
-    return req.user; // { userId, email } — never the password hash
+    return this.authService.getProfile(req.user.userId); // never the password hash
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('settings')
+  updateSettings(@Req() req: any, @Body('flavorTextEnabled') flavorTextEnabled: boolean) {
+    return this.authService.updateSettings(req.user.userId, flavorTextEnabled);
   }
 
   @UseGuards(GoogleAuthGuard)

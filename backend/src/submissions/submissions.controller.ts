@@ -19,4 +19,9 @@ export class SubmissionsController {
   async getOne(@Param('id') id: string) {
     return this.submissionsService.getSubmission(id);
   }
+
+  @Get('status/:userId')
+  async getStatusByProblem(@Param('userId') userId: string) {
+    return this.submissionsService.getStatusByProblem(userId);
+  }
 }

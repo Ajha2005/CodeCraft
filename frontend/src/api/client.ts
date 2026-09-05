@@ -56,3 +56,29 @@ export const fetchDailyProgress = async (userId: string) => {
   const res = await api.get<DailyProgress>(`/scoring/daily-progress/${userId}`);
   return res.data;
 };
+export interface RankInfo {
+  userId: string;
+  rank: number | null;
+}
+export const fetchUserRank = async (userId: string) => {
+  const res = await api.get<RankInfo>(`/leaderboard/rank/${userId}`);
+  return res.data;
+};
+export interface NearMiss {
+  rank: number | null;
+  pointsToNext: number;
+  nextRankName: string | null;
+}
+export const fetchNearMiss = async (userId: string) => {
+  const res = await api.get<NearMiss>(`/leaderboard/near-miss/${userId}`);
+  return res.data;
+};
+export interface CampaignSummary {
+  territoriesHeld: number;
+  cellsGainedToday: number;
+  cellsLostToday: number;
+}
+export const fetchCampaignSummary = async (userId: string) => {
+  const res = await api.get<CampaignSummary>(`/scoring/campaign-summary/${userId}`);
+  return res.data;
+};

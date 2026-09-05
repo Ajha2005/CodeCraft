@@ -1,7 +1,10 @@
 import { useCollegeLeaderboard } from './hooks/useLeaderboard';
+import { useAuth } from '../../auth/AuthContext';
+import { EMPTY_LEADERBOARD, rankTitle } from '../../lib/flavorText';
 
 export function LeaderboardPanel() {
   const { entries, loading } = useCollegeLeaderboard();
+  const { flavorTextEnabled } = useAuth();
 
   if (loading) return <div className="p-4 text-slate-400">Loading leaderboard...</div>;
 
@@ -13,12 +16,17 @@ export function LeaderboardPanel() {
           <li key={entry.userId} className="flex justify-between text-sm">
             <span className="text-slate-300">
               #{i + 1} {entry.name}
+              {flavorTextEnabled && (
+                <span className="ml-1.5 text-xs text-amber-400/80">{rankTitle(i + 1)}</span>
+              )}
             </span>
             <span className="font-mono">{entry.score.toFixed(1)}</span>
           </li>
         ))}
         {entries.length === 0 && (
-          <li className="text-slate-500 text-sm">No scores yet</li>
+          <li className="text-slate-500 text-sm italic">
+            {flavorTextEnabled ? EMPTY_LEADERBOARD : 'No scores yet'}
+          </li>
         )}
       </ol>
     </div>

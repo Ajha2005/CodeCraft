@@ -11,13 +11,14 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String?
-  googleId     String?  @unique
-  name         String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                String   @id @default(uuid())
+  email             String   @unique
+  passwordHash      String?
+  googleId          String?  @unique
+  name              String?
+  flavorTextEnabled Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   territoryCellOwnerships TerritoryCellOwnership[]
   submissions        Submission[]

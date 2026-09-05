@@ -1,32 +1,52 @@
+import { useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { LOGIN_GREETINGS, pickDaily } from '../lib/flavorText'
+import { useAuth } from './AuthContext'
 
 const API_BASE = 'http://localhost:3000'
 
 function LoginPage() {
   const [searchParams] = useSearchParams()
   const error = searchParams.get('error')
+  const { flavorTextEnabled } = useAuth()
+  const greeting = useMemo(
+    () => (flavorTextEnabled ? pickDaily(LOGIN_GREETINGS) : 'Welcome back'),
+    [flavorTextEnabled],
+  )
 
   function handleGoogleLogin() {
     window.location.href = `${API_BASE}/auth/google`
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="max-w-sm w-full text-center p-6">
-        <h1 className="text-2xl font-semibold mb-2">Welcome to CodeCraft</h1>
-        <p className="text-sm opacity-70 mb-8">
+    <div
+      className="min-h-screen flex items-center justify-center bg-[#0A0E14]"
+      style={{
+        backgroundImage:
+          'repeating-linear-gradient(135deg, #0A0E14, #0A0E14 12px, #10161F 12px, #10161F 24px)',
+      }}
+    >
+      <div className="max-w-sm w-full text-center p-8 rounded-xl border border-slate-700 bg-black/50 backdrop-blur">
+        <p
+          className="text-xs tracking-[0.2em] text-amber-500 mb-3 uppercase"
+          style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700 }}
+        >
+          CodeCraft — Territory Control
+        </p>
+        <h1 className="text-xl font-semibold mb-2 text-slate-100">{greeting}</h1>
+        <p className="text-sm text-slate-400 mb-8">
           Sign in with your @thapar.edu account to continue.
         </p>
 
         {error === 'domain_not_allowed' && (
-          <p className="text-sm text-red-600 mb-4">
+          <p className="text-sm text-red-400 mb-4">
             Only @thapar.edu accounts can sign in. Please try again with your institutional email.
           </p>
         )}
 
         <button
           onClick={handleGoogleLogin}
-          className="w-full flex items-center justify-center gap-3 border rounded px-4 py-2 text-sm font-medium hover:bg-black/5 transition"
+          className="w-full flex items-center justify-center gap-3 rounded px-4 py-2 text-sm font-medium bg-slate-100 text-slate-900 hover:bg-white transition"
         >
           <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
             <path

@@ -38,6 +38,19 @@ export class LeaderboardRedisService {
     return rank === null ? null : rank + 1;
   }
 
+  async getCollegeScore(userId: string): Promise<number | null> {
+    const score = await this.redis.zscore(this.collegeKey, userId);
+    return score === null ? null : Number(score);
+  }
+
+  /** 0-indexed rank lookup — rank 0 is first place. */
+  async getCollegeEntryAtRank(rank: number): Promise<{ userId: string; score: number } | null> {
+    if (rank < 0) return null;
+    const raw = await this.redis.zrevrange(this.collegeKey, rank, rank, 'WITHSCORES');
+    if (raw.length === 0) return null;
+    return { userId: raw[0], score: Number(raw[1]) };
+  }
+
   private parseZrangeWithScores(raw: string[]): { userId: string; score: number }[] {
     const result: { userId: string; score: number }[] = [];
     for (let i = 0; i < raw.length; i += 2) {

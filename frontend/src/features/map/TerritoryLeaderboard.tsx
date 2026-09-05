@@ -1,4 +1,5 @@
 import { useTerritoryLeaderboard } from './hooks/useLeaderboard';
+import { useAuth } from '../../auth/AuthContext';
 import type { TerritoryDto } from '../../types/territory';
 
 interface TerritoryLeaderboardProps {
@@ -7,6 +8,7 @@ interface TerritoryLeaderboardProps {
 
 export function TerritoryLeaderboard({ territory }: TerritoryLeaderboardProps) {
   const { entries, loading } = useTerritoryLeaderboard(territory?.id ?? null);
+  const { flavorTextEnabled } = useAuth();
 
   if (!territory) return null;
 
@@ -29,7 +31,9 @@ export function TerritoryLeaderboard({ territory }: TerritoryLeaderboardProps) {
             </li>
           ))}
           {entries.length === 0 && (
-            <li className="text-slate-500 text-sm">No activity yet</li>
+            <li className="text-slate-500 text-sm italic">
+              {flavorTextEnabled ? 'No ruler yet. Could be you.' : 'No activity yet'}
+            </li>
           )}
         </ol>
       )}

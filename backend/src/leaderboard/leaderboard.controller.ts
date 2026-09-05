@@ -38,6 +38,30 @@ export class LeaderboardController {
     return { userId, rank };
   }
 
+  @Get('near-miss/:userId')
+  async getNearMiss(@Param('userId') userId: string) {
+    const rank = await this.leaderboardRedis.getCollegeRank(userId);
+    if (!rank || rank <= 1) {
+      return { rank, pointsToNext: 0, nextRankName: null };
+    }
+
+    const [myScore, above] = await Promise.all([
+      this.leaderboardRedis.getCollegeScore(userId),
+      this.leaderboardRedis.getCollegeEntryAtRank(rank - 2),
+    ]);
+
+    if (myScore === null || !above) {
+      return { rank, pointsToNext: 0, nextRankName: null };
+    }
+
+    const [named] = await this.attachNames([above]);
+    return {
+      rank,
+      pointsToNext: Math.max(0, above.score - myScore),
+      nextRankName: named?.name ?? null,
+    };
+  }
+
   private async attachNames(
     raw: { userId: string; score: number }[],
   ): Promise<LeaderboardEntryDto[]> {

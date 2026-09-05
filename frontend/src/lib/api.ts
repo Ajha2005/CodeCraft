@@ -49,3 +49,14 @@ export async function fetchTerritoryLeaderboard(
   return res.json();
 }
 
+export interface StreakInfo {
+  current: number;
+  longest: number;
+}
+
+export async function fetchStreak(userId: string): Promise<StreakInfo> {
+  const res = await fetch(`${API_BASE_URL}/scoring/streak/${userId}`);
+  if (!res.ok) throw new Error(`Failed to fetch streak: ${res.status}`);
+  return res.json();
+}
+

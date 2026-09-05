@@ -40,4 +40,26 @@ export class SubmissionsService {
   async getSubmission(id: string) {
     return this.prisma.submission.findUnique({ where: { id } });
   }
+
+  /**
+   * Best verdict per problem for a user — 'AC' beats any non-AC verdict,
+   * which beats never having submitted at all. Powers the "uncharted
+   * territory" vs "you've been here before" hover copy on the problem list.
+   */
+  async getStatusByProblem(userId: string): Promise<Record<number, 'AC' | 'ATTEMPTED'>> {
+    const submissions = await this.prisma.submission.findMany({
+      where: { userId, verdict: { not: 'PENDING' } },
+      select: { problemId: true, verdict: true },
+    });
+
+    const status: Record<number, 'AC' | 'ATTEMPTED'> = {};
+    for (const s of submissions) {
+      if (s.verdict === 'AC') {
+        status[s.problemId] = 'AC';
+      } else if (status[s.problemId] !== 'AC') {
+        status[s.problemId] = 'ATTEMPTED';
+      }
+    }
+    return status;
+  }
 }
