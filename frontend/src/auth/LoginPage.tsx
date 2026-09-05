@@ -72,8 +72,8 @@ function LoginPage() {
   ].filter((item): item is string => Boolean(item))
 
   return (
-    <div className="min-h-screen hud-grid-bg flex flex-col overflow-hidden relative">
-      <nav className="relative z-20 flex items-center justify-end px-6 md:px-10 py-6">
+    <div className="h-dvh hud-grid-bg flex flex-col overflow-hidden relative">
+      <nav className="relative z-20 flex items-center justify-end px-6 md:px-10 py-4">
         <FlavorToggle />
       </nav>
 
@@ -109,19 +109,19 @@ function LoginPage() {
 
         <div className="relative z-10 animate-fade-in-up max-w-2xl mx-auto">
           <p
-            className="text-xs tracking-[0.5em] text-cyan-400 uppercase mb-10"
+            className="text-xs tracking-[0.5em] text-cyan-400 uppercase mb-6"
             style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700 }}
           >
             Now Live
           </p>
 
           <h1
-            className="tracking-wide mb-10"
+            className="tracking-wide mb-6"
             style={{
               fontFamily: "'Rajdhani', sans-serif",
               fontWeight: 700,
               color: '#f1f5f9',
-              fontSize: 'clamp(2.75rem, 13vw, 8rem)',
+              fontSize: 'clamp(2.5rem, 10vw, 6rem)',
             }}
           >
             Code
@@ -131,13 +131,13 @@ function LoginPage() {
           </h1>
 
           <p
-            className="text-lg sm:text-2xl tracking-[0.5em] text-slate-300 uppercase mb-12"
+            className="text-lg sm:text-2xl tracking-[0.5em] text-slate-300 uppercase mb-8"
             style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 600 }}
           >
             Claim Your Territory
           </p>
 
-          <p className="text-slate-400 text-base max-w-lg mx-auto mb-12 leading-relaxed">{greeting}</p>
+          <p className="text-slate-400 text-base max-w-lg mx-auto mb-8 leading-relaxed">{greeting}</p>
 
           {error === 'domain_not_allowed' && (
             <p className="text-sm text-red-400 mb-10 bg-red-950/40 border border-red-800/50 rounded-lg py-2 px-4 inline-block">
@@ -176,7 +176,7 @@ function LoginPage() {
             </svg>
             Sign in with Google
           </button>
-          <p className="text-xs text-slate-500 mb-12">New commander? Signing in enlists you automatically.</p>
+          <p className="text-xs text-slate-500 mb-4">New commander? Signing in enlists you automatically.</p>
 
           {statItems.length > 0 && (
             <div className="flex flex-wrap items-center justify-center gap-2">
