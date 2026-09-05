@@ -307,7 +307,7 @@ function ProblemsPage() {
               {selectedProblem.description}
             </p>
 
-            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-2">Examples</h2>
+            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-[0.15em] mb-2">Examples</h2>
             {selectedProblem.examples.map((ex, i) => (
               <pre
                 key={i}
@@ -317,7 +317,7 @@ function ProblemsPage() {
               </pre>
             ))}
 
-            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-2 mt-4">Constraints</h2>
+            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-[0.15em] mb-2 mt-4">Constraints</h2>
             <ul className="list-disc pl-5 text-slate-400">
               {selectedProblem.constraints.map((c, i) => (
                 <li key={i} className="text-sm">{c}</li>
@@ -326,7 +326,7 @@ function ProblemsPage() {
           </div>
 
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 backdrop-blur p-6 animate-fade-in-up" style={{ animationDelay: '100ms' }}>
-            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-3">Deploy Your Solution</h2>
+            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-[0.15em] mb-3">Deploy Your Solution</h2>
 
             <div className="flex items-center gap-2 mb-3">
               {(['python', 'c++'] as const).map((lang) => (
@@ -423,12 +423,12 @@ function ProblemsPage() {
 
         <div className="mb-10 animate-fade-in-up">
           <h1
-            className="text-4xl sm:text-5xl tracking-wide mb-3"
+            className="text-4xl sm:text-5xl tracking-wide mb-4"
             style={{ color: '#f1f5f9', fontFamily: "'Rajdhani', sans-serif", fontWeight: 700 }}
           >
             {flavorTextEnabled ? '⚔️ Pick your battlefield' : 'Problems'}
           </h1>
-          <p className="text-sm text-slate-400 uppercase tracking-wide mb-3">
+          <p className="text-sm text-slate-400 uppercase tracking-[0.15em] mb-4">
             {solvedCount} / {total} zones cleared
           </p>
           <div className="h-2 rounded-full bg-slate-800 overflow-hidden">

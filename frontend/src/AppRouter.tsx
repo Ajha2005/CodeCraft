@@ -18,14 +18,14 @@ function Nav() {
   const { pathname } = useLocation();
 
   return (
-    <nav className="sticky top-0 z-30 h-16 shrink-0 flex items-center justify-between gap-6 px-6 md:px-10 bg-slate-950/85 backdrop-blur-xl border-b border-slate-800/80">
+    <nav className="relative sticky top-0 z-30 h-16 shrink-0 flex items-center justify-between gap-6 px-6 md:px-10 bg-slate-950/85 backdrop-blur-xl border-b border-slate-800/80">
       <div className="flex items-center gap-8 md:gap-12">
         <span
           className="text-lg tracking-wide select-none shrink-0"
           style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700 }}
         >
           <span className="text-slate-100">Code</span>
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-teal-300 to-cyan-300">
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-teal-300 to-cyan-300 drop-shadow-[0_0_10px_rgba(34,211,238,0.45)]">
             Craft
           </span>
         </span>
@@ -38,7 +38,7 @@ function Nav() {
                 to={link.to}
                 className={`pb-1 border-b-2 transition-colors ${
                   active
-                    ? 'text-cyan-400 border-cyan-400'
+                    ? 'text-cyan-400 border-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.6)]'
                     : 'text-slate-400 border-transparent hover:text-slate-200 hover:border-slate-600'
                 }`}
               >
@@ -49,6 +49,7 @@ function Nav() {
         </div>
       </div>
       <FlavorToggle />
+      <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent" />
     </nav>
   );
 }

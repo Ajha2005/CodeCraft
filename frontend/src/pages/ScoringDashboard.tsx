@@ -100,7 +100,7 @@ export default function ScoringDashboard() {
             </div>
             <div>
               <h1
-                className="text-4xl sm:text-5xl tracking-wide leading-tight mb-1"
+                className="text-4xl sm:text-5xl tracking-wide leading-tight mb-2"
                 style={{ color: '#f1f5f9', fontFamily: "'Rajdhani', sans-serif", fontWeight: 700 }}
               >
                 Campaign Report
@@ -111,7 +111,7 @@ export default function ScoringDashboard() {
           {rank && (
             <div className="text-right">
               <p className="text-3xl font-bold font-mono text-cyan-400">#{rank}</p>
-              {flavorTextEnabled && <p className="text-xs text-slate-400 uppercase tracking-wide">{rankTitle(rank)}</p>}
+              {flavorTextEnabled && <p className="text-xs text-slate-400 uppercase tracking-[0.15em]">{rankTitle(rank)}</p>}
             </div>
           )}
         </div>
@@ -121,7 +121,7 @@ export default function ScoringDashboard() {
             className="mb-8 rounded-xl border border-cyan-600/30 bg-gradient-to-r from-cyan-950/40 to-slate-900/60 backdrop-blur p-4 text-sm animate-fade-in-up"
             style={{ animationDelay: '60ms' }}
           >
-            <p className="text-cyan-400 font-semibold mb-1 uppercase tracking-wide text-xs">Today's campaign</p>
+            <p className="text-cyan-400 font-semibold mb-1 uppercase tracking-[0.15em] text-xs">Today's campaign</p>
             <p className="text-slate-300">
               {campaign.territoriesHeld} {campaign.territoriesHeld === 1 ? 'territory' : 'territories'} held ·{' '}
               <span className="text-emerald-400">{campaign.cellsGainedToday} gained</span> ·{' '}
@@ -135,7 +135,7 @@ export default function ScoringDashboard() {
             className="rounded-xl p-6 border border-emerald-800/40 bg-gradient-to-br from-emerald-950/50 to-slate-900/60 backdrop-blur animate-fade-in-up"
             style={{ animationDelay: '100ms' }}
           >
-            <p className="text-slate-400 text-xs uppercase tracking-wide mb-1">Total Performance Score</p>
+            <p className="text-slate-400 text-xs uppercase tracking-[0.15em] mb-1">Total Performance Score</p>
             <p className="text-4xl font-bold text-emerald-400 font-mono">
               {scoreData?.totalScore.toFixed(1)}
             </p>
@@ -145,7 +145,7 @@ export default function ScoringDashboard() {
             className="rounded-xl p-6 border border-slate-800 bg-slate-900/60 backdrop-blur animate-fade-in-up"
             style={{ animationDelay: '160ms' }}
           >
-            <p className="text-slate-400 text-xs uppercase tracking-wide mb-1">Daily Qualifying Solves</p>
+            <p className="text-slate-400 text-xs uppercase tracking-[0.15em] mb-1">Daily Qualifying Solves</p>
             <p className="text-4xl font-bold text-slate-100 font-mono">
               {progress?.qualifyingCount} <span className="text-lg text-slate-500">/ {progress?.cap}</span>
             </p>
@@ -164,7 +164,7 @@ export default function ScoringDashboard() {
             className="rounded-xl p-6 border border-slate-800 bg-slate-900/60 backdrop-blur animate-fade-in-up"
             style={{ animationDelay: '220ms' }}
           >
-            <p className="text-slate-400 text-xs uppercase tracking-wide mb-1">College Rank</p>
+            <p className="text-slate-400 text-xs uppercase tracking-[0.15em] mb-1">College Rank</p>
             <p className="text-4xl font-bold text-slate-100 font-mono">
               {rank ? `#${rank}` : '—'}
             </p>
@@ -179,7 +179,7 @@ export default function ScoringDashboard() {
         </div>
 
         <h2
-          className="text-xl font-bold mb-4 uppercase tracking-[0.1em]"
+          className="text-xl font-bold mb-4 uppercase tracking-[0.15em]"
           style={{ color: '#f1f5f9', fontFamily: "'Rajdhani', sans-serif" }}
         >
           Your Territories
@@ -215,7 +215,7 @@ export default function ScoringDashboard() {
         </div>
 
         <h2
-          className="text-xl font-bold mb-4 uppercase tracking-[0.1em]"
+          className="text-xl font-bold mb-4 uppercase tracking-[0.15em]"
           style={{ color: '#f1f5f9', fontFamily: "'Rajdhani', sans-serif" }}
         >
           Solve History
