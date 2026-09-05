@@ -86,7 +86,7 @@ export function MapFullScreen() {
 
   if (territoriesLoading || cellsLoading) {
     return (
-      <div className="w-full h-screen flex items-center justify-center hud-grid-bg text-slate-400">
+      <div className="w-full h-[calc(100vh-4rem)] flex items-center justify-center hud-grid-bg text-slate-400">
         Loading map…
       </div>
     );
@@ -108,7 +108,7 @@ export function MapFullScreen() {
   }
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-[#0A0E14]">
+    <div className="relative w-full h-[calc(100vh-4rem)] overflow-hidden bg-[#0A0E14]">
       <TransformWrapper
         ref={transformRef}
         initialScale={1}
@@ -135,14 +135,14 @@ export function MapFullScreen() {
       </TransformWrapper>
 
       <h2
-        className="absolute top-4 left-4 text-lg tracking-wide text-cyan-400 pointer-events-none select-none drop-shadow-[0_0_12px_rgba(34,211,238,0.4)]"
+        className="absolute top-6 left-6 text-xl tracking-[0.08em] text-cyan-400 pointer-events-none select-none drop-shadow-[0_0_12px_rgba(34,211,238,0.4)]"
         style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700 }}
       >
         TERRITORY CONTROL — THAPAR CAMPUS
       </h2>
 
       {flavorTextEnabled && ticker.length > 0 && (
-        <div className="absolute top-14 left-4 flex flex-col gap-1 max-w-md">
+        <div className="absolute top-16 left-6 flex flex-col gap-1 max-w-md">
           {ticker.map((t) => (
             <div
               key={t.id}
@@ -156,13 +156,13 @@ export function MapFullScreen() {
 
       <button
         onClick={() => setShowLeaderboard((s) => !s)}
-        className="absolute top-4 right-4 px-3 py-1.5 rounded-lg text-sm font-medium border border-cyan-600/40 text-cyan-300 bg-black/50 backdrop-blur hover:bg-cyan-950/40 hover:border-cyan-500/60 transition-colors"
+        className="absolute top-6 right-6 px-3 py-1.5 rounded-lg text-sm font-medium border border-cyan-600/40 text-cyan-300 bg-black/50 backdrop-blur hover:bg-cyan-950/40 hover:border-cyan-500/60 transition-colors"
       >
         🏆 {showLeaderboard ? 'Hide' : 'Show'} leaderboard
       </button>
 
       {showLeaderboard && (
-        <div className="absolute top-16 right-4 w-72">
+        <div className="absolute top-20 right-6 w-72">
           <LeaderboardPanel />
         </div>
       )}

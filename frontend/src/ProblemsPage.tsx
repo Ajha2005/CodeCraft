@@ -246,7 +246,7 @@ function ProblemsPage() {
   const solvedPct = total > 0 ? Math.min(100, Math.round((solvedCount / total) * 100)) : 0
 
   const header = (
-    <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
+    <div className="flex flex-wrap justify-between items-center gap-3 mb-10">
       <div className="flex items-center gap-3">
         <div
           className="w-9 h-9 rounded-full bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center text-sm font-bold text-white shadow-lg"
@@ -279,7 +279,7 @@ function ProblemsPage() {
 
     return (
       <div className="min-h-screen hud-grid-bg">
-        <div className="max-w-5xl mx-auto p-6 text-left">
+        <div className="max-w-5xl mx-auto p-6 md:p-10 text-left">
           {header}
           <ToastStack toasts={toasts} dismiss={dismiss} />
           <button
@@ -291,7 +291,7 @@ function ProblemsPage() {
 
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 backdrop-blur p-6 mb-6 animate-fade-in-up">
             <div className="flex items-center gap-2 mb-2">
-              <h1 className="text-2xl font-bold text-slate-100" style={{ fontFamily: "'Rajdhani', sans-serif" }}>
+              <h1 className="text-3xl tracking-wide font-bold text-slate-100" style={{ fontFamily: "'Rajdhani', sans-serif" }}>
                 {selectedProblem.title}
               </h1>
               <span className={`px-2 py-0.5 rounded text-xs border ${diffStyle.border} ${diffStyle.bg} ${diffStyle.text} uppercase tracking-wide font-semibold`}>
@@ -417,18 +417,18 @@ function ProblemsPage() {
 
   return (
     <div className="min-h-screen hud-grid-bg">
-      <div className="max-w-4xl mx-auto p-6 text-left">
+      <div className="max-w-4xl mx-auto p-6 md:p-10 text-left">
         {header}
         <ToastStack toasts={toasts} dismiss={dismiss} />
 
-        <div className="mb-6 animate-fade-in-up">
+        <div className="mb-10 animate-fade-in-up">
           <h1
-            className="text-3xl font-bold mb-1"
-            style={{ color: '#f1f5f9', fontFamily: "'Rajdhani', sans-serif" }}
+            className="text-4xl sm:text-5xl tracking-wide mb-3"
+            style={{ color: '#f1f5f9', fontFamily: "'Rajdhani', sans-serif", fontWeight: 700 }}
           >
             {flavorTextEnabled ? '⚔️ Pick your battlefield' : 'Problems'}
           </h1>
-          <p className="text-sm text-slate-400 mb-3">
+          <p className="text-sm text-slate-400 uppercase tracking-wide mb-3">
             {solvedCount} / {total} zones cleared
           </p>
           <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
@@ -443,7 +443,7 @@ function ProblemsPage() {
           </div>
         </div>
 
-        <div className="flex gap-2 mb-6 flex-wrap">
+        <div className="flex gap-2 mb-8 flex-wrap">
           {(['', 'Easy', 'Medium', 'Hard'] as const).map((d) => {
             const style = d ? DIFFICULTY_STYLE[d] : null
             const active = difficulty === d

@@ -46,13 +46,11 @@ function LoginPage() {
     window.location.href = `${API_BASE}/auth/google`
   }
 
-  const statLine = [
+  const statItems = [
     problemCount !== null ? `${problemCount} problems live` : null,
     zoneCount !== null ? `${zoneCount} zones on the map` : null,
     topCommander ? `🏆 ${topCommander.name} leads the campaign` : null,
-  ]
-    .filter(Boolean)
-    .join('  ·  ')
+  ].filter((item): item is string => Boolean(item))
 
   return (
     <div className="min-h-screen hud-grid-bg flex flex-col overflow-hidden relative">
@@ -67,15 +65,20 @@ function LoginPage() {
 
         <div className="relative z-10 animate-fade-in-up max-w-2xl mx-auto">
           <p
-            className="text-xs tracking-[0.4em] text-cyan-400 uppercase mb-8"
+            className="text-xs tracking-[0.5em] text-cyan-400 uppercase mb-10"
             style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700 }}
           >
             Now Live
           </p>
 
           <h1
-            className="text-6xl sm:text-8xl tracking-wide mb-5"
-            style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, color: '#f1f5f9' }}
+            className="tracking-wide mb-6"
+            style={{
+              fontFamily: "'Rajdhani', sans-serif",
+              fontWeight: 700,
+              color: '#f1f5f9',
+              fontSize: 'clamp(2.75rem, 13vw, 8rem)',
+            }}
           >
             Code
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-teal-300 to-cyan-300">
@@ -84,22 +87,22 @@ function LoginPage() {
           </h1>
 
           <p
-            className="text-lg sm:text-xl tracking-[0.15em] text-slate-300 uppercase mb-10"
+            className="text-lg sm:text-2xl tracking-[0.25em] text-slate-300 uppercase mb-12"
             style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 600 }}
           >
             Claim Your Territory
           </p>
 
-          <p className="text-slate-400 text-base max-w-lg mx-auto mb-10 leading-relaxed">{greeting}</p>
+          <p className="text-slate-400 text-base max-w-lg mx-auto mb-12 leading-relaxed">{greeting}</p>
 
           {error === 'domain_not_allowed' && (
-            <p className="text-sm text-red-400 mb-8 bg-red-950/40 border border-red-800/50 rounded-lg py-2 px-4 inline-block">
+            <p className="text-sm text-red-400 mb-10 bg-red-950/40 border border-red-800/50 rounded-lg py-2 px-4 inline-block">
               Only @thapar.edu accounts can sign in. Please try again with your institutional email.
             </p>
           )}
 
           {error === 'google_auth_failed' && (
-            <p className="text-sm text-red-400 mb-8 bg-red-950/40 border border-red-800/50 rounded-lg py-2 px-4 inline-block">
+            <p className="text-sm text-red-400 mb-10 bg-red-950/40 border border-red-800/50 rounded-lg py-2 px-4 inline-block">
               Google sign-in is temporarily unavailable due to a server configuration issue — this isn't
               about your account. Please try again shortly or contact the site admin.
             </p>
@@ -107,7 +110,7 @@ function LoginPage() {
 
           <button
             onClick={handleGoogleLogin}
-            className="flex items-center justify-center gap-3 rounded-full px-8 py-3.5 text-sm font-semibold bg-slate-100 text-slate-900 hover:bg-white transition-all hover:scale-[1.03] active:scale-[0.98] animate-glow-pulse mx-auto mb-5"
+            className="flex items-center justify-center gap-3 rounded-full px-8 py-3.5 text-sm font-semibold bg-slate-100 text-slate-900 hover:bg-white transition-all hover:scale-[1.03] active:scale-[0.98] animate-glow-pulse mx-auto mb-6"
           >
             <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
               <path
@@ -129,10 +132,19 @@ function LoginPage() {
             </svg>
             Sign in with Google
           </button>
-          <p className="text-xs text-slate-500 mb-10">New commander? Signing in enlists you automatically.</p>
+          <p className="text-xs text-slate-500 mb-12">New commander? Signing in enlists you automatically.</p>
 
-          {statLine && (
-            <p className="text-xs text-slate-500 uppercase tracking-[0.2em]">{statLine}</p>
+          {statItems.length > 0 && (
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {statItems.map((item) => (
+                <span
+                  key={item}
+                  className="px-3 py-1 rounded-full border border-slate-800 text-slate-500 text-xs uppercase tracking-[0.1em]"
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
           )}
         </div>
       </div>

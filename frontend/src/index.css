@@ -180,10 +180,19 @@ code {
 }
 
 .hud-grid-bg {
+  position: relative;
+  overflow: hidden;
   background-color: #071019;
   background-image:
-    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0, rgba(255, 255, 255, 0.02) 1px, transparent 1px, transparent 12px),
     radial-gradient(ellipse at 20% -10%, rgba(34, 211, 238, 0.14), transparent 55%),
     radial-gradient(ellipse at 90% 110%, rgba(20, 184, 166, 0.12), transparent 50%);
+}
+
+.hud-grid-bg::before {
+  content: '';
+  position: absolute;
+  inset: -120px;
+  background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0, rgba(255, 255, 255, 0.02) 1px, transparent 1px, transparent 12px);
   animation: drift 12s linear infinite;
+  pointer-events: none;
 }
