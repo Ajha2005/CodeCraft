@@ -1,9 +1,17 @@
 import { useEffect, useState } from 'react'
 import Editor from '@monaco-editor/react'
-import { MapFullScreen } from './features/map/MapFullScreen'
-import './App.css'
+import confetti from 'canvas-confetti'
+import { useAuth } from './auth/AuthContext'
 
 const API_BASE = 'http://localhost:3000'
+
+interface ScoreResult {
+  difficultyWeight: number
+  correctness: number
+  attemptsPenalty: number
+  timeEfficiency: number
+  totalScore: number
+}
 
 interface ProblemSummary {
   id: number
@@ -35,8 +43,9 @@ interface SubmissionResult {
   noPointsReason?: string | null
 }
 
-function App() {
-  const [view, setView] = useState<'problems' | 'map'>('problems')
+function ProblemsPage() {
+  const { user, token, logout } = useAuth()
+
   const [problems, setProblems] = useState<ProblemSummary[]>([])
   const [total, setTotal] = useState(0)
   const [offset, setOffset] = useState(0)
@@ -47,10 +56,10 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const [userId, setUserId] = useState('7cca2cb9-3acc-4606-9b13-0c639c94a330')
   const [code, setCode] = useState('def solve(*args, **kwargs):\n    pass\n')
   const [submitting, setSubmitting] = useState(false)
   const [submissionResult, setSubmissionResult] = useState<SubmissionResult | null>(null)
+  const [scoreResult, setScoreResult] = useState<ScoreResult | null>(null)
   const [submitError, setSubmitError] = useState('')
 
   useEffect(() => {
@@ -82,6 +91,7 @@ function App() {
     setLoading(true)
     setError('')
     setSubmissionResult(null)
+    setScoreResult(null)
     setSubmitError('')
     setCode('def solve(*args, **kwargs):\n    pass\n')
 
@@ -98,14 +108,33 @@ function App() {
       .finally(() => setLoading(false))
   }
 
+  function fireCelebration(submissionId: string) {
+    confetti({
+      particleCount: 150,
+      spread: 90,
+      origin: { y: 0.6 },
+    })
+    fetch(`${API_BASE}/scoring/submission/${submissionId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((data: ScoreResult) => setScoreResult(data))
+      .catch(() => {})
+  }
+
   function pollSubmission(id: string) {
     const interval = setInterval(() => {
-      fetch(`${API_BASE}/submissions/${id}`)
+      fetch(`${API_BASE}/submissions/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
         .then((res) => res.json())
         .then((data: SubmissionResult) => {
           setSubmissionResult(data)
           if (data.verdict !== 'PENDING') {
             clearInterval(interval)
+            if (data.verdict === 'AC') {
+              fireCelebration(data.id)
+            }
           }
         })
         .catch(() => clearInterval(interval))
@@ -113,16 +142,20 @@ function App() {
   }
 
   function handleSubmit() {
-    if (!selectedProblem) return
+    if (!selectedProblem || !user) return
     setSubmitting(true)
     setSubmitError('')
     setSubmissionResult(null)
+    setScoreResult(null)
 
     fetch(`${API_BASE}/submissions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify({
-        userId,
+        userId: user.userId,
         problemId: selectedProblem.id,
         language,
         code,
@@ -146,31 +179,19 @@ function App() {
     return 'text-red-600'
   }
 
-    if (view === 'map') {
-    return (
-      <div className="relative">
-        <nav className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex gap-2 p-2 rounded bg-black/60 backdrop-blur border border-gray-700">
-          <button
-            onClick={() => setView('problems')}
-            className="px-3 py-1 rounded text-sm border border-gray-600 text-gray-200"
-          >
-            Problems
-          </button>
-          <button
-            onClick={() => setView('map')}
-            className="px-3 py-1 rounded text-sm bg-white text-black"
-          >
-            Map
-          </button>
-        </nav>
-        <MapFullScreen />
-      </div>
-    )
-  }
+  const header = (
+    <div className="flex justify-between items-center mb-4 text-sm">
+      <span className="opacity-70">{user?.email}</span>
+      <button onClick={logout} className="underline">
+        Logout
+      </button>
+    </div>
+  )
 
   if (selectedProblem) {
     return (
       <div className="max-w-5xl mx-auto p-6 text-left">
+        {header}
         <button
           onClick={() => setSelectedProblem(null)}
           className="mb-4 text-sm underline"
@@ -199,14 +220,6 @@ function App() {
         </ul>
 
         <h2 className="text-lg font-medium mb-2">Your Solution</h2>
-        <div className="flex items-center gap-2 mb-2">
-          <label className="text-sm opacity-70">User ID (temp, no auth wired yet):</label>
-          <input
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            className="border rounded px-2 py-1 text-sm flex-1"
-          />
-        </div>
 
         <div className="flex items-center gap-2 mb-2">
           <label className="text-sm opacity-70">Language:</label>
@@ -268,12 +281,23 @@ function App() {
               )}
           </div>
         )}
+        {submissionResult?.verdict === 'AC' && scoreResult && (
+          <div className="mt-4 border-2 border-green-400 rounded-lg p-4 bg-green-50">
+            <p className="text-lg font-bold text-green-700">🎉 Accepted! +{scoreResult.totalScore.toFixed(1)} pts</p>
+            <div className="text-sm opacity-80 mt-1 space-y-0.5">
+              <p>Difficulty weight: {scoreResult.difficultyWeight}</p>
+              <p>Attempts penalty: -{scoreResult.attemptsPenalty.toFixed(1)}</p>
+              <p>Time efficiency bonus: +{scoreResult.timeEfficiency.toFixed(1)}</p>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
 
   return (
     <div className="max-w-3xl mx-auto p-6 text-left">
+      {header}
       <h1 className="text-2xl font-semibold mb-4">Problems</h1>
 
       <div className="flex gap-2 mb-4">
@@ -329,23 +353,8 @@ function App() {
           Next
         </button>
       </div>
-
-      <nav className="flex gap-2 p-4 border-t mt-6">
-        <button
-          onClick={() => setView('problems')}
-          className="px-3 py-1 rounded text-sm bg-black text-white"
-        >
-          Problems
-        </button>
-        <button
-          onClick={() => setView('map')}
-          className="px-3 py-1 rounded text-sm border"
-        >
-          Map
-        </button>
-      </nav>
     </div>
   )
 }
 
-export default App
+export default ProblemsPage

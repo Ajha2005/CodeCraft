@@ -11,6 +11,7 @@ import { JudgeModule } from './judge/judge.module';
 import { SubmissionsModule } from './submissions/submissions.module';
 import { LeaderboardModule } from './leaderboard/leaderboard.module';
 import { RedisModule } from './common/redis/redis.module';
+import { ScoringModule } from './scoring/scoring.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { RedisModule } from './common/redis/redis.module';
     JudgeModule,
     SubmissionsModule,
     LeaderboardModule,
+    ScoringModule,
   ],
   controllers: [AppController],
   providers: [AppService],

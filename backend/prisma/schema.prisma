@@ -13,7 +13,8 @@ datasource db {
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
-  passwordHash String
+  passwordHash String?
+  googleId     String?  @unique
   name         String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -118,6 +119,7 @@ model DailyProgress {
 
   @@unique([userId, date])
   @@map("daily_progress")
+
 }
 
 model TerritoryCell {
@@ -149,4 +151,5 @@ model TerritoryCellOwnership {
   @@index([userId])
   @@map("territory_cell_ownerships")
 }
+
 
