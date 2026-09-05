@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { LOGIN_GREETINGS, pickDaily } from '../lib/flavorText'
 import { FlavorToggle } from '../components/FlavorToggle'
@@ -10,6 +11,22 @@ interface TopCommander {
   userId: string
   name: string
   score: number
+}
+
+interface CaptureCell {
+  id: number
+  active: boolean
+  delay: number
+  duration: number
+}
+
+function makeCaptureGrid(cols: number, rows: number): CaptureCell[] {
+  return Array.from({ length: cols * rows }, (_, i) => ({
+    id: i,
+    active: Math.random() < 0.18,
+    delay: Math.random() * 5,
+    duration: 3.5 + Math.random() * 3,
+  }))
 }
 
 function LoginPage() {
@@ -24,6 +41,8 @@ function LoginPage() {
   const [topCommander, setTopCommander] = useState<TopCommander | null>(null)
   const [problemCount, setProblemCount] = useState<number | null>(null)
   const [zoneCount, setZoneCount] = useState<number | null>(null)
+
+  const captureGrid = useMemo(() => makeCaptureGrid(14, 8), [])
 
   useEffect(() => {
     fetch(`${API_BASE}/leaderboard/college?limit=1`)
@@ -61,6 +80,31 @@ function LoginPage() {
       <div className="relative flex-1 flex flex-col items-center justify-center text-center px-6">
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
           <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[1000px] h-[1000px] rounded-full bg-cyan-500/10 blur-3xl" />
+
+          <div className="absolute inset-0 opacity-70">
+            <div
+              className="grid h-full w-full"
+              style={{ gridTemplateColumns: 'repeat(14, 1fr)', gridTemplateRows: 'repeat(8, 1fr)' }}
+            >
+              {captureGrid.map((cell) => (
+                <div key={cell.id} className="border border-cyan-500/[0.06]">
+                  {cell.active && (
+                    <div
+                      className="h-full w-full animate-cell-capture bg-cyan-400/20"
+                      style={
+                        {
+                          animationDelay: `${cell.delay}s`,
+                          animationDuration: `${cell.duration}s`,
+                        } as CSSProperties
+                      }
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="absolute inset-x-0 h-40 bg-gradient-to-b from-transparent via-cyan-400/[0.06] to-transparent animate-scan-sweep" />
         </div>
 
         <div className="relative z-10 animate-fade-in-up max-w-2xl mx-auto">
@@ -72,7 +116,7 @@ function LoginPage() {
           </p>
 
           <h1
-            className="tracking-wide mb-6"
+            className="tracking-wide mb-10"
             style={{
               fontFamily: "'Rajdhani', sans-serif",
               fontWeight: 700,
@@ -87,7 +131,7 @@ function LoginPage() {
           </h1>
 
           <p
-            className="text-lg sm:text-2xl tracking-[0.25em] text-slate-300 uppercase mb-12"
+            className="text-lg sm:text-2xl tracking-[0.5em] text-slate-300 uppercase mb-12"
             style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 600 }}
           >
             Claim Your Territory

@@ -179,6 +179,25 @@ code {
   animation: glow-pulse 2.4s ease-in-out infinite;
 }
 
+.animate-scan-sweep {
+  animation: scan-sweep 7s linear infinite;
+}
+
+@keyframes cell-capture {
+  0%, 100% {
+    opacity: 0;
+    box-shadow: none;
+  }
+  45%, 55% {
+    opacity: 1;
+    box-shadow: 0 0 14px 2px rgba(34, 211, 238, 0.55);
+  }
+}
+
+.animate-cell-capture {
+  animation: cell-capture 4s ease-in-out infinite;
+}
+
 .hud-grid-bg {
   position: relative;
   overflow: hidden;
