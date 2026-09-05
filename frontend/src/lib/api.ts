@@ -1,7 +1,7 @@
 import type { TerritoryDto } from '../types/territory';
 
 // Adjust to match wherever your backend actually runs
-const API_BASE_URL = 'http://localhost:3000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE;
 
 export async function fetchTerritories(): Promise<TerritoryDto[]> {
   const res = await fetch(`${API_BASE_URL}/territories`, { cache: 'no-store' });
