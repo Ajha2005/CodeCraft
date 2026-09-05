@@ -108,26 +108,36 @@ function ProblemsPage() {
   useEffect(() => {
     if (selectedProblem) return
 
-    setLoading(true)
-    setError('')
+    let ignore = false
 
-    const params = new URLSearchParams({
-      limit: String(limit),
-      offset: String(offset),
-    })
-    if (difficulty) params.set('difficulty', difficulty)
+    async function loadProblems() {
+      setLoading(true)
+      setError('')
 
-    fetch(`${API_BASE}/problems?${params}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`Request failed: ${res.status}`)
-        return res.json()
+      const params = new URLSearchParams({
+        limit: String(limit),
+        offset: String(offset),
       })
-      .then((data: ProblemListResponse) => {
+      if (difficulty) params.set('difficulty', difficulty)
+
+      try {
+        const res = await fetch(`${API_BASE}/problems?${params}`)
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`)
+        const data: ProblemListResponse = await res.json()
+        if (ignore) return
         setProblems(data.items)
         setTotal(data.total)
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false))
+      } catch (err) {
+        if (!ignore) setError((err as Error).message)
+      } finally {
+        if (!ignore) setLoading(false)
+      }
+    }
+
+    loadProblems()
+    return () => {
+      ignore = true
+    }
   }, [offset, limit, difficulty, selectedProblem])
 
   function openProblem(id: number) {
