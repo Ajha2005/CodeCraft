@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { LOGIN_GREETINGS, pickDaily, rankTitle } from '../lib/flavorText'
+import { FlavorToggle } from '../components/FlavorToggle'
 import { useAuth } from './AuthContext'
 
 const API_BASE = 'http://localhost:3000'
@@ -11,18 +12,21 @@ interface TopCommander {
   score: number
 }
 
+const medal = ['🥇', '🥈', '🥉']
+
 function LoginPage() {
   const [searchParams] = useSearchParams()
   const error = searchParams.get('error')
   const { flavorTextEnabled } = useAuth()
   const greeting = useMemo(
-    () => (flavorTextEnabled ? pickDaily(LOGIN_GREETINGS) : 'Welcome back'),
+    () => (flavorTextEnabled ? pickDaily(LOGIN_GREETINGS) : 'Sign in to pick up where you left off.'),
     [flavorTextEnabled],
   )
 
   const [topCommanders, setTopCommanders] = useState<TopCommander[]>([])
   const [problemCount, setProblemCount] = useState<number | null>(null)
   const [zoneCount, setZoneCount] = useState<number | null>(null)
+  const [showCommanders, setShowCommanders] = useState(false)
 
   useEffect(() => {
     fetch(`${API_BASE}/leaderboard/college?limit=3`)
@@ -45,81 +49,84 @@ function LoginPage() {
     window.location.href = `${API_BASE}/auth/google`
   }
 
-  const medal = ['🥇', '🥈', '🥉']
+  const tickerItems = useMemo(() => {
+    const items: string[] = []
+    if (topCommanders[0]) items.push(`🏆 ${topCommanders[0].name.toUpperCase()} LEADS THE CAMPAIGN`)
+    if (problemCount !== null) items.push(`⚔️ ${problemCount} PROBLEMS LIVE`)
+    if (zoneCount !== null) items.push(`🗺️ ${zoneCount} ZONES ON THE MAP`)
+    items.push('🚩 CAPTURE · HOLD · REPEAT')
+    items.push('🔥 THE FRONT NEVER SLEEPS')
+    items.push('⚡ ONE SOLVE CAN FLIP A ZONE')
+    return items.length > 0 ? items : ['🚩 CAPTURE · HOLD · REPEAT']
+  }, [topCommanders, problemCount, zoneCount])
 
   return (
-    <div className="min-h-screen hud-grid-bg flex items-center justify-center p-6 overflow-hidden relative">
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute -top-32 left-1/4 w-96 h-96 rounded-full bg-amber-500/10 blur-3xl" />
-        <div className="absolute -bottom-32 right-1/4 w-96 h-96 rounded-full bg-cyan-500/10 blur-3xl" />
-      </div>
-
-      <div className="relative w-full max-w-md z-10 animate-fade-in-up">
-        <div className="flex items-center justify-center gap-2 mb-6">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+    <div className="min-h-screen hud-grid-bg flex flex-col overflow-hidden relative">
+      {/* nav */}
+      <nav className="relative z-20 flex items-center justify-between px-6 md:px-10 py-5">
+        <p
+          className="text-lg tracking-wide text-slate-100"
+          style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700 }}
+        >
+          Code<span className="text-amber-400">Craft</span>
+        </p>
+        <div
+          className="hidden sm:flex items-center gap-8 text-sm text-slate-400 uppercase tracking-wide"
+          style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 600 }}
+        >
+          <span className="text-slate-100 border-b-2 border-amber-500 pb-1">Home</span>
+          <span className="hover:text-slate-200 transition-colors cursor-default">Battlefield</span>
+          <span className="hover:text-slate-200 transition-colors cursor-default">Territory Map</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <FlavorToggle />
+          <span className="hidden md:inline-flex items-center gap-1.5 text-xs text-emerald-400 border border-emerald-600/30 bg-emerald-500/10 rounded-full px-3 py-1.5">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+            </span>
+            Live
           </span>
-          <p
-            className="text-[11px] tracking-[0.25em] text-slate-400 uppercase"
-            style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 600 }}
-          >
-            Live campaign in progress
-          </p>
+        </div>
+      </nav>
+
+      {/* hero */}
+      <div className="relative flex-1 flex flex-col items-center justify-center text-center px-6 -mt-10">
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[900px] h-[900px] rounded-full bg-amber-500/10 blur-3xl" />
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[1100px] h-40 bg-gradient-to-t from-amber-500/25 via-orange-500/10 to-transparent blur-2xl" />
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[700px] h-1 bg-amber-400/60 blur-md" />
         </div>
 
-        {(problemCount !== null || zoneCount !== null) && (
-          <div className="grid grid-cols-3 gap-2 mb-5">
-            <StatChip label="Problems" value={problemCount ?? '—'} accent="text-cyan-400" />
-            <StatChip label="Zones" value={zoneCount ?? '—'} accent="text-amber-400" />
-            <StatChip
-              label="Top Commander"
-              value={topCommanders[0]?.name ?? '—'}
-              accent="text-fuchsia-400"
-              small
-            />
-          </div>
-        )}
+        <div className="relative z-10 animate-fade-in-up">
+          <p
+            className="text-xs tracking-[0.3em] text-amber-500 uppercase mb-4"
+            style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700 }}
+          >
+            Now Live
+          </p>
+          <h1
+            className="text-5xl sm:text-7xl leading-[0.95] mb-6"
+            style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, color: '#f1f5f9' }}
+          >
+            CLAIM YOUR
+            <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-orange-400 to-amber-300">
+              TERRITORY
+            </span>
+          </h1>
+          <p className="text-slate-400 text-base max-w-lg mx-auto mb-8">{greeting}</p>
 
-        <div className="relative rounded-2xl border border-amber-600/30 bg-black/60 backdrop-blur-xl p-8 shadow-[0_0_60px_-15px_rgba(201,162,39,0.35)]">
-          {/* HUD corner brackets */}
-          <span className="absolute -top-px -left-px w-6 h-6 border-t-2 border-l-2 border-amber-500/70 rounded-tl-2xl" />
-          <span className="absolute -top-px -right-px w-6 h-6 border-t-2 border-r-2 border-amber-500/70 rounded-tr-2xl" />
-          <span className="absolute -bottom-px -left-px w-6 h-6 border-b-2 border-l-2 border-amber-500/70 rounded-bl-2xl" />
-          <span className="absolute -bottom-px -right-px w-6 h-6 border-b-2 border-r-2 border-amber-500/70 rounded-br-2xl" />
-
-          <div className="text-center">
-            <p
-              className="text-3xl tracking-wide text-slate-100 mb-1"
-              style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700 }}
-            >
-              Code<span className="text-amber-400">Craft</span>
+          {error === 'domain_not_allowed' && (
+            <p className="text-sm text-red-400 mb-6 bg-red-950/40 border border-red-800/50 rounded-lg py-2 px-4 inline-block">
+              Only @thapar.edu accounts can sign in. Please try again with your institutional email.
             </p>
-            <p
-              className="text-[11px] tracking-[0.3em] text-amber-500/80 mb-5 uppercase"
-              style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 600 }}
-            >
-              Capture · Hold · Repeat
-            </p>
-            <h1
-              className="text-2xl mb-2 leading-tight"
-              style={{ color: '#f1f5f9', fontFamily: "'Rajdhani', sans-serif", fontWeight: 700 }}
-            >
-              {greeting}
-            </h1>
-            <p className="text-sm text-slate-400 mb-7">
-              Sign in with your @thapar.edu account to continue.
-            </p>
+          )}
 
-            {error === 'domain_not_allowed' && (
-              <p className="text-sm text-red-400 mb-4 bg-red-950/40 border border-red-800/50 rounded-lg py-2 px-3">
-                Only @thapar.edu accounts can sign in. Please try again with your institutional email.
-              </p>
-            )}
-
+          <div className="flex flex-wrap items-center justify-center gap-3 mb-3">
             <button
               onClick={handleGoogleLogin}
-              className="w-full flex items-center justify-center gap-3 rounded-lg px-4 py-3 text-sm font-semibold bg-slate-100 text-slate-900 hover:bg-white transition-all hover:scale-[1.02] active:scale-[0.98] animate-glow-pulse"
+              className="flex items-center justify-center gap-3 rounded-full px-6 py-3 text-sm font-semibold bg-slate-100 text-slate-900 hover:bg-white transition-all hover:scale-[1.03] active:scale-[0.98] animate-glow-pulse"
             >
               <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
                 <path
@@ -141,61 +148,56 @@ function LoginPage() {
               </svg>
               Sign in with Google
             </button>
-            <p className="text-xs text-slate-500 mt-4">
-              New commander? Signing in enlists you automatically.
-            </p>
-          </div>
-        </div>
-
-        {topCommanders.length > 0 && (
-          <div
-            className="mt-5 rounded-xl border border-slate-800 bg-slate-900/70 backdrop-blur p-4 animate-fade-in-up"
-            style={{ animationDelay: '150ms' }}
-          >
-            <p
-              className="text-[11px] tracking-[0.2em] text-slate-400 uppercase mb-2"
-              style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700 }}
+            <button
+              onClick={() => setShowCommanders((s) => !s)}
+              className="rounded-full px-6 py-3 text-sm font-semibold border border-slate-600 text-slate-200 hover:border-amber-500/60 hover:text-amber-300 transition-colors"
             >
-              Top Commanders
-            </p>
-            <ol className="space-y-1.5">
-              {topCommanders.map((c, i) => (
-                <li key={c.userId} className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2 text-slate-200">
-                    <span>{medal[i] ?? `#${i + 1}`}</span>
-                    <span>{c.name}</span>
-                    {flavorTextEnabled && (
-                      <span className="text-[10px] text-amber-400/80 uppercase tracking-wide">
-                        {rankTitle(i + 1)}
-                      </span>
-                    )}
-                  </span>
-                  <span className="font-mono text-emerald-400">{c.score.toFixed(1)}</span>
-                </li>
-              ))}
-            </ol>
+              {showCommanders ? 'Hide' : 'View'} Top Commanders
+            </button>
           </div>
-        )}
-      </div>
-    </div>
-  )
-}
+          <p className="text-xs text-slate-500 mb-6">New commander? Signing in enlists you automatically.</p>
 
-function StatChip({
-  label,
-  value,
-  accent,
-  small,
-}: {
-  label: string
-  value: string | number
-  accent: string
-  small?: boolean
-}) {
-  return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900/60 backdrop-blur px-3 py-2 text-center">
-      <p className={`font-mono font-bold ${accent} ${small ? 'text-xs truncate' : 'text-lg'}`}>{value}</p>
-      <p className="text-[10px] text-slate-500 uppercase tracking-wide">{label}</p>
+          {showCommanders && (
+            <div className="max-w-sm mx-auto rounded-xl border border-slate-800 bg-slate-900/80 backdrop-blur p-4 animate-pop-in text-left">
+              {topCommanders.length === 0 ? (
+                <p className="text-slate-500 text-sm italic text-center">No scores yet — could be you.</p>
+              ) : (
+                <ol className="space-y-1.5">
+                  {topCommanders.map((c, i) => (
+                    <li key={c.userId} className="flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-2 text-slate-200">
+                        <span>{medal[i] ?? `#${i + 1}`}</span>
+                        <span>{c.name}</span>
+                        {flavorTextEnabled && (
+                          <span className="text-[10px] text-amber-400/80 uppercase tracking-wide">
+                            {rankTitle(i + 1)}
+                          </span>
+                        )}
+                      </span>
+                      <span className="font-mono text-emerald-400">{c.score.toFixed(1)}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* marquee ticker */}
+      <div className="relative z-10 border-t border-amber-600/20 bg-black/50 backdrop-blur py-3 overflow-hidden">
+        <div className="flex w-max animate-marquee">
+          {[...tickerItems, ...tickerItems].map((item, i) => (
+            <span
+              key={i}
+              className="mx-6 text-xs text-slate-400 uppercase tracking-widest whitespace-nowrap"
+              style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 600 }}
+            >
+              {item}
+            </span>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
