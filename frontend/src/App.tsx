@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import Editor from '@monaco-editor/react'
-import { MapPage } from './features/map/MapPage'
 import { MapFullScreen } from './features/map/MapFullScreen'
 import './App.css'
 

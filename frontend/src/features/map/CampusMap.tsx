@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { TerritoryDto } from '../../types/territory';
 import type { TerritoryCellDto } from '../../lib/api';
 
@@ -22,7 +22,6 @@ const BRASS = '#C9A227';
 const STONE_FILL = '#2B323D';
 const STONE_STROKE = '#4A5568';
 const LABEL_UNCLAIMED_COLOR = '#CBD5E1';
-const LABEL_CLAIMED_COLOR = '#0A0E14';
 const MIN_LABEL_WIDTH = 45;
 const MIN_LABEL_HEIGHT = 24;
 const CELL_SIZE = 18.5; // must match generate-grid.ts
@@ -44,9 +43,22 @@ export function CampusMap({
   onTerritoryHover,
 }: CampusMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [cellLayerCount, setCellLayerCount] = useState(0);
 
-  // Whole-building fill/stroke — base layer, always applied.
-  // Fill is suppressed once cell detail is showing (cells cover it instead).
+  useEffect(() => {
+    console.log('[CampusMap] MOUNTED');
+    return () => console.log('[CampusMap] UNMOUNTING');
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const svg = containerRef.current?.querySelector('svg');
+      const count = svg?.querySelectorAll('[data-cell-layer]').length ?? 0;
+      setCellLayerCount(count);
+    }, 300);
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -62,16 +74,12 @@ export function CampusMap({
     }
   }, [territories, showCellDetail]);
 
-  // Decorations: CITADEL corner brackets + name labels.
-  // Only shown zoomed OUT (!showCellDetail) — once cells are visible,
-  // per-building labels/reticles would just clutter the cell view.
   useEffect(() => {
     const container = containerRef.current;
     const svg = container?.querySelector('svg');
     if (!container || !svg) return;
 
     svg.querySelectorAll('[data-decoration]').forEach((el) => el.remove());
-
 
     for (const [svgPathId, territory] of Object.entries(territories)) {
       const pathEl = container.querySelector<SVGPathElement>(`#${CSS.escape(svgPathId)}`);
@@ -103,7 +111,7 @@ export function CampusMap({
         svg.appendChild(reticle);
       }
 
-            if (box.width >= MIN_LABEL_WIDTH && box.height >= MIN_LABEL_HEIGHT) {
+      if (box.width >= MIN_LABEL_WIDTH && box.height >= MIN_LABEL_HEIGHT) {
         const fontSize = Math.min(14, Math.max(8, box.height * 0.16));
         const label = truncateToFit(territory.name, box.width - 6, fontSize);
         if (!label) continue;
@@ -118,7 +126,7 @@ export function CampusMap({
         text.setAttribute('font-family', "'Rajdhani', sans-serif");
         text.setAttribute('font-weight', '600');
         text.setAttribute('font-size', String(fontSize));
-        text.setAttribute('fill', showCellDetail ? '#F1F5F9' : (territory.ownerId ? LABEL_CLAIMED_COLOR : LABEL_UNCLAIMED_COLOR));
+        text.setAttribute('fill', showCellDetail ? '#F1F5F9' : LABEL_UNCLAIMED_COLOR);
         text.setAttribute('stroke', '#0A0E14');
         text.setAttribute('stroke-width', '3');
         text.setAttribute('paint-order', 'stroke');
@@ -138,51 +146,59 @@ export function CampusMap({
     svg.querySelectorAll('[data-cell-clip]').forEach((el) => el.remove());
 
     if (!showCellDetail) return;
-    console.log('showCellDetail is true, cellsByTerritory keys:', Object.keys(cellsByTerritory));
+    console.log('[cell effect] RUNNING at', new Date().toLocaleTimeString());
 
-      for (const [svgPathId, territory] of Object.entries(territories)) {
-    const pathEl = container.querySelector<SVGPathElement>(`#${CSS.escape(svgPathId)}`);
-    const cells = cellsByTerritory[territory.id];
-    console.log(svgPathId, 'territory.id=', territory.id, 'pathEl found=', !!pathEl, 'cells found=', cells?.length ?? 0);
-    if (!pathEl || !cells || cells.length === 0) continue;
+    for (const [svgPathId, territory] of Object.entries(territories)) {
+      try {
+        const pathEl = container.querySelector<SVGPathElement>(`#${CSS.escape(svgPathId)}`);
+        const cells = cellsByTerritory[territory.id];
+        if (!pathEl || !cells || cells.length === 0) continue;
 
-      const box = pathEl.getBBox();
-      const clipId = `clip-${svgPathId}`;
+        const box = pathEl.getBBox();
+        const clipId = `clip-${svgPathId}`;
 
-      const defs =
-        svg.querySelector('defs') ??
-        (() => {
-          const d = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-          svg.insertBefore(d, svg.firstChild);
-          return d;
-        })();
+        const defs =
+          svg.querySelector('defs') ??
+          (() => {
+            const d = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            svg.insertBefore(d, svg.firstChild);
+            return d;
+          })();
 
-      const clipPath = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath');
-      clipPath.setAttribute('id', clipId);
-      clipPath.setAttribute('data-cell-clip', svgPathId);
-      const clipUse = document.createElementNS('http://www.w3.org/2000/svg', 'use');
-      clipUse.setAttribute('href', `#${svgPathId}`);
-      clipPath.appendChild(clipUse);
-      defs.appendChild(clipPath);
+        const clipPath = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath');
+        clipPath.setAttribute('id', clipId);
+        clipPath.setAttribute('data-cell-clip', svgPathId);
+        const clipUse = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+        clipUse.setAttribute('href', `#${svgPathId}`);
+        clipPath.appendChild(clipUse);
+        defs.appendChild(clipPath);
 
-      const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      group.setAttribute('data-cell-layer', svgPathId);
-      group.setAttribute('clip-path', `url(#${clipId})`);
+        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        group.setAttribute('data-cell-layer', svgPathId);
+        group.setAttribute('clip-path', `url(#${clipId})`);
 
-      for (const cell of cells) {
-        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.setAttribute('x', String(box.x + cell.col * CELL_SIZE));
-        rect.setAttribute('y', String(box.y + cell.row * CELL_SIZE));
-        rect.setAttribute('width', String(CELL_SIZE));
-        rect.setAttribute('height', String(CELL_SIZE));
-        rect.setAttribute('fill', cell.ownerId ? cell.ownerColor : STONE_FILL);
-        rect.setAttribute('fill-opacity', cell.ownerId ? '0.7' : '1');
-        rect.setAttribute('stroke', '#1a1e26');
-        rect.setAttribute('stroke-width', '0.5');
-        group.appendChild(rect);
+        for (const cell of cells) {
+          const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          rect.setAttribute('x', String(box.x + cell.col * CELL_SIZE));
+          rect.setAttribute('y', String(box.y + cell.row * CELL_SIZE));
+          rect.setAttribute('width', String(CELL_SIZE));
+          rect.setAttribute('height', String(CELL_SIZE));
+          rect.setAttribute('fill', cell.ownerId ? cell.ownerColor : STONE_FILL);
+          rect.setAttribute('fill-opacity', cell.ownerId ? '0.7' : '1');
+          rect.setAttribute('stroke', '#1a1e26');
+          rect.setAttribute('stroke-width', '0.5');
+          group.appendChild(rect);
+        }
+
+        const firstDecoration = svg.querySelector('[data-decoration]');
+        if (firstDecoration) {
+          svg.insertBefore(group, firstDecoration);
+        } else {
+          svg.appendChild(group);
+        }
+      } catch (err) {
+        console.error('[cell effect] ERROR on', svgPathId, err);
       }
-
-      svg.appendChild(group);
     }
   }, [territories, cellsByTerritory, showCellDetail]);
 
@@ -220,14 +236,19 @@ export function CampusMap({
   }, [territories, onTerritoryClick, onTerritoryHover]);
 
   return (
-    <div
-      ref={containerRef}
-      className="[&_svg]:w-full [&_svg]:h-auto [&_path]:transition-all [&_path]:duration-300 [&_path]:cursor-pointer"
-      style={{
-        background:
-          'repeating-linear-gradient(135deg, #0A0E14, #0A0E14 12px, #10161F 12px, #10161F 24px)',
-      }}
-      dangerouslySetInnerHTML={{ __html: svgMarkup }}
-    />
+    <>
+      <div className="absolute top-28 left-4 text-xs text-cyan-400 font-mono bg-black/60 p-2 rounded pointer-events-none z-50">
+        cell layer groups in DOM: {cellLayerCount}
+      </div>
+      <div
+        ref={containerRef}
+        className="[&_svg]:w-full [&_svg]:h-auto [&_path]:transition-all [&_path]:duration-300 [&_path]:cursor-pointer"
+        style={{
+          background:
+            'repeating-linear-gradient(135deg, #0A0E14, #0A0E14 12px, #10161F 12px, #10161F 24px)',
+        }}
+        dangerouslySetInnerHTML={{ __html: svgMarkup }}
+      />
+    </>
   );
 }

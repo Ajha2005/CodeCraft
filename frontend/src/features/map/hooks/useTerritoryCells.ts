@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { fetchTerritoryCells } from '../../../lib/api';
 import { getSocket } from '../../../lib/socket';
 import type { TerritoryCellDto } from '../../../lib/api';
@@ -37,11 +37,13 @@ export function useTerritoryCells() {
     };
   }, []);
 
-  // Group by territoryId for convenient lookup while rendering
-  const cellsByTerritory: Record<string, TerritoryCellDto[]> = {};
-  for (const cell of cells) {
-    (cellsByTerritory[cell.territoryId] ??= []).push(cell);
-  }
+  const cellsByTerritory = useMemo(() => {
+    const grouped: Record<string, TerritoryCellDto[]> = {};
+    for (const cell of cells) {
+      (grouped[cell.territoryId] ??= []).push(cell);
+    }
+    return grouped;
+  }, [cells]);
 
   return { cells, cellsByTerritory, loading };
 }
