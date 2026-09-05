@@ -27,7 +27,6 @@ const LABEL_UNCLAIMED_COLOR = '#CBD5E1';
 const LABEL_CELL_DETAIL_COLOR = '#F1F5F9';
 const MIN_LABEL_WIDTH = 45;
 const MIN_LABEL_HEIGHT = 24;
-const CELL_SIZE = 18.5; // must match generate-grid.ts
 
 function truncateToFit(name: string, boxWidth: number, fontSize: number): string {
   const approxCharWidth = fontSize * 0.58;
@@ -265,6 +264,16 @@ export function CampusMap({
         const box = pathEl.getBBox();
         const clipId = `clip-${svgPathId}`;
 
+        // Grid dimensions (row/col count) come from generate-grid.ts's
+        // --size, a separate constant we can't read from here. Deriving
+        // cell width/height from this territory's own bbox and the actual
+        // max row/col keeps the grid filling the whole box instead of
+        // clustering in the top-left corner if that size ever changes.
+        const maxCol = cells.reduce((max, c) => Math.max(max, c.col), 0);
+        const maxRow = cells.reduce((max, c) => Math.max(max, c.row), 0);
+        const cellWidth = box.width / (maxCol + 1);
+        const cellHeight = box.height / (maxRow + 1);
+
         const defs =
           svg.querySelector('defs') ??
           (() => {
@@ -287,10 +296,10 @@ export function CampusMap({
 
         for (const cell of cells) {
           const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-          rect.setAttribute('x', String(box.x + cell.col * CELL_SIZE));
-          rect.setAttribute('y', String(box.y + cell.row * CELL_SIZE));
-          rect.setAttribute('width', String(CELL_SIZE));
-          rect.setAttribute('height', String(CELL_SIZE));
+          rect.setAttribute('x', String(box.x + cell.col * cellWidth));
+          rect.setAttribute('y', String(box.y + cell.row * cellHeight));
+          rect.setAttribute('width', String(cellWidth));
+          rect.setAttribute('height', String(cellHeight));
           rect.setAttribute('fill', cell.ownerId ? cell.ownerColor : STONE_FILL);
           rect.setAttribute('fill-opacity', cell.ownerId ? '0.7' : '1');
           rect.setAttribute('stroke', '#1a1e26');
