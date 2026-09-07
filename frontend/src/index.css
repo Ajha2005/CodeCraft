@@ -17,7 +17,7 @@
   --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
 
-  font: 18px/145% var(--sans);
+  font: 18px/1.45 var(--sans);
   letter-spacing: 0.18px;
   color-scheme: light dark;
   color: var(--text);
@@ -70,33 +70,13 @@ body,
   min-height: 100%;
 }
 
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
-}
-
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
+/* In @layer base so Tailwind utility classes (mb-*, mx-auto, etc. on <p>
+   elements) still win — an unlayered rule here would beat them regardless
+   of specificity, per CSS cascade layer rules. */
+@layer base {
+  p {
+    margin: 0;
   }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
-p {
-  margin: 0;
 }
 
 code,
@@ -145,10 +125,10 @@ code {
 @keyframes glow-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.35);
+    box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.35);
   }
   50% {
-    box-shadow: 0 0 24px 4px rgba(245, 158, 11, 0.25);
+    box-shadow: 0 0 24px 4px rgba(34, 211, 238, 0.25);
   }
 }
 
@@ -179,6 +159,19 @@ code {
   }
 }
 
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 28s linear infinite;
+}
+
 .animate-fade-in-up {
   animation: fade-in-up 0.5s ease-out both;
 }
@@ -191,11 +184,39 @@ code {
   animation: glow-pulse 2.4s ease-in-out infinite;
 }
 
+.animate-scan-sweep {
+  animation: scan-sweep 7s linear infinite;
+}
+
+@keyframes cell-capture {
+  0%, 100% {
+    opacity: 0;
+    box-shadow: none;
+  }
+  45%, 55% {
+    opacity: 1;
+    box-shadow: 0 0 14px 2px rgba(34, 211, 238, 0.55);
+  }
+}
+
+.animate-cell-capture {
+  animation: cell-capture 4s ease-in-out infinite;
+}
+
 .hud-grid-bg {
-  background-color: #0a0e14;
+  position: relative;
+  overflow: hidden;
+  background-color: #071019;
   background-image:
-    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0, rgba(255, 255, 255, 0.02) 1px, transparent 1px, transparent 12px),
-    radial-gradient(ellipse at 20% -10%, rgba(201, 162, 39, 0.14), transparent 55%),
-    radial-gradient(ellipse at 90% 110%, rgba(6, 182, 212, 0.1), transparent 50%);
+    radial-gradient(ellipse at 20% -10%, rgba(34, 211, 238, 0.14), transparent 55%),
+    radial-gradient(ellipse at 90% 110%, rgba(20, 184, 166, 0.12), transparent 50%);
+}
+
+.hud-grid-bg::before {
+  content: '';
+  position: absolute;
+  inset: -120px;
+  background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0, rgba(255, 255, 255, 0.02) 1px, transparent 1px, transparent 12px);
   animation: drift 12s linear infinite;
+  pointer-events: none;
 }

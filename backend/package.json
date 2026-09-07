@@ -7,6 +7,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "seed": "tsx prisma/seed.ts",
+    "reset-grid": "tsx prisma/reset-grid.ts",
     "build": "nest build",
     "postbuild": "mkdir -p dist/generated/prisma && cp generated/prisma/package.json dist/generated/prisma/package.json",
     "postgenerate": "echo '{\"type\": \"commonjs\"}' > generated/prisma/package.json",

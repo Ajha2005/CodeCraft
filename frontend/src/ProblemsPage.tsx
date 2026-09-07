@@ -18,7 +18,7 @@ import {
   verdictFlavor,
 } from './lib/flavorText'
 
-const API_BASE = import.meta.env.VITE_API_BASE
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3000'
 
 const DIFFICULTY_STYLE: Record<string, { text: string; border: string; bg: string; dot: string }> = {
   Easy: { text: 'text-emerald-400', border: 'border-emerald-500/40', bg: 'bg-emerald-500/10', dot: 'bg-emerald-500' },
@@ -108,26 +108,36 @@ function ProblemsPage() {
   useEffect(() => {
     if (selectedProblem) return
 
-    setLoading(true)
-    setError('')
+    let ignore = false
 
-    const params = new URLSearchParams({
-      limit: String(limit),
-      offset: String(offset),
-    })
-    if (difficulty) params.set('difficulty', difficulty)
+    async function loadProblems() {
+      setLoading(true)
+      setError('')
 
-    fetch(`${API_BASE}/problems?${params}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`Request failed: ${res.status}`)
-        return res.json()
+      const params = new URLSearchParams({
+        limit: String(limit),
+        offset: String(offset),
       })
-      .then((data: ProblemListResponse) => {
+      if (difficulty) params.set('difficulty', difficulty)
+
+      try {
+        const res = await fetch(`${API_BASE}/problems?${params}`)
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`)
+        const data: ProblemListResponse = await res.json()
+        if (ignore) return
         setProblems(data.items)
         setTotal(data.total)
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false))
+      } catch (err) {
+        if (!ignore) setError((err as Error).message)
+      } finally {
+        if (!ignore) setLoading(false)
+      }
+    }
+
+    loadProblems()
+    return () => {
+      ignore = true
+    }
   }, [offset, limit, difficulty, selectedProblem])
 
   function openProblem(id: number) {
@@ -246,10 +256,10 @@ function ProblemsPage() {
   const solvedPct = total > 0 ? Math.min(100, Math.round((solvedCount / total) * 100)) : 0
 
   const header = (
-    <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
+    <div className="flex flex-wrap justify-between items-center gap-3 mb-10">
       <div className="flex items-center gap-3">
         <div
-          className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-500 to-rose-600 flex items-center justify-center text-sm font-bold text-white shadow-lg"
+          className="w-9 h-9 rounded-full bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center text-sm font-bold text-white shadow-lg"
           style={{ fontFamily: "'Rajdhani', sans-serif" }}
         >
           {(user?.email?.[0] ?? '?').toUpperCase()}
@@ -259,7 +269,7 @@ function ProblemsPage() {
           <div className="flex items-center gap-2 text-xs">
             {user && <StreakBadge userId={user.userId} />}
             {flavorTextEnabled && rank && (
-              <span className="text-amber-400 font-semibold">{rankTitle(rank)}</span>
+              <span className="text-cyan-400 font-semibold">{rankTitle(rank)}</span>
             )}
           </div>
         </div>
@@ -279,7 +289,7 @@ function ProblemsPage() {
 
     return (
       <div className="min-h-screen hud-grid-bg">
-        <div className="max-w-5xl mx-auto p-6 text-left">
+        <div className="max-w-5xl mx-auto p-6 md:p-10 text-left">
           {header}
           <ToastStack toasts={toasts} dismiss={dismiss} />
           <button
@@ -291,14 +301,14 @@ function ProblemsPage() {
 
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 backdrop-blur p-6 mb-6 animate-fade-in-up">
             <div className="flex items-center gap-2 mb-2">
-              <h1 className="text-2xl font-bold text-slate-100" style={{ fontFamily: "'Rajdhani', sans-serif" }}>
+              <h1 className="text-3xl tracking-wide font-bold text-slate-100" style={{ fontFamily: "'Rajdhani', sans-serif" }}>
                 {selectedProblem.title}
               </h1>
               <span className={`px-2 py-0.5 rounded text-xs border ${diffStyle.border} ${diffStyle.bg} ${diffStyle.text} uppercase tracking-wide font-semibold`}>
                 {selectedProblem.difficultyLevel}
               </span>
               {flavorTextEnabled && DIFFICULTY_TAG[selectedProblem.difficultyLevel] && (
-                <span className="px-2 py-0.5 rounded text-xs border border-amber-600/40 text-amber-400 uppercase tracking-wide">
+                <span className="px-2 py-0.5 rounded text-xs border border-cyan-600/40 text-cyan-400 uppercase tracking-wide">
                   {DIFFICULTY_TAG[selectedProblem.difficultyLevel]}
                 </span>
               )}
@@ -307,7 +317,7 @@ function ProblemsPage() {
               {selectedProblem.description}
             </p>
 
-            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-2">Examples</h2>
+            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-[0.15em] mb-2">Examples</h2>
             {selectedProblem.examples.map((ex, i) => (
               <pre
                 key={i}
@@ -317,7 +327,7 @@ function ProblemsPage() {
               </pre>
             ))}
 
-            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-2 mt-4">Constraints</h2>
+            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-[0.15em] mb-2 mt-4">Constraints</h2>
             <ul className="list-disc pl-5 text-slate-400">
               {selectedProblem.constraints.map((c, i) => (
                 <li key={i} className="text-sm">{c}</li>
@@ -326,7 +336,7 @@ function ProblemsPage() {
           </div>
 
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 backdrop-blur p-6 animate-fade-in-up" style={{ animationDelay: '100ms' }}>
-            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-3">Deploy Your Solution</h2>
+            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-[0.15em] mb-3">Deploy Your Solution</h2>
 
             <div className="flex items-center gap-2 mb-3">
               {(['python', 'c++'] as const).map((lang) => (
@@ -338,7 +348,7 @@ function ProblemsPage() {
                   }}
                   className={`px-3 py-1 rounded text-xs font-medium border transition-colors ${
                     language === lang
-                      ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
+                      ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300'
                       : 'border-slate-700 text-slate-400 hover:border-slate-500'
                   }`}
                 >
@@ -360,7 +370,7 @@ function ProblemsPage() {
             <button
               onClick={handleSubmit}
               disabled={submitting}
-              className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 text-sm font-bold disabled:opacity-50 mb-4 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-lg shadow-amber-900/30"
+              className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-600 text-slate-950 text-sm font-bold disabled:opacity-50 mb-4 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-lg shadow-cyan-900/30"
             >
               {submitting ? 'Deploying…' : '🚀 Deploy Solution'}
             </button>
@@ -417,23 +427,23 @@ function ProblemsPage() {
 
   return (
     <div className="min-h-screen hud-grid-bg">
-      <div className="max-w-4xl mx-auto p-6 text-left">
+      <div className="max-w-4xl mx-auto p-6 md:p-10 text-left">
         {header}
         <ToastStack toasts={toasts} dismiss={dismiss} />
 
-        <div className="mb-6 animate-fade-in-up">
+        <div className="mb-10 animate-fade-in-up">
           <h1
-            className="text-3xl font-bold mb-1"
-            style={{ color: '#f1f5f9', fontFamily: "'Rajdhani', sans-serif" }}
+            className="text-4xl sm:text-5xl tracking-wide mb-4"
+            style={{ color: '#f1f5f9', fontFamily: "'Rajdhani', sans-serif", fontWeight: 700 }}
           >
             {flavorTextEnabled ? '⚔️ Pick your battlefield' : 'Problems'}
           </h1>
-          <p className="text-sm text-slate-400 mb-3">
+          <p className="text-sm text-slate-400 uppercase tracking-[0.15em] mb-4">
             {solvedCount} / {total} zones cleared
           </p>
           <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 transition-all duration-700"
+              className="h-full rounded-full bg-gradient-to-r from-cyan-500 via-teal-500 to-emerald-500 transition-all duration-700"
               style={{
                 width: `${solvedPct}%`,
                 backgroundSize: '200% 100%',
@@ -443,7 +453,7 @@ function ProblemsPage() {
           </div>
         </div>
 
-        <div className="flex gap-2 mb-6 flex-wrap">
+        <div className="flex gap-2 mb-8 flex-wrap">
           {(['', 'Easy', 'Medium', 'Hard'] as const).map((d) => {
             const style = d ? DIFFICULTY_STYLE[d] : null
             const active = difficulty === d
