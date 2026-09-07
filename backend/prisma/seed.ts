@@ -111,7 +111,15 @@ async function main() {
     try {
       await prisma.problem.upsert({
         where: { id: Number(row.id) },
-        update: {},
+        update: {
+          title: row.title,
+          description: row.description,
+          difficultyLevel: row.difficulty_level,
+          examples,
+          constraints,
+          testCases,
+          updatedAt: new Date(row.updated_at),
+        },
         create: {
           id: Number(row.id),
           title: row.title,

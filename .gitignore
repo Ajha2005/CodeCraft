@@ -2,6 +2,9 @@ node_modules
 dist
 generated
 
+# Ephemeral git worktrees created by background Claude Code agents
+.claude/worktrees
+
 # Keep environment variables out of version control
 .envjudge0/*.zip
 judge0/judge0-v1.13.1.zip.1

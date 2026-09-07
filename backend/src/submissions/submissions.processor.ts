@@ -136,30 +136,86 @@ export class SubmissionsProcessor extends WorkerHost {
   }
 
   private async assignTerritory(userId: string, tier: string) {
-    // Prefer any unclaimed cell in any territory of this tier
+    // If the user already holds cells in this tier, grow their territory
+    // outward from those cells instead of handing them an unrelated one.
+    const ownedCells = await this.prisma.territoryCellOwnership.findMany({
+      where: { userId, closedAt: null, cell: { territory: { tier } } },
+      include: { cell: true },
+    });
+
+    if (ownedCells.length > 0) {
+      const grown = await this.tryGrowTerritory(
+        userId,
+        tier,
+        ownedCells.map((o) => o.cell),
+      );
+      if (grown) return;
+    }
+
+    await this.assignAnyCellInTier(userId, tier);
+  }
+
+  private isAdjacent(a: { row: number; col: number }, b: { row: number; col: number }) {
+    return Math.abs(a.row - b.row) + Math.abs(a.col - b.col) === 1;
+  }
+
+  // Tries to extend the user's existing footprint in this tier by one cell,
+  // touching a cell they already own. Prefers an unclaimed neighbor; if every
+  // neighbor is already someone else's, captures one instead. Returns false
+  // when no owned cell has any neighboring cell at all, so the caller can
+  // fall back to the tier-wide assignment.
+  private async tryGrowTerritory(
+    userId: string,
+    tier: string,
+    ownedCells: { territoryId: string; row: number; col: number }[],
+  ): Promise<boolean> {
+    const territoryIds = [...new Set(ownedCells.map((c) => c.territoryId))];
+
+    const candidates = await this.prisma.territoryCell.findMany({
+      where: { territoryId: { in: territoryIds } },
+      include: { ownerships: { where: { closedAt: null } } },
+    });
+
+    const isNeighborOfOwned = (cell: { territoryId: string; row: number; col: number }) =>
+      ownedCells.some(
+        (owned) => owned.territoryId === cell.territoryId && this.isAdjacent(owned, cell),
+      );
+
+    const unclaimedNeighbor = candidates.find(
+      (cell) => cell.ownerships.length === 0 && isNeighborOfOwned(cell),
+    );
+    if (unclaimedNeighbor) {
+      await this.claimCell(userId, tier, unclaimedNeighbor);
+      return true;
+    }
+
+    const contestedNeighbor = candidates.find(
+      (cell) =>
+        isNeighborOfOwned(cell) &&
+        cell.ownerships.length > 0 &&
+        cell.ownerships[0].userId !== userId,
+    );
+    if (contestedNeighbor) {
+      await this.captureCell(userId, tier, contestedNeighbor, contestedNeighbor.ownerships[0].id);
+      return true;
+    }
+
+    return false;
+  }
+
+  // Original tier-wide behavior: any unclaimed cell in the tier, else contest
+  // a cell someone else holds. Used when the user has no foothold yet in this
+  // tier, or their existing cells have no free/contestable neighbor left.
+  private async assignAnyCellInTier(userId: string, tier: string) {
     const unclaimedCell = await this.prisma.territoryCell.findFirst({
       where: {
         territory: { tier },
         ownerships: { none: { closedAt: null } },
       },
-      include: { territory: true },
     });
 
     if (unclaimedCell) {
-      await this.prisma.territoryCellOwnership.create({
-        data: { cellId: unclaimedCell.id, userId, sourceType: 'solve' },
-      });
-      this.logger.log(
-        `Assigned unclaimed ${tier} cell ${unclaimedCell.id} (territory ${unclaimedCell.territoryId}) to user ${userId}`,
-      );
-      this.territoryGateway.broadcastCellUpdate({
-        territoryId: unclaimedCell.territoryId,
-        cellId: unclaimedCell.id,
-        row: unclaimedCell.row,
-        col: unclaimedCell.col,
-        ownerId: userId,
-        ownerColor: getColorForUser(userId),
-      });
+      await this.claimCell(userId, tier, unclaimedCell);
       return;
     }
 
@@ -170,7 +226,7 @@ export class SubmissionsProcessor extends WorkerHost {
         territory: { tier },
         ownerships: { some: { closedAt: null, NOT: { userId } } },
       },
-      include: { territory: true, ownerships: { where: { closedAt: null } } },
+      include: { ownerships: { where: { closedAt: null } } },
     });
 
     if (!contested) {
@@ -178,22 +234,51 @@ export class SubmissionsProcessor extends WorkerHost {
       return;
     }
 
-    const openOwnership = contested.ownerships[0];
+    await this.captureCell(userId, tier, contested, contested.ownerships[0].id);
+  }
+
+  private async claimCell(
+    userId: string,
+    tier: string,
+    cell: { id: string; territoryId: string; row: number; col: number },
+  ) {
+    await this.prisma.territoryCellOwnership.create({
+      data: { cellId: cell.id, userId, sourceType: 'solve' },
+    });
+    this.logger.log(
+      `Assigned unclaimed ${tier} cell ${cell.id} (territory ${cell.territoryId}) to user ${userId}`,
+    );
+    this.broadcastCell(cell, userId);
+  }
+
+  private async captureCell(
+    userId: string,
+    tier: string,
+    cell: { id: string; territoryId: string; row: number; col: number },
+    openOwnershipId: string,
+  ) {
     await this.prisma.territoryCellOwnership.update({
-      where: { id: openOwnership.id },
+      where: { id: openOwnershipId },
       data: { closedAt: new Date() },
     });
     await this.prisma.territoryCellOwnership.create({
-      data: { cellId: contested.id, userId, sourceType: 'solve' },
+      data: { cellId: cell.id, userId, sourceType: 'solve' },
     });
     this.logger.log(
-      `User ${userId} captured ${tier} cell ${contested.id} (territory ${contested.territoryId})`,
+      `User ${userId} captured ${tier} cell ${cell.id} (territory ${cell.territoryId})`,
     );
+    this.broadcastCell(cell, userId);
+  }
+
+  private broadcastCell(
+    cell: { id: string; territoryId: string; row: number; col: number },
+    userId: string,
+  ) {
     this.territoryGateway.broadcastCellUpdate({
-      territoryId: contested.territoryId,
-      cellId: contested.id,
-      row: contested.row,
-      col: contested.col,
+      territoryId: cell.territoryId,
+      cellId: cell.id,
+      row: cell.row,
+      col: cell.col,
       ownerId: userId,
       ownerColor: getColorForUser(userId),
     });
