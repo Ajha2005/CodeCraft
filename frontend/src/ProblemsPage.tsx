@@ -201,7 +201,7 @@ function ProblemsPage() {
           clearInterval(interval)
           clearInterval(runningInterval)
         })
-    }, 1000)
+    }, 2000)
   }
 
   function handleSubmit() {
