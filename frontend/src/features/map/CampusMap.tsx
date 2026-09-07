@@ -95,6 +95,12 @@ export function CampusMap({
         pathEl.style.fill = STONE_FILL;
       } else if (shares.length === 1) {
         pathEl.style.fill = shares[0].color;
+        // A single captured cell out of hundreds shouldn't paint the whole
+        // building as if it were fully held — fade the fill in proportional
+        // to how much of the territory is actually captured, so the color
+        // reads as "in progress" until it's genuinely mostly taken.
+        const capturedFraction = cells.length > 0 ? shares[0].cellCount / cells.length : 1;
+        pathEl.style.fillOpacity = String(Math.min(1, 0.25 + 0.75 * capturedFraction));
       } else {
         const patternId = `stripe-${svgPathId}`;
         const stripes = computeStripeWidths(shares);
@@ -119,6 +125,10 @@ export function CampusMap({
 
         defs.appendChild(pattern);
         pathEl.style.fill = `url(#${patternId})`;
+
+        const totalCaptured = shares.reduce((sum, s) => sum + s.cellCount, 0);
+        const capturedFraction = cells.length > 0 ? totalCaptured / cells.length : 1;
+        pathEl.style.fillOpacity = String(Math.min(1, 0.25 + 0.75 * capturedFraction));
       }
     }
   }, [territories, showCellDetail, cellsByTerritory]);

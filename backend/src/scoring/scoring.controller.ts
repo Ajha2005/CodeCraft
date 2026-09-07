@@ -15,7 +15,6 @@ export class ScoringController {
     return { totalScore, scores };
   }
 
-
   @Get('submission/:submissionId')
   async getSubmissionScore(@Param('submissionId') submissionId: string) {
     return this.prisma.performanceScore.findUnique({
@@ -25,11 +24,41 @@ export class ScoringController {
 
   @Get('territories/:userId')
   async getUserTerritories(@Param('userId') userId: string) {
-    return this.prisma.territoryOwnership.findMany({
+    // Territory-level ownership is derived from cell ownership rather than
+    // tracked separately: capturing a solve only ever creates/moves a
+    // TerritoryCellOwnership row (see SubmissionsProcessor.assignTerritory),
+    // so a query against TerritoryOwnership here would always come back
+    // empty even for a user holding plenty of cells.
+    const ownerships = await this.prisma.territoryCellOwnership.findMany({
       where: { userId, closedAt: null },
-      include: { territory: true },
-      orderBy: { assignedAt: 'desc' },
+      include: { cell: { include: { territory: true } } },
+      orderBy: { createdAt: 'asc' },
     });
+
+    const firstByTerritory = new Map<string, (typeof ownerships)[number]>();
+    for (const ownership of ownerships) {
+      const territoryId = ownership.cell.territoryId;
+      if (!firstByTerritory.has(territoryId)) {
+        firstByTerritory.set(territoryId, ownership);
+      }
+    }
+
+    return [...firstByTerritory.values()]
+      .map((ownership) => ({
+        id: ownership.id,
+        territoryId: ownership.cell.territoryId,
+        userId: ownership.userId,
+        sourceType: ownership.sourceType,
+        assignedAt: ownership.createdAt,
+        closedAt: ownership.closedAt,
+        territory: {
+          id: ownership.cell.territory.id,
+          name: ownership.cell.territory.name,
+          tier: ownership.cell.territory.tier,
+          baseValue: ownership.cell.territory.baseValue,
+        },
+      }))
+      .sort((a, b) => b.assignedAt.getTime() - a.assignedAt.getTime());
   }
 
   @Get('daily-progress/:userId')
@@ -62,8 +91,8 @@ export class ScoringController {
     let cursor = activeDates.has(today.getTime())
       ? today
       : activeDates.has(yesterday.getTime())
-      ? yesterday
-      : null;
+        ? yesterday
+        : null;
 
     let current = 0;
     while (cursor && activeDates.has(cursor.getTime())) {
@@ -105,7 +134,8 @@ export class ScoringController {
       }),
     ]);
 
-    const territoriesHeld = new Set(heldCells.map((c) => c.cell.territoryId)).size;
+    const territoriesHeld = new Set(heldCells.map((c) => c.cell.territoryId))
+      .size;
 
     return {
       territoriesHeld,
