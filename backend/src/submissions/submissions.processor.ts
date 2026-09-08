@@ -10,7 +10,7 @@ import { getColorForUser } from '../common/color/color.util';
 
 const DAILY_LIMIT = 6;
 
-@Processor('submissions')
+@Processor('submissions', { stalledInterval: 300000 })
 export class SubmissionsProcessor extends WorkerHost {
   private readonly logger = new Logger(SubmissionsProcessor.name);
 
