@@ -243,10 +243,31 @@ ${treeStruct}void printResult(int x) {
     cout << x;
 }
 
+void printResult(bool x) {
+    cout << (x ? "true" : "false");
+}
+
+void printResult(double x) {
+    cout << setprecision(15) << x;
+}
+
+void printResult(const string& x) {
+    cout << "\\"" << x << "\\"";
+}
+
 void printResult(vector<int> x) {
     cout << "[";
     for (size_t i = 0; i < x.size(); i++) {
         cout << x[i];
+        if (i + 1 < x.size()) cout << ",";
+    }
+    cout << "]";
+}
+
+void printResult(vector<vector<int>> x) {
+    cout << "[";
+    for (size_t i = 0; i < x.size(); i++) {
+        printResult(x[i]);
         if (i + 1 < x.size()) cout << ",";
     }
     cout << "]";
