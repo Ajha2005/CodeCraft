@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { TransformWrapper, TransformComponent, type ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
 import { CampusMap } from './CampusMap';
 import { LeaderboardPanel } from './LeaderboardPanel';
@@ -9,7 +10,18 @@ import { getSocket } from '../../lib/socket';
 import { useAuth } from '../../auth/AuthContext';
 import { EMPTY_ZONE_TAP } from '../../lib/flavorText';
 import type { TerritoryDto } from '../../types/territory';
+import type { TerritoryCellDto } from '../../lib/api';
+import { createChallenge } from '../contest/api';
+import { ToastStack } from '../../components/ToastStack';
+import { useToasts } from '../../lib/useToasts';
+import { getApiErrorMessage } from '../../lib/apiError';
 import campusMapSvg from '../../assets/campus-map.svg?raw';
+
+const DURATION_OPTIONS = [
+  { label: '5 min', seconds: 300 },
+  { label: '10 min', seconds: 600 },
+  { label: '15 min', seconds: 900 },
+];
 
 const ENTER_CELL_DETAIL = 3.2;
 const EXIT_CELL_DETAIL = 2.2;
@@ -31,7 +43,14 @@ interface CapturePing {
 export function MapFullScreen() {
   const { territories, loading: territoriesLoading } = useTerritories();
   const { cellsByTerritory, loading: cellsLoading } = useTerritoryCells();
-  const { flavorTextEnabled } = useAuth();
+  const { user, flavorTextEnabled } = useAuth();
+  const navigate = useNavigate();
+  const { toasts, push, dismiss } = useToasts();
+  const [challengeTarget, setChallengeTarget] = useState<{ cell: TerritoryCellDto; territory: TerritoryDto } | null>(
+    null,
+  );
+  const [challengeDuration, setChallengeDuration] = useState(600);
+  const [challengeBusy, setChallengeBusy] = useState(false);
   const [scale, setScale] = useState(1);
   const [showCellDetail, setShowCellDetail] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
@@ -122,6 +141,20 @@ export function MapFullScreen() {
   const zoomOut = () => transformRef.current?.zoomOut(0.5, 200, 'easeOut');
   const resetView = () => transformRef.current?.resetTransform(300, 'easeOut');
 
+  async function handleConfirmChallenge() {
+    if (!challengeTarget) return;
+    setChallengeBusy(true);
+    try {
+      const contest = await createChallenge(challengeTarget.cell.id, { durationSeconds: challengeDuration });
+      setChallengeTarget(null);
+      navigate(`/contest/${contest.id}`);
+    } catch (err: unknown) {
+      push(getApiErrorMessage(err, 'Could not send challenge'), 'warning');
+    } finally {
+      setChallengeBusy(false);
+    }
+  }
+
   function handleTerritoryClick(territory: TerritoryDto) {
     if (territory.ownerId) {
       setSelectedTerritory(territory);
@@ -142,6 +175,7 @@ export function MapFullScreen() {
       className="relative w-full h-[calc(100vh-4rem)] overflow-hidden bg-[#0A0E14]"
       onMouseMove={(e) => setPointer({ x: e.clientX, y: e.clientY })}
     >
+      <ToastStack toasts={toasts} dismiss={dismiss} />
       <TransformWrapper
         ref={transformRef}
         initialScale={1}
@@ -164,8 +198,13 @@ export function MapFullScreen() {
             showCellDetail={showCellDetail}
             hoveredSvgPathId={hoveredTerritory?.svgPathId ?? null}
             capturePing={capturePing}
+            currentUserId={user?.userId ?? null}
             onTerritoryClick={handleTerritoryClick}
             onTerritoryHover={setHoveredTerritory}
+            onCellChallenge={(cell, territory) => {
+              setChallengeDuration(600);
+              setChallengeTarget({ cell, territory });
+            }}
           />
         </TransformComponent>
       </TransformWrapper>
@@ -284,6 +323,49 @@ export function MapFullScreen() {
       <div className="absolute bottom-6 left-4 text-xs text-slate-500 font-mono select-none pointer-events-none">
         {Math.round(scale * 100)}%
       </div>
+
+      {challengeTarget && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="w-80 rounded-2xl border border-cyan-600/40 bg-slate-900 p-6 animate-pop-in">
+            <h3 className="text-lg font-bold text-slate-100 mb-1">Challenge for this cell?</h3>
+            <p className="text-sm text-slate-400 mb-4">
+              {challengeTarget.territory.name} · <span className="uppercase text-xs">{challengeTarget.territory.tier}</span>
+            </p>
+            <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Match length</p>
+            <div className="flex gap-2 mb-6">
+              {DURATION_OPTIONS.map((opt) => (
+                <button
+                  key={opt.seconds}
+                  onClick={() => setChallengeDuration(opt.seconds)}
+                  className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${
+                    challengeDuration === opt.seconds
+                      ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300'
+                      : 'border-slate-700 text-slate-400 hover:border-slate-500'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleConfirmChallenge}
+                disabled={challengeBusy}
+                className="flex-1 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-600 text-slate-950 text-sm font-bold disabled:opacity-50 hover:scale-[1.02] active:scale-[0.98] transition-transform"
+              >
+                {challengeBusy ? 'Sending…' : 'Send Challenge'}
+              </button>
+              <button
+                onClick={() => setChallengeTarget(null)}
+                disabled={challengeBusy}
+                className="px-4 py-2 rounded-lg border border-slate-700 text-slate-400 text-sm hover:text-slate-200 hover:border-slate-500 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

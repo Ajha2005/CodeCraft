@@ -24,6 +24,10 @@ model User {
   submissions        Submission[]
   territoryOwnerships TerritoryOwnership[]
   dailyProgress      DailyProgress[]
+  contestsAsChallenger    Contest[]            @relation("ContestChallenger")
+  contestsAsDefender      Contest[]            @relation("ContestDefender")
+  contestsWon             Contest[]            @relation("ContestWinner")
+  contestParticipations   ContestParticipant[]
 }
 
 model Problem {
@@ -38,6 +42,7 @@ model Problem {
   updatedAt       DateTime @map("updated_at")
 
   submissions Submission[]
+  contests    Contest[]
 
   @@index([difficultyLevel])
   @@map("problems")
@@ -55,13 +60,18 @@ model Submission {
   createdAt   DateTime @default(now())
   pointsAwarded   Boolean  @default(false)
   noPointsReason  String?  // 'ALREADY_SOLVED' | 'DAILY_LIMIT' | null
+  contestId       String?  // set when this submission was made inside a live 1v1 contest,
+                            // routing it to ContestService instead of the normal scoring path
   user    User    @relation(fields: [userId], references: [id])
   problem Problem @relation(fields: [problemId], references: [id])
+  contest Contest? @relation(fields: [contestId], references: [id])
 
   performanceScore PerformanceScore?
+  bestForParticipant ContestParticipant?
 
   @@index([userId])
   @@index([problemId])
+  @@index([contestId])
   @@map("submissions")
 }
 
@@ -131,6 +141,7 @@ model TerritoryCell {
 
   territory  Territory               @relation(fields: [territoryId], references: [id])
   ownerships TerritoryCellOwnership[]
+  contests   Contest[]
 
   @@unique([territoryId, row, col])
   @@index([territoryId])
@@ -151,6 +162,70 @@ model TerritoryCellOwnership {
   @@index([cellId])
   @@index([userId])
   @@map("territory_cell_ownerships")
+}
+
+// Phase 7 — 1v1 territory contests.
+//
+// A contest targets a single TerritoryCell rather than a whole Territory:
+// cells are the only unit of ownership anywhere else in the system (see
+// TerritoryCellOwnership above), a Territory itself can be split across many
+// owners at once, so "winning the territory" only has a well-defined meaning
+// at the cell level. Winning transfers exactly the contested cell, the same
+// atomic operation solo play already performs in SubmissionsProcessor.
+//
+// One row covers the whole lifecycle (challenge -> accept/decline -> live
+// match -> resolution) via `status`, rather than a separate Challenge
+// entity — a challenge is just a Contest that hasn't been accepted yet.
+model Contest {
+  id              String    @id @default(uuid())
+  cellId          String
+  problemId       Int
+  challengerId    String
+  defenderId      String
+  status          String    @default("PENDING") // PENDING | ACTIVE | COMPLETED | DECLINED | CANCELLED | EXPIRED
+  durationSeconds Int       @default(600)
+  winnerId        String?   // null = defender successfully defended, or a draw
+  endReason       String?   // AC | TIMEOUT | FORFEIT | DRAW
+  createdAt       DateTime  @default(now())
+  respondedAt     DateTime?
+  startedAt       DateTime?
+  endedAt         DateTime?
+
+  cell       TerritoryCell @relation(fields: [cellId], references: [id])
+  problem    Problem       @relation(fields: [problemId], references: [id])
+  challenger User          @relation("ContestChallenger", fields: [challengerId], references: [id])
+  defender   User          @relation("ContestDefender", fields: [defenderId], references: [id])
+  winner     User?         @relation("ContestWinner", fields: [winnerId], references: [id])
+
+  participants ContestParticipant[]
+  submissions  Submission[]
+
+  @@index([cellId])
+  @@index([challengerId])
+  @@index([defenderId])
+  @@index([status])
+  @@map("contests")
+}
+
+model ContestParticipant {
+  id               String    @id @default(uuid())
+  contestId        String
+  userId           String
+  bestSubmissionId String?   @unique
+  verdict          String?
+  totalPassed      Int       @default(0)
+  totalTests       Int       @default(0)
+  solvedAt         DateTime?
+  connected        Boolean   @default(false)
+  disconnectedAt   DateTime?
+  forfeited        Boolean   @default(false)
+
+  contest        Contest     @relation(fields: [contestId], references: [id])
+  user           User        @relation(fields: [userId], references: [id])
+  bestSubmission Submission? @relation(fields: [bestSubmissionId], references: [id])
+
+  @@unique([contestId, userId])
+  @@map("contest_participants")
 }
 
 

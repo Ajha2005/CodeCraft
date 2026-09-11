@@ -8,6 +8,7 @@ import { JudgeModule } from '../judge/judge.module';
 import { ScoringModule } from '../scoring/scoring.module';
 import { LeaderboardModule } from '../leaderboard/leaderboard.module';
 import { TerritoryModule } from '../territory/territory.module';
+import { ContestModule } from '../contest/contest.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { TerritoryModule } from '../territory/territory.module';
     ScoringModule,
     LeaderboardModule,
     TerritoryModule,
+    ContestModule,
     BullModule.registerQueue({
       name: 'submissions',
     }),

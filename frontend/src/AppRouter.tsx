@@ -6,12 +6,15 @@ import AuthCallback from './auth/AuthCallback';
 import { AuthProvider } from './auth/AuthContext';
 import ProtectedRoute from './auth/ProtectedRoute';
 import { MapFullScreen } from './features/map/MapFullScreen';
+import ChallengesPage from './features/contest/ChallengesPage';
+import ContestRoomPage from './features/contest/ContestRoomPage';
 import { FlavorToggle } from './components/FlavorToggle';
 
 const NAV_LINKS = [
   { to: '/', label: 'Problems' },
   { to: '/scoring', label: 'Scoring' },
   { to: '/map', label: 'Map' },
+  { to: '/contests', label: 'Contests' },
 ] as const;
 
 function Nav() {
@@ -74,6 +77,8 @@ export default function AppRouter() {
             <Route path="/" element={<ProblemsPage />} />
             <Route path="/scoring" element={<ScoringDashboard />} />
             <Route path="/map" element={<MapFullScreen />} />
+            <Route path="/contests" element={<ChallengesPage />} />
+            <Route path="/contest/:id" element={<ContestRoomPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

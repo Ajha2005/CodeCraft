@@ -6,6 +6,7 @@ import { JudgeService } from '../judge/judge.service';
 import { ScoringService } from '../scoring/scoring.service';
 import { LeaderboardRedisService } from '../common/redis/leaderboard-redis.service';
 import { TerritoryGateway } from '../territory/territory.gateway';
+import { ContestService } from '../contest/contest.service';
 import { getColorForUser } from '../common/color/color.util';
 
 const DAILY_LIMIT = 6;
@@ -20,14 +21,54 @@ export class SubmissionsProcessor extends WorkerHost {
     private readonly scoringService: ScoringService,
     private readonly leaderboardRedis: LeaderboardRedisService,
     private readonly territoryGateway: TerritoryGateway,
+    private readonly contestService: ContestService,
   ) {
     super();
   }
 
   async process(job: Job): Promise<any> {
-    const { submissionId, code, testCases, language, userId, problemId } = job.data;
+    const {
+      submissionId,
+      code,
+      testCases,
+      language,
+      userId,
+      problemId,
+      contestId,
+    } = job.data;
 
-    const judgeResult = await this.judgeService.runAllTestCases(code, testCases, language);
+    const judgeResult = await this.judgeService.runAllTestCases(
+      code,
+      testCases,
+      language,
+    );
+
+    // Contest submissions never touch the daily-limit/territory-tier scoring
+    // path below — winning a contest transfers the contested cell directly,
+    // it's a different mechanism from solo territory acquisition.
+    if (contestId) {
+      await this.prisma.submission.update({
+        where: { id: submissionId },
+        data: {
+          verdict: judgeResult.verdict,
+          totalPassed: judgeResult.totalPassed,
+          totalTests: judgeResult.totalTests,
+        },
+      });
+      try {
+        await this.contestService.handleSubmissionResult(
+          contestId,
+          userId,
+          submissionId,
+          judgeResult.verdict,
+          judgeResult.totalPassed,
+          judgeResult.totalTests,
+        );
+      } catch (err) {
+        this.logger.error('handleSubmissionResult failed', err as Error);
+      }
+      return judgeResult;
+    }
 
     // Compute points-awarded outcome BEFORE writing anything to the submission row,
     // so verdict and pointsAwarded/noPointsReason always land in a single atomic
@@ -40,7 +81,11 @@ export class SubmissionsProcessor extends WorkerHost {
 
     if (judgeResult.verdict === 'AC') {
       try {
-        const result = await this.handleAcceptedSubmission(submissionId, userId, problemId);
+        const result = await this.handleAcceptedSubmission(
+          submissionId,
+          userId,
+          problemId,
+        );
         pointsAwarded = result.awarded;
         noPointsReason = result.reason;
       } catch (err) {
@@ -92,7 +137,9 @@ export class SubmissionsProcessor extends WorkerHost {
       return { awarded: false, reason: 'DAILY_LIMIT' };
     }
 
-    const problem = await this.prisma.problem.findUnique({ where: { id: problemId } });
+    const problem = await this.prisma.problem.findUnique({
+      where: { id: problemId },
+    });
     if (!problem) return { awarded: false, reason: null };
 
     const attempts = await this.prisma.submission.count({
@@ -121,7 +168,10 @@ export class SubmissionsProcessor extends WorkerHost {
     });
     const totalUserScore = userScoreAgg._sum.totalScore ?? 0;
     await this.leaderboardRedis.updateCollegeScore(userId, totalUserScore);
-    this.territoryGateway.broadcastLeaderboardUpdate({ userId, newScore: totalUserScore });
+    this.territoryGateway.broadcastLeaderboardUpdate({
+      userId,
+      newScore: totalUserScore,
+    });
 
     await this.prisma.dailyProgress.upsert({
       where: { userId_date: { userId, date: today } },
@@ -155,7 +205,10 @@ export class SubmissionsProcessor extends WorkerHost {
     await this.assignAnyCellInTier(userId, tier);
   }
 
-  private isAdjacent(a: { row: number; col: number }, b: { row: number; col: number }) {
+  private isAdjacent(
+    a: { row: number; col: number },
+    b: { row: number; col: number },
+  ) {
     return Math.abs(a.row - b.row) + Math.abs(a.col - b.col) === 1;
   }
 
@@ -176,9 +229,15 @@ export class SubmissionsProcessor extends WorkerHost {
       include: { ownerships: { where: { closedAt: null } } },
     });
 
-    const isNeighborOfOwned = (cell: { territoryId: string; row: number; col: number }) =>
+    const isNeighborOfOwned = (cell: {
+      territoryId: string;
+      row: number;
+      col: number;
+    }) =>
       ownedCells.some(
-        (owned) => owned.territoryId === cell.territoryId && this.isAdjacent(owned, cell),
+        (owned) =>
+          owned.territoryId === cell.territoryId &&
+          this.isAdjacent(owned, cell),
       );
 
     const unclaimedNeighbor = candidates.find(
@@ -196,7 +255,12 @@ export class SubmissionsProcessor extends WorkerHost {
         cell.ownerships[0].userId !== userId,
     );
     if (contestedNeighbor) {
-      await this.captureCell(userId, tier, contestedNeighbor, contestedNeighbor.ownerships[0].id);
+      await this.captureCell(
+        userId,
+        tier,
+        contestedNeighbor,
+        contestedNeighbor.ownerships[0].id,
+      );
       return true;
     }
 
@@ -230,7 +294,9 @@ export class SubmissionsProcessor extends WorkerHost {
     });
 
     if (!contested) {
-      this.logger.error(`No contestable ${tier} cells exist — seed data missing or all cells self-owned.`);
+      this.logger.error(
+        `No contestable ${tier} cells exist — seed data missing or all cells self-owned.`,
+      );
       return;
     }
 

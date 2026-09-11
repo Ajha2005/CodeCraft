@@ -16,8 +16,10 @@ interface CampusMapProps {
   showCellDetail: boolean;
   hoveredSvgPathId?: string | null;
   capturePing?: CapturePing | null;
+  currentUserId?: string | null;
   onTerritoryClick?: (territory: TerritoryDto) => void;
   onTerritoryHover?: (territory: TerritoryDto | null) => void;
+  onCellChallenge?: (cell: TerritoryCellDto, territory: TerritoryDto) => void;
 }
 
 const TIER_STROKE_WIDTH: Record<string, string> = {
@@ -50,8 +52,10 @@ export function CampusMap({
   showCellDetail,
   hoveredSvgPathId,
   capturePing,
+  currentUserId,
   onTerritoryClick,
   onTerritoryHover,
+  onCellChallenge,
 }: CampusMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const innerHtml = useMemo(() => ({ __html: svgMarkup }), [svgMarkup]);
@@ -399,6 +403,22 @@ export function CampusMap({
           rect.setAttribute('fill-opacity', cell.ownerId ? '0.7' : '1');
           rect.setAttribute('stroke', '#1a1e26');
           rect.setAttribute('stroke-width', '0.5');
+
+          // Enemy-held cells are the only ones you can challenge for — your
+          // own cells need no challenge, and unclaimed ones are earned by
+          // solving a problem, not by fighting someone over them.
+          const isChallengeable =
+            !!cell.ownerId && !!currentUserId && cell.ownerId !== currentUserId && !!onCellChallenge;
+          if (isChallengeable) {
+            rect.style.cursor = 'pointer';
+            rect.addEventListener('click', (e) => {
+              e.stopPropagation();
+              onCellChallenge!(cell, territory);
+            });
+            rect.addEventListener('mouseover', () => rect.setAttribute('stroke', '#F97316'));
+            rect.addEventListener('mouseout', () => rect.setAttribute('stroke', '#1a1e26'));
+          }
+
           group.appendChild(rect);
         }
 
@@ -412,7 +432,7 @@ export function CampusMap({
         console.error('[cell effect] ERROR on', svgPathId, err);
       }
     }
-  }, [territories, cellsByTerritory, showCellDetail]);
+  }, [territories, cellsByTerritory, showCellDetail, currentUserId, onCellChallenge]);
 
   useEffect(() => {
     const container = containerRef.current;

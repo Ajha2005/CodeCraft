@@ -6,6 +6,7 @@ import { JudgeModule } from '../judge/judge.module';
 @Module({
   imports: [JudgeModule],
   providers: [ProblemsService],
-  controllers: [ProblemsController]
+  controllers: [ProblemsController],
+  exports: [ProblemsService],
 })
 export class ProblemsModule {}
