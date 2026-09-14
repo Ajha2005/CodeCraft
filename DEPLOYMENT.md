@@ -8,7 +8,7 @@
 | Backend (NestJS) | AWS EC2 (Ubuntu) | Runs via pm2, proxied through Nginx |
 | Piston (code execution) | Same AWS EC2, Docker | Port 2000, needs Python + gcc packages installed |
 | PostgreSQL | Supabase | Free tier |
-| Redis | Upstash | Free tier, used for BullMQ queue + leaderboard cache |
+| Redis | Redis Cloud (redis.io) | Free tier: 30MB storage limit, no command-count cap. Previously Upstash (500k commands/month cap - hit this limit, switched providers) |
 | Domain/SSL | TBD - was DuckDNS, blocked by some Indian ISPs; needs a real cheap domain | Nginx + Certbot |
 
 ## If the AWS server dies / needs recreating
@@ -93,7 +93,7 @@ pm2 save
 
 ## .env template (backend)
 DATABASE_URL=          Supabase -> Connect -> Session pooler. NOT Transaction pooler (migrations fail). NOT Direct connection (IPv6-only, unreachable from most VPS).
-REDIS_URL=             Upstash dashboard -> copy the plain rediss URL, NOT the redis-cli command shown alongside it
+REDIS_URL=             Redis Cloud dashboard -> Data Access or Configuration tab -> use the plain redis://default:PASSWORD@host:port URL, NOT the redis-cli command shown alongside it
 JWT_SECRET=            generate with: openssl rand -base64 32
 JWT_EXPIRES_IN=1d
 GOOGLE_CLIENT_ID=      Google Cloud Console -> Credentials
