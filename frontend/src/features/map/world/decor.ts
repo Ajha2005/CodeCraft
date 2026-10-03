@@ -71,7 +71,14 @@ export class DecorKit {
   private patterns = new Map<string, CanvasPattern>();
   private forestTex = new Map<string, HTMLCanvasElement>();
 
-  private pattern(ctx: CanvasRenderingContext2D, key: string, wu: number, hu: number, ppu: number, draw: TileDraw): CanvasPattern {
+  /** Device pixels per world unit, snapped to a power of two (the mip level). */
+  private level = 1;
+
+  private pattern(ctx: CanvasRenderingContext2D, name: string, wu: number, hu: number, draw: TileDraw): CanvasPattern {
+    // Tiles are rebuilt per mip level so a pattern is sampled ~1:1. Sampling a
+    // heavily minified pattern is dramatically slower than drawing it 1:1.
+    const ppu = this.level;
+    const key = `${name}@${ppu}`;
     const hit = this.patterns.get(key);
     if (hit) return hit;
     const canvas = document.createElement('canvas');
@@ -94,15 +101,16 @@ export class DecorKit {
   }
 
   /** Paint the terrain/props for one zone. `t` is seconds, for animation. */
-  draw(ctx: CanvasRenderingContext2D, view: ZoneView, t: number, zoom: number) {
+  draw(ctx: CanvasRenderingContext2D, view: ZoneView, t: number, zoom: number, low = false, dpr = 1) {
+    this.level = Math.min(4, Math.max(0.25, 2 ** Math.round(Math.log2(Math.max(0.05, zoom * dpr)))));
     const z = view.zone;
     const b = z.box;
     const rng = mulberry32(z.seed);
-    const fine = zoom > 0.34;
+    const fine = zoom > 0.34 && !low;
 
     switch (z.kind) {
       case 'hostel': {
-        const p = this.pattern(ctx, 'win-hostel', 64, 56, 2, (c) => {
+        const p = this.pattern(ctx, 'win-hostel', 64, 56, (c) => {
           const r = mulberry32(7);
           for (let j = 0; j < 4; j++) {
             for (let i = 0; i < 4; i++) {
@@ -113,12 +121,14 @@ export class DecorKit {
           }
         });
         this.fillPattern(ctx, view, p, fine ? 0.55 : 0.3);
-        this.roofline(ctx, view, 9, 'rgba(255,255,255,0.08)');
-        this.rooftopUnits(ctx, view, rng, 3);
+        if (!low) {
+          this.roofline(ctx, view, 9, 'rgba(255,255,255,0.08)');
+          this.rooftopUnits(ctx, view, rng, 3);
+        }
         break;
       }
       case 'academic': {
-        const p = this.pattern(ctx, 'win-academic', 96, 48, 2, (c) => {
+        const p = this.pattern(ctx, 'win-academic', 96, 48, (c) => {
           const r = mulberry32(11);
           for (let j = 0; j < 2; j++) {
             for (let i = 0; i < 3; i++) {
@@ -128,12 +138,14 @@ export class DecorKit {
           }
         });
         this.fillPattern(ctx, view, p, fine ? 0.5 : 0.28);
-        this.roofline(ctx, view, 11, 'rgba(255,255,255,0.1)');
-        this.rooftopUnits(ctx, view, rng, 4);
+        if (!low) {
+          this.roofline(ctx, view, 11, 'rgba(255,255,255,0.1)');
+          this.rooftopUnits(ctx, view, rng, 4);
+        }
         break;
       }
       case 'residence': {
-        const p = this.pattern(ctx, 'houses', 48, 48, 2, (c) => {
+        const p = this.pattern(ctx, 'houses', 48, 48, (c) => {
           c.fillStyle = 'rgba(255,255,255,0.11)';
           c.fillRect(6, 8, 36, 30);
           c.fillStyle = 'rgba(0,0,0,0.28)';
@@ -145,7 +157,7 @@ export class DecorKit {
         break;
       }
       case 'market': {
-        const p = this.pattern(ctx, 'awning', 28, 28, 3, (c) => {
+        const p = this.pattern(ctx, 'awning', 28, 28, (c) => {
           c.fillStyle = 'rgba(239,68,68,0.34)';
           c.fillRect(0, 0, 14, 28);
           c.fillStyle = 'rgba(255,255,255,0.24)';
@@ -157,7 +169,7 @@ export class DecorKit {
         break;
       }
       case 'plaza': {
-        const p = this.pattern(ctx, 'paving', 24, 24, 2, (c) => {
+        const p = this.pattern(ctx, 'paving', 24, 24, (c) => {
           c.strokeStyle = 'rgba(255,255,255,0.07)';
           c.lineWidth = 1;
           c.strokeRect(0.5, 0.5, 23, 23);
@@ -184,7 +196,7 @@ export class DecorKit {
         break;
       }
       case 'field': {
-        const p = this.pattern(ctx, 'mow', 56, 56, 1.5, (c) => {
+        const p = this.pattern(ctx, 'mow', 56, 56, (c) => {
           c.fillStyle = 'rgba(255,255,255,0.07)';
           c.fillRect(0, 0, 56, 28);
           c.fillStyle = 'rgba(0,0,0,0.12)';
@@ -331,7 +343,7 @@ export class DecorKit {
         break;
       }
       case 'construction': {
-        const p = this.pattern(ctx, 'hazard', 40, 40, 1.6, (c) => {
+        const p = this.pattern(ctx, 'hazard', 40, 40, (c) => {
           c.fillStyle = 'rgba(251,191,36,0.34)';
           c.beginPath();
           c.moveTo(0, 20);
@@ -368,13 +380,13 @@ export class DecorKit {
         break;
       }
       default: {
-        const p = this.pattern(ctx, 'panels', 24, 24, 2, (c) => {
+        const p = this.pattern(ctx, 'panels', 24, 24, (c) => {
           c.strokeStyle = 'rgba(255,255,255,0.08)';
           c.lineWidth = 1;
           c.strokeRect(0.5, 0.5, 23, 23);
         });
         this.fillPattern(ctx, view, p, 1);
-        this.rooftopUnits(ctx, view, rng, 2);
+        if (!low) this.rooftopUnits(ctx, view, rng, 2);
       }
     }
   }

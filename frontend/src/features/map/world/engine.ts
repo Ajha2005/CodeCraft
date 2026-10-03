@@ -14,7 +14,7 @@ import { TIER_STYLE } from './theme';
 
 const WALK_SPEED = 250;
 const SPRINT_SPEED = 520;
-const MIN_ZOOM_FLOOR = 0.2;
+const MIN_ZOOM_FLOOR = 0.1;
 const MAX_ZOOM = 6;
 const GLOBAL_DETAIL_ENTER = 1.5;
 const GLOBAL_DETAIL_EXIT = 1.25;
@@ -139,6 +139,15 @@ export class MapEngine {
   private shakeAmp = 0;
   private sprintAmt = 0;
 
+  // adaptive quality: watch the real interval between animation frames and
+  // shed purely decorative effects (and pixel density) if it stays slow
+  private frameMs = 16;
+  private slowRun = 0;
+  private fastRun = 0;
+  private lowFx = false;
+  private upgradeAt = 0;
+  private upgradeBackoff = 25;
+
   // player
   private player = { x: 0, y: 0, vx: 0, vy: 0, heading: 0, lift: 0, phase: 0 };
   private playerRender: PlayerRender;
@@ -170,6 +179,10 @@ export class MapEngine {
   private hoverCell: HoverCellRef | null = null;
   private hoverCellId: string | null = null;
   private lastClient = { x: 0, y: 0 };
+  /** Last mouse position over the canvas (CSS px), so hover can follow the camera. */
+  private pointerLocal: { x: number; y: number } | null = null;
+  private cameraMoved = false;
+  private lastHoverCheck = 0;
   private highlightIdx = -1;
   private selectedIdx = -1;
   private waypointIdx = -1;
@@ -243,6 +256,7 @@ export class MapEngine {
       meId: null,
       meColor: this.meColor,
       reduced: false,
+      lowFx: false,
     };
   }
 
@@ -258,6 +272,7 @@ export class MapEngine {
     this.ctx = canvas.getContext('2d', { alpha: false });
     this.renderer = new WorldRenderer(this.world.campus, this.world.lanes);
     this.reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.fx.reduced = this.reduced;
 
     this.resize();
     this.resizeObs = new ResizeObserver(() => this.resize());
@@ -271,7 +286,10 @@ export class MapEngine {
     on(canvas, 'pointermove', (e) => this.onPointerMove(e));
     on(canvas, 'pointerup', (e) => this.onPointerUp(e));
     on(canvas, 'pointercancel', (e) => this.onPointerUp(e));
-    on(canvas, 'pointerleave', () => this.setHover(-1, null));
+    on(canvas, 'pointerleave', () => {
+      this.pointerLocal = null;
+      this.setHover(-1, null);
+    });
     on(canvas, 'wheel', (e) => this.onWheel(e), { passive: false });
     on(canvas, 'dblclick', (e) => this.onDoubleClick(e));
     on(canvas, 'contextmenu', (e) => this.onContextMenu(e));
@@ -329,7 +347,7 @@ export class MapEngine {
     if (!this.canvas || !this.host) return;
     const w = Math.max(1, this.host.clientWidth);
     const h = Math.max(1, this.host.clientHeight);
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.dpr = Math.min(window.devicePixelRatio || 1, this.lowFx ? 1.25 : 2);
     this.vw = w;
     this.vh = h;
     this.canvas.width = Math.round(w * this.dpr);
@@ -754,7 +772,10 @@ export class MapEngine {
     const p = this.pointers.get(e.pointerId);
 
     if (!p) {
-      if (e.pointerType === 'mouse') this.updateHover(x, y);
+      if (e.pointerType === 'mouse') {
+        this.pointerLocal = { x, y };
+        this.updateHover(x, y);
+      }
       return;
     }
 
@@ -913,11 +934,15 @@ export class MapEngine {
     if (!this.running) return;
     this.raf = requestAnimationFrame((t) => this.loop(t));
 
-    const idle = performance.now() - this.lastActivity > 2200 && !this.fx.active && this.route.length === 0;
-    if (idle && ts - this.lastRender < 45) return; // ~20fps when nothing is happening
+    const quietFor = performance.now() - this.lastActivity;
+    const idle = quietFor > 2200 && !this.fx.active && this.route.length === 0;
+    // ~20fps once nothing is happening, ~11fps after a long quiet spell
+    if (idle && ts - this.lastRender < (quietFor > 15000 ? 88 : 45)) return;
     this.lastRender = ts;
 
-    const dt = this.lastTs ? clamp((ts - this.lastTs) / 1000, 0, 0.05) : 0.016;
+    const rawGap = this.lastTs ? ts - this.lastTs : 16;
+    if (!idle) this.adaptQuality(rawGap);
+    const dt = this.lastTs ? clamp(rawGap / 1000, 0, 0.05) : 0.016;
     this.lastTs = ts;
     this.update(dt);
     this.render();
@@ -1021,7 +1046,7 @@ export class MapEngine {
         this.fx.dust(p.x - (p.vx / speed) * 7, p.y + 2, -p.vx * 0.1, -p.vy * 0.1);
       }
       this.trailAcc += speed * dt;
-      if (this.trailAcc > 7) {
+      if (this.trailAcc > 7 && !this.reduced) {
         this.trailAcc = 0;
         this.playerRender.trail.push({ x: p.x, y: p.y, lift: p.lift, age: 0 });
       }
@@ -1078,6 +1103,14 @@ export class MapEngine {
     }
 
     this.fx.update(dt);
+
+    // The world slid under a motionless cursor (zoom, follow-cam, fling):
+    // re-pick what is under it, at most ~12x a second.
+    if (this.cameraMoved && this.pointerLocal && this.pointers.size === 0 && this.clock - this.lastHoverCheck > 0.08) {
+      this.cameraMoved = false;
+      this.lastHoverCheck = this.clock;
+      this.updateHover(this.pointerLocal.x, this.pointerLocal.y);
+    }
   }
 
   private arrive() {
@@ -1150,12 +1183,16 @@ export class MapEngine {
       this.fling.vx *= decay;
       this.fling.vy *= decay;
       this.touch();
+      this.cameraMoved = true;
     }
 
     const lz = Math.log(this.cam.zoom);
     const lt = Math.log(clamp(this.tgt.zoom, this.minZoom, MAX_ZOOM));
     this.cam.zoom = Math.exp(lz + (lt - lz) * (1 - Math.exp(-dt * kZoom)));
-    if (Math.abs(lt - lz) > 0.002) this.touch();
+    if (Math.abs(lt - lz) > 0.002) {
+      this.touch();
+      this.cameraMoved = true;
+    }
 
     if (this.anchor && !this.following) {
       const a = this.anchor;
@@ -1170,7 +1207,10 @@ export class MapEngine {
       const dy = this.tgt.y - this.cam.y;
       this.cam.x += dx * kp;
       this.cam.y += dy * kp;
-      if (Math.abs(dx) + Math.abs(dy) > 0.4) this.touch();
+      if (Math.abs(dx) + Math.abs(dy) > 0.4) {
+        this.touch();
+        this.cameraMoved = true;
+      }
     }
 
     // FOV-style kick while sprinting
@@ -1200,6 +1240,35 @@ export class MapEngine {
 
   // ============================================================== render
 
+  /**
+   * The time `draw()` itself takes is useless here - canvas work is rasterized
+   * asynchronously - so we watch the real gap between animation frames instead.
+   * Sustained slowness while the player is actively moving switches to low-fx;
+   * we only try to come back after a growing cooldown.
+   */
+  private adaptQuality(frameGapMs: number) {
+    if (frameGapMs > 400) return; // tab was hidden / throttled, not a slow device
+    this.frameMs += (frameGapMs - this.frameMs) * 0.08;
+    if (!this.lowFx) {
+      this.slowRun = this.frameMs > 34 ? this.slowRun + 1 : 0;
+      if (this.slowRun > 50) {
+        this.lowFx = true;
+        this.slowRun = 0;
+        this.upgradeAt = this.clock + this.upgradeBackoff;
+        this.resize(); // lower pixel density too
+      }
+    } else if (this.clock > this.upgradeAt) {
+      this.fastRun = this.frameMs < 21 ? this.fastRun + 1 : 0;
+      if (this.fastRun > 150) {
+        this.lowFx = false;
+        this.fastRun = 0;
+        this.upgradeBackoff = Math.min(this.upgradeBackoff * 2, 200);
+        this.frameMs = 20; // judge the restored quality on fresh frames
+        this.resize();
+      }
+    }
+  }
+
   private render() {
     const ctx = this.ctx;
     const renderer = this.renderer;
@@ -1227,6 +1296,7 @@ export class MapEngine {
     f.destination = this.destination;
     f.waypoint = this.waypointIdx >= 0 ? this.world.campus.zones[this.waypointIdx].anchor : null;
     f.reduced = this.reduced;
+    f.lowFx = this.lowFx;
 
     renderer.draw(ctx, f);
 

@@ -4,7 +4,7 @@ import { usePlayerStats } from '../lib/playerStatsContext';
 import { useIncomingChallenges } from '../lib/useIncomingChallenges';
 import { useSfxEnabled } from '../lib/useSfx';
 import { sfx } from '../lib/sfx';
-import { levelTitle } from '../lib/progression';
+import { rankTitle } from '../lib/flavorText';
 import { Icon, type IconName } from './ui/Icon';
 import { LevelBadge } from './ui/LevelBadge';
 import { XPBar } from './ui/XPBar';
@@ -104,7 +104,9 @@ export function Nav() {
               <span className="block max-w-[8.5rem] truncate text-[0.82rem] font-semibold text-slate-100">{name}</span>
               <span className="mt-0.5 flex items-center gap-1.5">
                 <XPBar pct={stats.level.pct} className="!h-1 w-16" />
-                <span className="font-display text-[0.62rem] font-bold uppercase tracking-wide text-amber-300/90">{levelTitle(stats.level.level)}</span>
+                <span className="font-display text-[0.62rem] font-bold uppercase tracking-wide text-amber-300/90">
+                  {stats.rank ? (flavorTextEnabled ? rankTitle(stats.rank) : `Rank #${stats.rank}`) : `LV ${stats.level.level}`}
+                </span>
               </span>
             </span>
           </Link>

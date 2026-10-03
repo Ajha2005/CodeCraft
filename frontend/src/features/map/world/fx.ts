@@ -45,6 +45,8 @@ interface FloatText {
 const MAX_PARTICLES = 420;
 
 export class Fx {
+  /** Reduced-motion: sparks and dust are skipped; rings and text still give feedback. */
+  reduced = false;
   private particles: Particle[] = [];
   private rings: Ring[] = [];
   private texts: FloatText[] = [];
@@ -65,6 +67,7 @@ export class Fx {
   }
 
   dust(x: number, y: number, vx: number, vy: number, color = '#9fb4c6') {
+    if (this.reduced) return;
     this.add({
       x,
       y,
@@ -81,6 +84,7 @@ export class Fx {
   }
 
   spark(x: number, y: number, color: string, speed = 160) {
+    if (this.reduced) return;
     const a = Math.random() * Math.PI * 2;
     const s = speed * (0.35 + Math.random() * 0.65);
     this.add({

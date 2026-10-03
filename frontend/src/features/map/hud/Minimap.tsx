@@ -21,12 +21,12 @@ export function Minimap({ engine }: { engine: MapEngine }) {
   const deg = (stats.heading * 180) / Math.PI;
 
   return (
-    <div className="hud-panel w-[14.5rem] max-w-[46vw] p-2 animate-slide-in-left">
+    <div className="hud-panel w-[14.5rem] p-2 animate-slide-in-left max-sm:w-[9.25rem] max-sm:p-1.5">
       <div className="relative overflow-hidden rounded-lg ring-1 ring-cyan-500/20">
         <canvas
           ref={canvasRef}
           onClick={handleClick}
-          className="block h-[7.6rem] w-full cursor-crosshair"
+          className="block h-[7.6rem] w-full cursor-crosshair max-sm:h-[4.6rem]"
           aria-label="Campus minimap. Click to travel."
         />
         <div className="pointer-events-none absolute left-1.5 top-1.5 flex items-center gap-1 rounded bg-black/55 px-1.5 py-0.5">
@@ -35,7 +35,7 @@ export function Minimap({ engine }: { engine: MapEngine }) {
       </div>
       <div className="mt-1.5 flex items-center justify-between gap-2 px-0.5 font-mono text-[0.66rem] font-bold">
         <span className="rounded bg-cyan-500/15 px-1.5 py-0.5 text-cyan-300">SEC {stats.sector}</span>
-        <span className="tabular-nums text-slate-400">
+        <span className="tabular-nums text-slate-400 max-sm:hidden">
           {Math.round(stats.px / 2)}, {Math.round(stats.py / 2)}
         </span>
         <span

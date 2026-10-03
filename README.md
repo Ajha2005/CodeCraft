@@ -78,10 +78,14 @@ flowchart LR
 - Submission queueing via Redis + BullMQ to keep judge throughput controlled under load
 
 **Gamification**
-- A live, zoomable/pannable SVG campus map (`react-zoom-pan-pinch`) divided into a grid of ownable `TerritoryCell`s, generated via point-in-polygon rasterization of campus zones
+- A live, navigable **game world** of the campus (canvas-rendered): zones are extruded blocks whose height follows their tier, with themed terrain (forest, pond, pitch, track, parking...), streets, and a grid of ownable `TerritoryCell`s generated via point-in-polygon rasterization of campus zones
+- You control a **commander** on the map: walk with WASD/arrows, sprint, or click to auto-travel along streets (A* pathfinding); a spring-follow camera, minimap, fast-travel list, waypoints, and zone-entry banners make it feel like moving around inside the map
+- Fog of war: zones are hatched until you walk into them, with an exploration meter and a "Cartographer" achievement
+- Level/XP derived from your Performance Score, daily-quest pips, streak flame, a quest-board problem list, an achievements wall, and a level-up celebration
+- Optional synthesized sound effects (off by default)
 - Territory tier (Outpost → Settlement → Stronghold → Citadel) is driven by the Performance Score formula, not manual admin assignment
 - A soft daily qualifying-problem cap (6/day) so territory farming is bounded without discouraging practice
-- Streak badges, confetti, and toggleable "flavor text" for a lighter tone
+- Confetti, live capture effects, and toggleable "flavor text" for a lighter tone
 
 **Real-Time 1v1 Contests**
 - Challenge/accept flow: `POST /challenges` → target notified live or on next load → `POST /challenges/:id/accept` opens a dedicated WebSocket room
@@ -97,7 +101,7 @@ flowchart LR
 
 | Layer | Choice | Why |
 |---|---|---|
-| Frontend | React 19 + TypeScript + Tailwind CSS 4 + Vite | Component-driven UI for the map, editor, contest room, and leaderboard; full type safety across nested data models |
+| Frontend | React 19 + TypeScript + Tailwind CSS 4 + Vite (map: custom Canvas 2D engine) | Component-driven UI for the HUD, editor, contest room, and leaderboard; a purpose-built canvas renderer keeps the ~10k-cell map smooth |
 | Code Editor | Monaco Editor (`@monaco-editor/react`) | VS Code's engine — syntax highlighting, multi-language support, input interception hooks |
 | Backend | Node.js + NestJS 11 | Modular controller/service/module architecture; first-class WebSocket gateways and guards |
 | Database | PostgreSQL via Prisma 7 | Strongly relational schema (User, Problem, Submission, Territory Cells, Contest); transactional territory/daily-limit writes |
@@ -211,6 +215,30 @@ erDiagram
 
 Full schema: [`backend/prisma/schema.prisma`](./backend/prisma/schema.prisma) · Design rationale: [`docs/database-design.md`](./docs/database-design.md)
 
+## Exploring the Map
+
+The map is a small game. Everything below is also listed in-app (press `?`).
+
+| Input | Action |
+|---|---|
+| `W` `A` `S` `D` / arrows | Walk (hold `Shift` to sprint) |
+| Click open ground / right-click | Auto-travel there along streets |
+| Click a zone | Inspect it (owners, control meter, leaderboard) |
+| `T` | Travel to the selected zone |
+| `E` | Inspect the zone you are standing in |
+| `Space` | Dive in/out: zoom to the cell grid of the current/selected zone |
+| Click a rival's cell (when zoomed in) | Challenge its owner to a 1v1 duel |
+| Scroll / pinch, `+` `-` | Zoom |
+| Drag | Look around (press `C` to snap back to your commander) |
+| `O` | Whole-campus overview |
+| `F` | Fast-travel list (search, filter, pin a waypoint) |
+| `L` | College leaderboard |
+| `Esc` | Cancel a route / close a panel |
+
+On touch devices a virtual stick replaces the keyboard. The page deep-links too: `/map?territory=<territoryId>` walks you to that zone (the dashboard's "Show on map" uses it).
+
+**Performance:** the renderer draws only what is on screen, caches textures, and watches its own frame rate: on a slow device it drops purely decorative effects and pixel density automatically, then tries to restore them. `prefers-reduced-motion` disables camera smoothing, parallax and particles.
+
 ## Territory & Scoring Model
 
 ```
@@ -265,9 +293,10 @@ CodeCraft/
 ├── frontend/                # React + TypeScript + Vite client
 │   └── src/
 │       ├── auth/                # Login, OAuth callback, protected routes
-│       ├── features/map/        # Campus map, territory leaderboard panel
+│       ├── features/map/        # Game world: canvas engine (world/), HUD (hud/), leaderboards
 │       ├── features/contest/    # Challenges list, live contest room
-│       ├── pages/                # Scoring dashboard
+│       ├── components/          # Nav, toasts, shared game UI kit (ui/)
+│       ├── pages/                # Scoring dashboard (commander profile)
 │       └── lib/                  # API client, Monaco setup, sockets, toasts
 ├── judge0/                  # Legacy Judge0 config (superseded by Piston, kept for reference)
 ├── docs/                    # Full system design docs (MkDocs source)

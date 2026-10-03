@@ -10,7 +10,7 @@ import { TerritoryLeaderboard } from '../TerritoryLeaderboard';
 import { useTerritoryLeaderboard } from '../hooks/useLeaderboard';
 import { STATUS_COLOR, STATUS_LABEL, type ZoneSummary } from './zoneSummary';
 
-interface ZonePanelProps {
+export interface ZonePanelProps {
   summary: ZoneSummary;
   territory: TerritoryDto | null;
   sector: string;

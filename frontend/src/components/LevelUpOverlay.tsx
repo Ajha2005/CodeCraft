@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { usePlayerStats } from '../lib/playerStatsContext';
-import { levelTitle } from '../lib/progression';
 import { sfx } from '../lib/sfx';
 import { LevelBadge } from './ui/LevelBadge';
 
@@ -42,7 +41,7 @@ export function LevelUpOverlay() {
         <p className="relative mt-2 text-lg text-slate-200">
           Level {levelUp.from} <span className="mx-1 text-amber-300">→</span> <span className="font-bold text-white">Level {levelUp.to}</span>
         </p>
-        <p className="font-display relative mt-1 text-sm font-bold uppercase tracking-[0.3em] text-cyan-300">{levelTitle(levelUp.to)}</p>
+        <p className="font-display relative mt-1 text-sm font-bold uppercase tracking-[0.3em] text-cyan-300">New heights reached</p>
         <button type="button" className="btn-primary relative mt-7 h-11 rounded-lg px-8 text-sm" onClick={dismissLevelUp}>
           Keep conquering
         </button>

@@ -35,7 +35,7 @@ export function ActionHints({ inZone }: { inZone: boolean }) {
 /** One-time welcome card for first-time map visitors. */
 export function FirstRunHint({ onDismiss, touch }: { onDismiss: () => void; touch: boolean }) {
   return (
-    <div className="hud-panel w-[min(30rem,calc(100vw-1.5rem))] p-4 text-center animate-pop-in" role="dialog" aria-label="How to move">
+    <div className="hud-panel w-[min(30rem,calc(100vw-1.5rem))] p-4 text-center animate-pop-in max-sm:w-[calc(100vw-5.25rem)] max-sm:p-3" role="dialog" aria-label="How to move">
       <p className="font-display text-xl font-bold uppercase tracking-[0.18em] text-cyan-300">Welcome to campus</p>
       <p className="mt-1 text-sm text-slate-300">You’re standing at the Main Gate. Walk the map, explore every zone, and take territory.</p>
       <div className="mt-3 grid grid-cols-2 gap-2 text-left text-xs text-slate-300">

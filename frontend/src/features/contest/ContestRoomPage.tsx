@@ -9,6 +9,12 @@ import { ToastStack } from '../../components/ToastStack';
 import { useToasts } from '../../lib/useToasts';
 import { createContestSocket } from '../../lib/socket';
 import { getApiErrorMessage } from '../../lib/apiError';
+import { sfx } from '../../lib/sfx';
+import { Icon } from '../../components/ui/Icon';
+import { PlayerAvatar } from '../../components/ui/PlayerAvatar';
+import { Pips } from '../../components/ui/Pips';
+import { ProgressRing } from '../../components/ui/ProgressRing';
+import { TierBadge } from '../../components/ui/TierBadge';
 import { acceptChallenge, declineChallenge, getContest, submitContestSolution } from './api';
 import type { ContestDetail } from './types';
 
@@ -31,10 +37,61 @@ function formatClock(totalSeconds: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-function verdictColor(verdict: string | undefined | null): string {
-  if (verdict === 'AC') return 'text-emerald-400';
-  if (!verdict || verdict === 'PENDING') return 'text-slate-500';
-  return 'text-rose-400';
+function verdictTone(verdict: string | undefined | null): { text: string; color: string } {
+  if (verdict === 'AC') return { text: 'text-emerald-300', color: '#34d399' };
+  if (!verdict || verdict === 'PENDING') return { text: 'text-slate-400', color: '#64748b' };
+  return { text: 'text-rose-300', color: '#fb7185' };
+}
+
+function FighterCard({
+  userId,
+  name,
+  you,
+  result,
+  online,
+  graceSeconds,
+  align,
+}: {
+  userId: string;
+  name: string;
+  you: boolean;
+  result: LiveResult | null;
+  online?: boolean;
+  graceSeconds?: number | null;
+  align: 'left' | 'right';
+}) {
+  const tone = verdictTone(result?.verdict);
+  const right = align === 'right';
+  return (
+    <div className={`hud-panel hud-panel-quiet p-3.5 ${you ? 'ring-1 ring-cyan-400/40' : ''}`}>
+      <div className={`flex items-center gap-3 ${right ? 'flex-row-reverse text-right' : ''}`}>
+        <PlayerAvatar userId={userId} name={name} size={52} />
+        <div className="min-w-0 flex-1">
+          <p className="hud-label !text-[0.6rem]" style={{ color: you ? '#67e8f9' : undefined }}>
+            {you ? 'You' : 'Opponent'}
+          </p>
+          <p className="font-display truncate text-xl font-bold leading-tight text-slate-50">{name}</p>
+          {online !== undefined &&
+            (online ? (
+              <p className="text-[0.68rem] font-bold uppercase tracking-wide text-emerald-400">● online</p>
+            ) : (
+              <p className="animate-pulse text-[0.68rem] font-bold uppercase tracking-wide text-rose-400">
+                ○ disconnected{graceSeconds ? ` · ${graceSeconds}s` : ''}
+              </p>
+            ))}
+        </div>
+      </div>
+      <div className="mt-3">
+        <div className={`mb-1.5 flex items-baseline justify-between ${right ? 'flex-row-reverse' : ''}`}>
+          <span className={`font-mono text-sm font-bold ${tone.text}`}>{result?.verdict ?? 'PENDING'}</span>
+          <span className="font-mono text-xs font-bold tabular-nums text-slate-400">
+            {result ? `${result.totalPassed}/${result.totalTests}` : '—'}
+          </span>
+        </div>
+        <Pips filled={result?.totalPassed ?? 0} total={Math.max(1, Math.min(result?.totalTests || 5, 12))} color={tone.color} />
+      </div>
+    </div>
+  );
 }
 
 export default function ContestRoomPage() {
@@ -165,9 +222,13 @@ export default function ContestRoomPage() {
   }, [contest?.startedAt, contest?.status]);
 
   useEffect(() => {
-    if (ended && ended.winnerId === user?.userId && !celebratedRef.current) {
-      celebratedRef.current = true;
+    if (!ended || celebratedRef.current) return;
+    celebratedRef.current = true;
+    if (ended.winnerId === user?.userId) {
+      sfx.play('win');
       confetti({ particleCount: 180, spread: 100, origin: { y: 0.6 } });
+    } else if (ended.winnerId) {
+      sfx.play('error');
     }
   }, [ended, user?.userId]);
 
@@ -198,6 +259,7 @@ export default function ContestRoomPage() {
 
   async function handleSubmit() {
     if (!id) return;
+    sfx.play('click');
     setSubmitting(true);
     try {
       await submitContestSolution(id, code, language);
@@ -211,17 +273,24 @@ export default function ContestRoomPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen hud-grid-bg flex items-center justify-center">
-        <p className="text-slate-400 animate-pulse">Entering the arena…</p>
+      <div className="hud-grid-bg flex min-h-[calc(100dvh-var(--nav-h))] flex-1 items-center justify-center">
+        <div className="relative z-10 flex flex-col items-center gap-4">
+          <div className="relative h-14 w-14">
+            <div className="hex absolute inset-0 animate-spin-slow bg-gradient-to-b from-orange-400/80 to-rose-600/30" />
+            <div className="hex absolute inset-[3px] bg-slate-950" />
+            <Icon name="swords" className="absolute inset-0 m-auto h-5 w-5 text-orange-300" />
+          </div>
+          <p className="font-display text-sm font-bold uppercase tracking-[0.3em] text-orange-300">Entering the arena…</p>
+        </div>
       </div>
     );
   }
 
   if (loadError || !contest) {
     return (
-      <div className="min-h-screen hud-grid-bg flex flex-col items-center justify-center gap-4">
-        <p className="text-rose-400">{loadError || 'Something went wrong.'}</p>
-        <Link to="/contests" className="text-cyan-400 text-sm hover:underline">
+      <div className="hud-grid-bg flex min-h-[calc(100dvh-var(--nav-h))] flex-1 flex-col items-center justify-center gap-4">
+        <p className="relative z-10 text-rose-400">{loadError || 'Something went wrong.'}</p>
+        <Link to="/contests" className="relative z-10 text-sm text-cyan-400 hover:underline">
           ← Back to Contests
         </Link>
       </div>
@@ -240,181 +309,200 @@ export default function ContestRoomPage() {
         Math.floor((new Date(contest.startedAt).getTime() + contest.durationSeconds * 1000 - now) / 1000),
       )
     : contest.durationSeconds;
+  const timeFrac = contest.durationSeconds > 0 ? remainingSeconds / contest.durationSeconds : 0;
+  const timerColor = timeFrac > 0.5 ? '#22d3ee' : timeFrac > 0.2 ? '#fbbf24' : '#fb7185';
+  const urgent = remainingSeconds > 0 && remainingSeconds <= 30;
+  const won = ended?.winnerId === user?.userId;
 
   return (
-    <div className="min-h-screen hud-grid-bg">
-      <div className="max-w-5xl mx-auto p-6 md:p-10 text-left">
-        <ToastStack toasts={toasts} dismiss={dismiss} />
+    <div className="hud-grid-bg min-h-[calc(100dvh-var(--nav-h))] flex-1">
+      <div className="relative z-10 mx-auto max-w-[88rem] px-4 py-5 text-left md:px-8 md:py-8">
+        <ToastStack toasts={toasts} dismiss={dismiss} placement="top-right" />
 
-        <div className="flex items-center justify-between mb-6">
-          <h1
-            className="text-2xl sm:text-3xl tracking-wide"
-            style={{ color: '#f1f5f9', fontFamily: "'Rajdhani', sans-serif", fontWeight: 700 }}
-          >
-            ⚔️ {contest.cell.territoryName}
-          </h1>
-          <Link to="/contests" className="text-xs text-slate-400 hover:text-slate-200 transition-colors">
-            ← All contests
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <Link to="/contests" className="group inline-flex items-center gap-2 text-sm font-semibold text-slate-400 transition-colors hover:text-cyan-300">
+            <Icon name="arrowLeft" className="h-4 w-4 transition-transform group-hover:-translate-x-1" /> All duels
           </Link>
+          <div className="flex items-center gap-3">
+            <TierBadge tier={contest.cell.tier} size="md" />
+            <h1 className="font-display text-2xl font-bold tracking-wide text-slate-50 sm:text-3xl">{contest.cell.territoryName}</h1>
+          </div>
+          <span
+            className={`rounded-full border px-3 py-1 font-display text-xs font-bold uppercase tracking-[0.16em] ${
+              ended
+                ? 'border-slate-600 text-slate-400'
+                : contest.status === 'ACTIVE'
+                  ? 'border-rose-400/60 bg-rose-500/10 text-rose-300'
+                  : 'border-amber-400/50 bg-amber-400/10 text-amber-300'
+            }`}
+          >
+            {ended ? 'Finished' : contest.status === 'ACTIVE' ? '● Live' : 'Awaiting response'}
+          </span>
         </div>
 
         {contest.status === 'PENDING' && (
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 backdrop-blur p-8 text-center animate-fade-in-up">
-            <p className="text-slate-300 mb-1">
-              <span className="text-rose-400 font-semibold">{contest.challenger.name}</span> challenges{' '}
-              <span className="text-cyan-300 font-semibold">{contest.defender.name}</span> for this cell
-            </p>
-            <p className={`inline-block px-2 py-0.5 rounded text-xs border mt-2 ${diffStyle.border} ${diffStyle.bg} ${diffStyle.text}`}>
-              {contest.problem.title} · {contest.problem.difficultyLevel}
+          <div className="hud-panel relative overflow-hidden p-6 text-center md:p-10 animate-fade-in-up">
+            <div className="pointer-events-none absolute left-1/2 top-0 h-48 w-96 -translate-x-1/2 rounded-full bg-orange-500/10 blur-3xl" />
+            <div className="relative mx-auto grid max-w-xl grid-cols-[1fr_auto_1fr] items-center gap-4">
+              <div className="flex flex-col items-center gap-2">
+                <PlayerAvatar userId={contest.challenger.id} name={contest.challenger.name} size={76} />
+                <p className="font-display text-xl font-bold text-rose-300">{contest.challenger.name}</p>
+                <p className="hud-label !text-[0.58rem]">Challenger</p>
+              </div>
+              <span className="font-display flex h-14 w-14 items-center justify-center rounded-full border border-orange-400/60 bg-orange-500/10 text-xl font-bold text-orange-300 animate-glow-pulse">
+                VS
+              </span>
+              <div className="flex flex-col items-center gap-2">
+                <PlayerAvatar userId={contest.defender.id} name={contest.defender.name} size={76} />
+                <p className="font-display text-xl font-bold text-cyan-300">{contest.defender.name}</p>
+                <p className="hud-label !text-[0.58rem]">Defender</p>
+              </div>
+            </div>
+            <p className={`relative mt-6 inline-block rounded-md border px-3 py-1 text-sm font-semibold ${diffStyle.border} ${diffStyle.bg} ${diffStyle.text}`}>
+              {contest.problem.title} · {contest.problem.difficultyLevel} · {Math.round(contest.durationSeconds / 60)} min
             </p>
             {isDefender ? (
-              <div className="flex justify-center gap-3 mt-6">
-                <button
-                  onClick={handleAccept}
-                  disabled={actionBusy}
-                  className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-600 text-slate-950 text-sm font-bold disabled:opacity-50 hover:scale-[1.02] active:scale-[0.98] transition-transform"
-                >
-                  {actionBusy ? 'Accepting…' : 'Accept Challenge'}
+              <div className="relative mt-7 flex justify-center gap-3">
+                <button onClick={handleAccept} disabled={actionBusy} className="btn-primary h-12 rounded-lg px-8 text-sm">
+                  <Icon name="swords" className="h-4 w-4" />
+                  {actionBusy ? 'Accepting…' : 'Accept challenge'}
                 </button>
-                <button
-                  onClick={handleDecline}
-                  disabled={actionBusy}
-                  className="px-5 py-2.5 rounded-lg border border-slate-700 text-slate-400 text-sm font-medium hover:text-slate-200 hover:border-slate-500 disabled:opacity-50 transition-colors"
-                >
+                <button onClick={handleDecline} disabled={actionBusy} className="btn-ghost h-12 rounded-lg px-6 text-sm font-semibold">
                   Decline
                 </button>
               </div>
             ) : (
-              <p className="text-amber-400 animate-pulse mt-6 text-sm">
-                Waiting for {contest.defender.name} to respond…
-              </p>
+              <p className="relative mt-7 animate-pulse text-sm font-semibold text-amber-300">Waiting for {contest.defender.name} to respond…</p>
             )}
           </div>
         )}
 
         {ended && (
           <div
-            className={`rounded-2xl border p-6 mb-6 text-center animate-pop-in ${
-              ended.winnerId === user?.userId
-                ? 'border-emerald-500/40 bg-gradient-to-br from-emerald-950 to-slate-900 shadow-[0_0_30px_-10px_rgba(16,185,129,0.5)]'
-                : ended.winnerId
-                ? 'border-rose-500/40 bg-rose-950/20'
-                : 'border-slate-700 bg-slate-900/60'
+            className={`hud-panel relative mb-6 overflow-hidden p-6 text-center md:p-8 animate-pop-in ${
+              won ? 'bg-gradient-to-br from-emerald-950/80 to-slate-950/80' : ended.winnerId ? 'bg-gradient-to-br from-rose-950/60 to-slate-950/80' : ''
             }`}
+            style={{
+              borderColor: won ? 'rgba(52,211,153,0.55)' : ended.winnerId ? 'rgba(251,113,133,0.5)' : undefined,
+              boxShadow: won ? '0 0 50px -14px rgba(16,185,129,0.65)' : ended.winnerId ? '0 0 50px -16px rgba(244,63,94,0.5)' : undefined,
+            }}
           >
-            {ended.winnerId === user?.userId && (
-              <p className="text-xl font-bold text-emerald-400">🚩 You captured the territory!</p>
-            )}
-            {ended.winnerId && ended.winnerId !== user?.userId && (
-              <p className="text-xl font-bold text-rose-400">💀 You lost this contest.</p>
-            )}
-            {!ended.winnerId && (
-              <p className="text-xl font-bold text-slate-300">🤝 Draw — no territory changed hands.</p>
-            )}
-            <p className="text-xs text-slate-500 uppercase tracking-wide mt-1">
+            <div
+              className={`mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full border ${
+                won ? 'border-emerald-400/60 bg-emerald-400/15 text-emerald-300' : ended.winnerId ? 'border-rose-400/60 bg-rose-400/15 text-rose-300' : 'border-slate-500 bg-slate-500/10 text-slate-300'
+              } ${won ? 'animate-float' : ''}`}
+            >
+              <Icon name={won ? 'flag' : ended.winnerId ? 'skull' : 'swords'} filled={won} className="h-8 w-8" />
+            </div>
+            <p className={`font-display text-4xl font-bold uppercase tracking-[0.12em] ${won ? 'text-emerald-300' : ended.winnerId ? 'text-rose-300' : 'text-slate-200'}`}>
+              {won ? 'Territory captured!' : ended.winnerId ? 'Defeat' : 'Stalemate'}
+            </p>
+            <p className="mt-1 text-sm text-slate-300">
+              {won ? `${contest.cell.territoryName} is yours.` : ended.winnerId ? 'You lost this contest. The cell stays with your rival.' : 'Draw — no territory changed hands.'}
+            </p>
+            <p className="hud-label mt-2 !text-[0.64rem]">
               {ended.reason === 'AC' && 'Decided by first accepted solution'}
               {ended.reason === 'TIMEOUT' && 'Decided on test cases passed when time ran out'}
               {ended.reason === 'FORFEIT' && 'Decided by opponent disconnect'}
               {ended.reason === 'DRAW' && 'Equal test cases passed'}
             </p>
-            <Link to="/map" className="inline-block mt-4 text-cyan-400 text-sm hover:underline">
-              View the map →
-            </Link>
+            <div className="mt-5 flex justify-center gap-3">
+              <Link to="/map" className="btn-primary h-11 rounded-lg px-6 text-sm">
+                <Icon name="map" className="h-4 w-4" /> View the map
+              </Link>
+              <Link to="/contests" className="btn-ghost h-11 rounded-lg px-5 text-sm font-semibold">
+                All duels
+              </Link>
+            </div>
           </div>
         )}
 
         {contest.status === 'ACTIVE' && !ended && (
           <>
-            <div className="flex flex-wrap items-center justify-between gap-4 mb-6 animate-fade-in-up">
-              <div className="flex items-center gap-3">
-                <div className="text-sm">
-                  <span className="text-slate-500 uppercase tracking-wide text-[10px] block">You</span>
-                  <span className="text-slate-100 font-medium">{self.name}</span>
-                  <span className={`ml-2 font-mono text-xs ${verdictColor(selfResult?.verdict)}`}>
-                    {selfResult?.verdict ?? 'PENDING'} {selfResult ? `(${selfResult.totalPassed}/${selfResult.totalTests})` : ''}
+            <div className="mb-5 grid items-stretch gap-3 md:grid-cols-[1fr_auto_1fr] animate-fade-in-up">
+              <FighterCard userId={self.id} name={self.name} you result={selfResult} align="left" />
+
+              <div className="hud-panel flex flex-col items-center justify-center px-6 py-3" style={urgent ? { borderColor: 'rgba(251,113,133,0.7)', boxShadow: '0 0 36px -10px rgba(244,63,94,0.7)' } : undefined}>
+                <ProgressRing pct={timeFrac} size={118} stroke={7} color={timerColor} track="rgba(51,65,85,0.5)">
+                  <span className={`font-mono text-3xl font-bold tabular-nums ${urgent ? 'animate-pulse text-rose-300' : 'text-slate-50'}`}>{formatClock(remainingSeconds)}</span>
+                </ProgressRing>
+                <p className="hud-label mt-1 !text-[0.6rem]">{remainingSeconds === 0 ? 'Time’s up' : 'Time left'}</p>
+              </div>
+
+              <FighterCard
+                userId={opponent.id}
+                name={opponent.name}
+                you={false}
+                result={opponentResult}
+                online={opponentConnected}
+                graceSeconds={graceSeconds}
+                align="right"
+              />
+            </div>
+
+            <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+              <section className="hud-panel p-5 md:p-6 animate-fade-in-up">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="font-display text-2xl font-bold tracking-wide text-slate-50">{contest.problem.title}</h2>
+                  <span className={`rounded-md border px-2 py-0.5 font-display text-xs font-bold uppercase tracking-[0.12em] ${diffStyle.border} ${diffStyle.bg} ${diffStyle.text}`}>
+                    {contest.problem.difficultyLevel}
                   </span>
                 </div>
-              </div>
+                <p className="mt-3 whitespace-pre-wrap text-[0.92rem] leading-relaxed text-slate-300">{contest.problem.description}</p>
+                <h3 className="hud-label mb-2 mt-5 text-cyan-300">Examples</h3>
+                <div className="space-y-2">
+                  {contest.problem.examples.map((ex, i) => (
+                    <div key={i} className="overflow-hidden rounded-lg border border-slate-700/70 bg-black/40 text-sm">
+                      <div className="grid grid-cols-[4.5rem_1fr] border-b border-slate-800">
+                        <span className="hud-label !text-[0.62rem] px-3 py-2 text-slate-500">Input</span>
+                        <span className="block overflow-x-auto py-2 pr-3 font-mono text-[0.82rem] text-slate-200">{JSON.stringify(ex.input)}</span>
+                      </div>
+                      <div className="grid grid-cols-[4.5rem_1fr]">
+                        <span className="hud-label !text-[0.62rem] px-3 py-2 text-slate-500">Output</span>
+                        <span className="block overflow-x-auto py-2 pr-3 font-mono text-[0.82rem] text-emerald-300">{JSON.stringify(ex.output)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
 
-              <div className="text-3xl font-mono font-bold text-cyan-400 tabular-nums">
-                {formatClock(remainingSeconds)}
-              </div>
-
-              <div className="text-sm text-right">
-                <span className="text-slate-500 uppercase tracking-wide text-[10px] block">Opponent</span>
-                <span className="text-slate-100 font-medium">
-                  {opponent.name}{' '}
-                  {opponentConnected ? (
-                    <span className="text-emerald-400 text-xs">● online</span>
-                  ) : (
-                    <span className="text-rose-400 text-xs animate-pulse">
-                      ○ disconnected{graceSeconds ? ` (${graceSeconds}s to reconnect)` : ''}
-                    </span>
-                  )}
-                </span>
-                <span className={`ml-2 font-mono text-xs ${verdictColor(opponentResult?.verdict)}`}>
-                  {opponentResult?.verdict ?? 'PENDING'}{' '}
-                  {opponentResult ? `(${opponentResult.totalPassed}/${opponentResult.totalTests})` : ''}
-                </span>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 backdrop-blur p-6 mb-6 animate-fade-in-up">
-              <div className="flex items-center gap-2 mb-2">
-                <h2 className="text-2xl tracking-wide font-bold text-slate-100" style={{ fontFamily: "'Rajdhani', sans-serif" }}>
-                  {contest.problem.title}
-                </h2>
-                <span className={`px-2 py-0.5 rounded text-xs border ${diffStyle.border} ${diffStyle.bg} ${diffStyle.text} uppercase tracking-wide font-semibold`}>
-                  {contest.problem.difficultyLevel}
-                </span>
-              </div>
-              <p className="mb-4 whitespace-pre-wrap text-slate-300 text-sm leading-relaxed">
-                {contest.problem.description}
-              </p>
-              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-[0.15em] mb-2">Examples</h3>
-              {contest.problem.examples.map((ex, i) => (
-                <pre key={i} className="bg-black/40 border border-slate-800 rounded-lg p-3 mb-2 text-sm overflow-x-auto text-slate-300 font-mono">
-{`Input: ${JSON.stringify(ex.input)}\nOutput: ${JSON.stringify(ex.output)}`}
-                </pre>
-              ))}
-            </div>
-
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 backdrop-blur p-6 animate-fade-in-up">
-              <div className="flex items-center gap-2 mb-3">
-                {(['python', 'c++'] as const).map((lang) => (
-                  <button
-                    key={lang}
-                    onClick={() => {
-                      setLanguage(lang);
-                      setCode(contest.problem.boilerplate[lang] || '');
-                    }}
-                    className={`px-3 py-1 rounded text-xs font-medium border transition-colors ${
-                      language === lang
-                        ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300'
-                        : 'border-slate-700 text-slate-400 hover:border-slate-500'
-                    }`}
-                  >
-                    {lang === 'python' ? 'Python' : 'C++'}
-                  </button>
-                ))}
-              </div>
-              <div className="border border-slate-800 rounded-lg overflow-hidden mb-4 shadow-lg">
-                <Editor
-                  height="320px"
-                  language={language === 'c++' ? 'cpp' : language}
-                  value={code}
-                  onChange={(value) => setCode(value || '')}
-                  theme="vs-dark"
-                  options={{ fontSize: 14, minimap: { enabled: false } }}
-                />
-              </div>
-              <button
-                onClick={handleSubmit}
-                disabled={submitting || remainingSeconds === 0}
-                className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-600 text-slate-950 text-sm font-bold disabled:opacity-50 hover:scale-[1.02] active:scale-[0.98] transition-transform shadow-lg shadow-cyan-900/30"
-              >
-                {submitting ? 'Deploying…' : remainingSeconds === 0 ? 'Time expired' : '🚀 Submit Solution'}
-              </button>
+              <section className="hud-panel p-4 md:p-5 animate-fade-in-up lg:sticky lg:top-[calc(var(--nav-h)+1rem)]" style={{ animationDelay: '80ms' }}>
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="font-display text-sm font-bold uppercase tracking-[0.18em] text-slate-100">Your solution</h3>
+                  <div className="flex rounded-lg border border-slate-700 bg-slate-950/60 p-0.5" role="tablist" aria-label="Language">
+                    {(['python', 'c++'] as const).map((lang) => (
+                      <button
+                        key={lang}
+                        role="tab"
+                        aria-selected={language === lang}
+                        onClick={() => {
+                          setLanguage(lang);
+                          setCode(contest.problem.boilerplate[lang] || '');
+                        }}
+                        className={`rounded-md px-3.5 py-1 text-xs font-bold transition-all ${
+                          language === lang ? 'bg-cyan-400/20 text-cyan-200 shadow-[0_0_12px_-3px_rgba(34,211,238,0.7)]' : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {lang === 'python' ? 'Python' : 'C++'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="overflow-hidden rounded-lg border border-slate-700/80 shadow-[0_0_30px_-14px_rgba(34,211,238,0.5)]">
+                  <Editor
+                    height="380px"
+                    language={language === 'c++' ? 'cpp' : language}
+                    value={code}
+                    onChange={(value) => setCode(value || '')}
+                    theme="vs-dark"
+                    options={{ fontSize: 14, minimap: { enabled: false }, scrollBeyondLastLine: false, padding: { top: 12 } }}
+                  />
+                </div>
+                <button onClick={handleSubmit} disabled={submitting || remainingSeconds === 0} className="btn-primary mt-4 h-11 rounded-lg px-6 text-sm">
+                  <Icon name="rocket" className="h-4 w-4" />
+                  {submitting ? 'Deploying…' : remainingSeconds === 0 ? 'Time expired' : 'Submit solution'}
+                </button>
+              </section>
             </div>
           </>
         )}

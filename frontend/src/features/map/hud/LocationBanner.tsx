@@ -11,10 +11,10 @@ export interface Splash {
 }
 
 /** Top-center "where am I" chip: zone, tier, who holds it, control meter. */
-export function LocationChip({ summary, sector }: { summary: ZoneSummary | null; sector: string }) {
+export function LocationChip({ summary, sector, compact = false }: { summary: ZoneSummary | null; sector: string; compact?: boolean }) {
   if (!summary) {
     return (
-      <div className="hud-panel hud-panel-quiet flex items-center gap-2.5 px-4 py-2 animate-slide-down" key="open">
+      <div className={`hud-panel hud-panel-quiet flex items-center gap-2.5 animate-slide-down ${compact ? 'w-[11.75rem] px-3 py-1.5' : 'px-4 py-2'}`} key="open">
         <Icon name="compass" className="h-4 w-4 text-slate-400" />
         <span className="hud-label !text-slate-300">Open ground</span>
         <span className="font-mono text-[0.7rem] font-bold text-cyan-300/80">SECTOR {sector}</span>
@@ -24,14 +24,14 @@ export function LocationChip({ summary, sector }: { summary: ZoneSummary | null;
 
   const meta = TIER_META[summary.tier];
   return (
-    <div key={summary.id} className="hud-panel hud-panel-quiet w-[min(26rem,calc(100vw-1.5rem))] px-4 py-2.5 animate-slide-down">
+    <div key={summary.id} className={`hud-panel hud-panel-quiet animate-slide-down ${compact ? 'w-[11.75rem] px-3 py-2' : 'w-[min(26rem,calc(100vw-1.5rem))] px-4 py-2.5'}`}>
       <div className="flex items-center gap-2.5">
         <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" fill={meta.accent} style={{ filter: `drop-shadow(0 0 6px ${meta.accent})` }}>
           <path d={meta.icon} />
         </svg>
-        <p className="font-display min-w-0 flex-1 truncate text-lg font-bold leading-none tracking-wide text-slate-50">{summary.name}</p>
-        <TierBadge tier={summary.tier} />
-        <span className="font-mono text-[0.68rem] font-bold text-cyan-300/80">{sector}</span>
+        <p className={`font-display min-w-0 flex-1 truncate font-bold leading-none tracking-wide text-slate-50 ${compact ? 'text-sm' : 'text-lg'}`}>{summary.name}</p>
+        {!compact && <TierBadge tier={summary.tier} />}
+        {!compact && <span className="font-mono text-[0.68rem] font-bold text-cyan-300/80">{sector}</span>}
       </div>
       <div className="mt-2 flex items-center gap-2.5">
         <div className="flex h-1.5 flex-1 overflow-hidden rounded-full bg-slate-800/90 ring-1 ring-slate-700/60">
@@ -39,7 +39,7 @@ export function LocationChip({ summary, sector }: { summary: ZoneSummary | null;
             <span key={s.userId} style={{ width: `${(s.cellCount / Math.max(1, summary.total)) * 100}%`, background: s.color }} />
           ))}
         </div>
-        <span className="text-[0.68rem] font-bold uppercase tracking-wide" style={{ color: STATUS_COLOR[summary.status] }}>
+        <span className={`font-bold uppercase tracking-wide ${compact ? 'text-[0.58rem]' : 'text-[0.68rem]'}`} style={{ color: STATUS_COLOR[summary.status] }}>
           {STATUS_LABEL[summary.status]}
         </span>
       </div>

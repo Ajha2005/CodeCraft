@@ -76,6 +76,8 @@ export interface Frame {
   meId: string | null;
   meColor: string;
   reduced: boolean;
+  /** Adaptive quality: true drops purely decorative effects on slow devices. */
+  lowFx: boolean;
 }
 
 interface Star {
@@ -123,8 +125,17 @@ export class WorldRenderer {
   private readonly labelWidthCache = new Map<string, number>();
   private readonly lanePath: Path2D;
   private readonly lampPoints: Pt[] = [];
+  /** Every zone outline merged, so the pavement is two strokes, not ninety. */
+  private readonly allZones: Path2D;
+  /** Everything outside the slab: clip target for drawing only its visible edge. */
+  private readonly slabOutside: Path2D;
 
-  // visible world rect for the current frame
+  // exact viewport in world units for the current frame
+  private tx0 = 0;
+  private ty0 = 0;
+  private tx1 = 0;
+  private ty1 = 0;
+  // visible world rect for the current frame (padded for culling)
   private vx0 = 0;
   private vy0 = 0;
   private vx1 = 0;
@@ -165,6 +176,12 @@ export class WorldRenderer {
     const h = campus.height + SLAB_MARGIN * 2;
     this.slabPath = new Path2D();
     this.slabPath.roundRect(x0, y0, w, h, 52);
+    this.slabOutside = new Path2D();
+    this.slabOutside.rect(-6000, -6000, 15000, 15000);
+    this.slabOutside.addPath(this.slabPath);
+
+    this.allZones = new Path2D();
+    for (const z of campus.zones) this.allZones.addPath(new Path2D(z.d));
 
     // Street dashes batched into one path; a sparse subset becomes lamps.
     this.lanePath = new Path2D();
@@ -183,7 +200,12 @@ export class WorldRenderer {
     this.groundTex.height = 340;
     const g = this.groundTex.getContext('2d') as CanvasRenderingContext2D;
     const rr = rand(2024);
-    g.fillStyle = PALETTE.ground;
+    // Island lighting is baked in here (brighter core, darker rim) so each
+    // frame needs one textured fill instead of three full-screen gradients.
+    const base = g.createRadialGradient(320, 170, 8, 320, 170, 390);
+    base.addColorStop(0, '#112538');
+    base.addColorStop(1, '#09131e');
+    g.fillStyle = base;
     g.fillRect(0, 0, 640, 340);
     for (let i = 0; i < 90; i++) {
       const x = rr() * 640;
@@ -201,6 +223,11 @@ export class WorldRenderer {
       g.fillStyle = `rgba(150,200,230,${0.015 + rr() * 0.03})`;
       g.fillRect(rr() * 640, rr() * 340, 1, 1);
     }
+    const rim = g.createRadialGradient(320, 170, 210, 320, 170, 410);
+    rim.addColorStop(0, 'rgba(2,6,12,0)');
+    rim.addColorStop(1, 'rgba(2,6,12,0.55)');
+    g.fillStyle = rim;
+    g.fillRect(0, 0, 640, 340);
   }
 
   // ------------------------------------------------------------------ frame
@@ -209,16 +236,25 @@ export class WorldRenderer {
     const { vw, vh, dpr, zoom } = f;
     const halfW = vw / (2 * zoom);
     const halfH = vh / (2 * zoom);
-    this.vx0 = f.cx - halfW - 40;
-    this.vx1 = f.cx + halfW + 40;
-    this.vy0 = f.cy - halfH - 40;
-    this.vy1 = f.cy + halfH + 40;
+    this.tx0 = f.cx - halfW;
+    this.tx1 = f.cx + halfW;
+    this.ty0 = f.cy - halfH;
+    this.ty1 = f.cy + halfH;
+    this.vx0 = this.tx0 - 40;
+    this.vx1 = this.tx1 + 40;
+    this.vy0 = this.ty0 - 40;
+    this.vy1 = this.ty1 + 40;
+
+    // When the viewport sits wholly inside the island there is no void, rim
+    // or island edge to draw - skipping them is the biggest saving when zoomed in.
+    const m = SLAB_MARGIN - 60;
+    const inside = this.tx0 > -m && this.tx1 < this.campus.width + m && this.ty0 > -m && this.ty1 < this.campus.height + m;
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.drawVoid(ctx, f);
+    if (!inside) this.drawVoid(ctx, f);
 
     ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, dpr * (vw / 2 - f.cx * zoom + f.shakeX), dpr * (vh / 2 - f.cy * zoom + f.shakeY));
-    this.drawSlab(ctx, f);
+    this.drawSlab(ctx, f, inside);
     this.drawStreets(ctx, f);
 
     for (const idx of f.order) {
@@ -226,14 +262,14 @@ export class WorldRenderer {
       if (this.visible(v.zone, 60)) this.drawZone(ctx, f, v);
     }
 
-    this.drawClouds(ctx, f);
+    if (!f.lowFx) this.drawClouds(ctx, f);
     this.drawLabels(ctx, f);
     this.drawRoute(ctx, f);
     this.drawPlayer(ctx, f);
     f.fx.draw(ctx, zoom);
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.drawMotes(ctx, f);
+    if (!f.lowFx) this.drawMotes(ctx, f);
     this.drawWaypointArrow(ctx, f);
   }
 
@@ -261,48 +297,49 @@ export class WorldRenderer {
     }
   }
 
-  private drawSlab(ctx: CanvasRenderingContext2D, f: Frame) {
+  private drawSlab(ctx: CanvasRenderingContext2D, f: Frame, inside: boolean) {
     const { campus } = this;
     const W = campus.width;
     const H = campus.height;
     const zoom = f.zoom;
 
-    // soft glow cast beneath the floating island
-    ctx.save();
-    ctx.translate(W / 2 + 80, H + SLAB_THICKNESS + 190);
-    ctx.scale(1, 0.2);
-    const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, W * 0.6);
-    glow.addColorStop(0, 'rgba(34,211,238,0.20)');
-    glow.addColorStop(1, 'rgba(34,211,238,0)');
-    ctx.fillStyle = glow;
-    ctx.fillRect(-W, -W, W * 2, W * 2);
-    ctx.restore();
+    if (!inside) {
+      // soft glow cast beneath the floating island
+      if (this.ty1 > H) {
+        ctx.save();
+        ctx.translate(W / 2 + 80, H + SLAB_THICKNESS + 190);
+        ctx.scale(1, 0.2);
+        const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, W * 0.6);
+        glow.addColorStop(0, 'rgba(34,211,238,0.20)');
+        glow.addColorStop(1, 'rgba(34,211,238,0)');
+        ctx.fillStyle = glow;
+        ctx.fillRect(-W, -W, W * 2, W * 2);
+        ctx.restore();
+      }
 
-    // thickness: stacked copies, darkening with depth
-    const steps = 16;
-    for (let i = steps; i >= 1; i--) {
-      const k = (i / steps) * SLAB_THICKNESS;
-      ctx.save();
-      ctx.translate(OBL_X * k, k);
-      ctx.fillStyle = mix('#173047', '#03070c', i / steps);
-      ctx.fill(this.slabPath);
-      ctx.restore();
+      // thickness: stacked copies darkening with depth, clipped to the band
+      // outside the top face so each copy only fills what can be seen.
+      if (this.tx1 > W - 100 || this.ty1 > H - 100) {
+        ctx.save();
+        ctx.clip(this.slabOutside, 'evenodd');
+        const steps = 10;
+        for (let i = steps; i >= 1; i--) {
+          const k = (i / steps) * SLAB_THICKNESS;
+          ctx.save();
+          ctx.translate(OBL_X * k, k);
+          ctx.fillStyle = mix('#173047', '#03070c', i / steps);
+          ctx.fill(this.slabPath);
+          ctx.restore();
+        }
+        ctx.restore();
+      }
     }
 
-    // top face
-    const top = ctx.createRadialGradient(W / 2, H / 2, 40, W / 2, H / 2, W * 0.62);
-    top.addColorStop(0, '#112538');
-    top.addColorStop(1, '#09131e');
-    ctx.fillStyle = top;
-    ctx.fill(this.slabPath);
-
+    // top face: one cached texture (lighting baked in) + tactical grid
     ctx.save();
     ctx.clip(this.slabPath);
-    ctx.globalAlpha = 0.9;
     ctx.drawImage(this.groundTex, -SLAB_MARGIN, -SLAB_MARGIN, W + SLAB_MARGIN * 2, H + SLAB_MARGIN * 2);
-    ctx.globalAlpha = 1;
 
-    // tactical grid
     const gridAlpha = 0.05 + 0.05 * Math.min(1, zoom * 1.2);
     const step = 80;
     ctx.lineWidth = 1 / zoom;
@@ -321,23 +358,33 @@ export class WorldRenderer {
     }
     ctx.strokeStyle = rgba(PALETTE.cyan, gridAlpha);
     ctx.stroke();
-
-    // the vignette of the island itself: darker toward the rim
-    const edge = ctx.createRadialGradient(W / 2, H / 2, W * 0.34, W / 2, H / 2, W * 0.66);
-    edge.addColorStop(0, 'rgba(2,6,12,0)');
-    edge.addColorStop(1, 'rgba(2,6,12,0.55)');
-    ctx.fillStyle = edge;
-    ctx.fillRect(-SLAB_MARGIN, -SLAB_MARGIN, W + SLAB_MARGIN * 2, H + SLAB_MARGIN * 2);
     ctx.restore();
 
-    // glowing rim
-    ctx.save();
-    ctx.lineWidth = 2 / zoom;
-    ctx.strokeStyle = rgba(PALETTE.cyan, 0.55);
-    ctx.shadowColor = rgba(PALETTE.cyan, 0.9);
-    ctx.shadowBlur = 18;
-    ctx.stroke(this.slabPath);
-    ctx.restore();
+    // glowing rim, as layered strokes rather than a blur
+    if (!inside) {
+      ctx.lineJoin = 'round';
+      this.glowStroke(ctx, this.slabPath, PALETTE.cyan, 2 / zoom, 0.6, f.lowFx);
+    }
+  }
+
+  /** A cheap glow: three concentric strokes instead of a blurred shadow. */
+  private glowStroke(ctx: CanvasRenderingContext2D, path: Path2D | null, color: string, width: number, alpha: number, low = false) {
+    const draw = () => (path ? ctx.stroke(path) : ctx.stroke());
+    if (low) {
+      ctx.strokeStyle = rgba(color, alpha);
+      ctx.lineWidth = width * 1.4;
+      draw();
+      return;
+    }
+    ctx.strokeStyle = rgba(color, alpha * 0.13);
+    ctx.lineWidth = width * 4.2;
+    draw();
+    ctx.strokeStyle = rgba(color, alpha * 0.28);
+    ctx.lineWidth = width * 2.2;
+    draw();
+    ctx.strokeStyle = rgba(color, alpha);
+    ctx.lineWidth = width;
+    draw();
   }
 
   private drawStreets(ctx: CanvasRenderingContext2D, f: Frame) {
@@ -347,10 +394,10 @@ export class WorldRenderer {
     // pavement + curb around every block
     ctx.lineWidth = SIDEWALK * 2 + 3;
     ctx.strokeStyle = PALETTE.curb;
-    for (const v of f.views) if (this.visible(v.zone, SIDEWALK + 6)) ctx.stroke(v.path);
+    ctx.stroke(this.allZones);
     ctx.lineWidth = SIDEWALK * 2;
     ctx.strokeStyle = PALETTE.sidewalk;
-    for (const v of f.views) if (this.visible(v.zone, SIDEWALK + 6)) ctx.stroke(v.path);
+    ctx.stroke(this.allZones);
 
     if (zoom > 0.3) {
       ctx.fillStyle = 'rgba(255,214,102,0.34)';
@@ -358,7 +405,7 @@ export class WorldRenderer {
 
       // street lamps
       ctx.globalCompositeOperation = 'lighter';
-      for (const p of this.lampPoints) {
+      for (const p of f.lowFx ? [] : this.lampPoints) {
         if (p.x < this.vx0 || p.x > this.vx1 || p.y < this.vy0 || p.y > this.vy1) continue;
         const flick = f.reduced ? 1 : 0.85 + 0.15 * Math.sin(f.anim * 2 + p.x);
         const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 22);
@@ -397,8 +444,8 @@ export class WorldRenderer {
     // ground shadow
     if (h0 > 2) {
       const s = h0 * 0.95 + 4;
-      ctx.fillStyle = 'rgba(0,0,0,0.16)';
-      for (const k of [1.5, 1.05, 0.62]) {
+      ctx.fillStyle = h0 > 9 ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.24)';
+      for (const k of h0 > 9 && !f.lowFx ? [1.45, 0.75] : [1]) {
         ctx.save();
         ctx.translate(OBL_X * s * k, s * k);
         ctx.fill(v.path);
@@ -437,7 +484,7 @@ export class WorldRenderer {
         ctx.fill();
 
         // lit ribbon of windows along tall walls
-        if (h0 >= 12 && zoom > 0.5 && len > 40 && v.zone.kind !== 'water') {
+        if (h0 >= 12 && zoom > 0.5 && !f.lowFx && len > 40 && v.zone.kind !== 'water') {
           ctx.fillStyle = 'rgba(255,224,160,0.22)';
           const ux = dx / len;
           const uy = dy / len;
@@ -467,26 +514,37 @@ export class WorldRenderer {
     ctx.translate(ox, oy);
     const terrainFirst = z.kind === 'water' || z.kind === 'forest';
 
-    ctx.fillStyle = detail ? mix(baseRoof(z.kind), '#0b121b', 0.55) : baseRoof(z.kind);
+    // A single owner over an opaque base is just a blended color, so paint it
+    // in one fill; striped (contested) and terrain-first zones layer instead.
+    let roofFill = baseRoof(z.kind);
+    let blended = false;
+    if (!detail && !terrainFirst && v.shares.length === 1 && v.stripes.length === 0) {
+      const a = Math.min(1, (0.3 + 0.7 * v.fraction) * tintStrength(z.kind) + 0.05);
+      roofFill = mix(roofFill, v.shares[0].color, a);
+      blended = true;
+    }
+    ctx.fillStyle = detail ? mix(roofFill, '#0b121b', 0.55) : roofFill;
     ctx.fill(v.path);
 
     if (!detail) {
       ctx.save();
       ctx.clip(v.path);
-      if (terrainFirst) this.decor.draw(ctx, v, f.anim, zoom);
-      this.paintOwnership(ctx, v, terrainFirst ? 0.5 : 1);
-      if (!terrainFirst) this.decor.draw(ctx, v, f.anim, zoom);
+      if (terrainFirst) this.decor.draw(ctx, v, f.anim, zoom, f.lowFx, f.dpr);
+      if (!blended) this.paintOwnership(ctx, v, terrainFirst ? 0.5 : 1);
+      if (!terrainFirst) this.decor.draw(ctx, v, f.anim, zoom, f.lowFx, f.dpr);
       ctx.restore();
     }
 
     // sheen
     const b = z.box;
-    const sheen = ctx.createLinearGradient(b.x, b.y, b.x + b.w, b.y + b.h);
-    sheen.addColorStop(0, 'rgba(255,255,255,0.11)');
-    sheen.addColorStop(0.55, 'rgba(255,255,255,0)');
-    sheen.addColorStop(1, 'rgba(0,0,0,0.18)');
-    ctx.fillStyle = sheen;
-    ctx.fill(v.path);
+    if (zoom > 0.3 && !f.lowFx) {
+      const sheen = ctx.createLinearGradient(b.x, b.y, b.x + b.w, b.y + b.h);
+      sheen.addColorStop(0, 'rgba(255,255,255,0.11)');
+      sheen.addColorStop(0.55, 'rgba(255,255,255,0)');
+      sheen.addColorStop(1, 'rgba(0,0,0,0.18)');
+      ctx.fillStyle = sheen;
+      ctx.fill(v.path);
+    }
 
     if (detail) this.drawCells(ctx, f, v);
 
@@ -514,18 +572,10 @@ export class WorldRenderer {
     ctx.stroke(v.path);
 
     // corner brackets: the higher the tier, the bolder
-    if (!detail) this.drawBrackets(ctx, z, rgba(tier.accent, 0.5 + tier.rank * 0.16), 1.6 + tier.rank * 0.5, f.anim);
+    if (!detail) this.drawBrackets(ctx, z, rgba(tier.accent, 0.5 + tier.rank * 0.16), 1.6 + tier.rank * 0.5, f.lowFx ? 0 : f.anim, f.lowFx);
 
     // holdings highlight
-    if (mine) {
-      ctx.save();
-      ctx.lineWidth = 2.6;
-      ctx.strokeStyle = rgba(f.meColor, 0.95);
-      ctx.shadowColor = f.meColor;
-      ctx.shadowBlur = 14;
-      ctx.stroke(v.path);
-      ctx.restore();
-    }
+    if (mine) this.glowStroke(ctx, v.path, f.meColor, 2.6, 0.95, f.lowFx);
 
     // contested zones: marching orange ring
     if (v.contested) {
@@ -533,11 +583,7 @@ export class WorldRenderer {
       const pulse = f.reduced ? 1 : 0.6 + 0.4 * Math.sin(f.anim * 3.2 + z.seed * 9);
       ctx.setLineDash([11, 7]);
       ctx.lineDashOffset = -f.anim * 22;
-      ctx.lineWidth = 2.4;
-      ctx.strokeStyle = rgba(PALETTE.danger, 0.55 + 0.45 * pulse);
-      ctx.shadowColor = PALETTE.danger;
-      ctx.shadowBlur = 10 * pulse;
-      ctx.stroke(v.path);
+      this.glowStroke(ctx, v.path, PALETTE.danger, 2.4, 0.55 + 0.45 * pulse, f.lowFx);
       ctx.restore();
     }
 
@@ -549,34 +595,20 @@ export class WorldRenderer {
         ctx.save();
         ctx.fillStyle = rgba('#ffffff', 0.55 * k * k);
         ctx.fill(v.path);
-        ctx.lineWidth = 4;
-        ctx.strokeStyle = rgba(v.topColor ?? PALETTE.cyan, k);
-        ctx.shadowColor = v.topColor ?? PALETTE.cyan;
-        ctx.shadowBlur = 24 * k;
-        ctx.stroke(v.path);
+        this.glowStroke(ctx, v.path, v.topColor ?? PALETTE.cyan, 4, k, f.lowFx);
         ctx.restore();
       }
     }
 
     // hover + selection
     if (v.hover > 0.02) {
-      ctx.save();
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = rgba(PALETTE.cyan, 0.95 * v.hover);
-      ctx.shadowColor = PALETTE.cyan;
-      ctx.shadowBlur = 22 * v.hover;
-      ctx.stroke(v.path);
-      ctx.restore();
+      this.glowStroke(ctx, v.path, PALETTE.cyan, 3, 0.95 * v.hover, f.lowFx);
     }
     if (v.select > 0.02) {
       ctx.save();
       ctx.setLineDash([16, 9]);
       ctx.lineDashOffset = -f.anim * 28;
-      ctx.lineWidth = 2.6;
-      ctx.strokeStyle = rgba('#ffffff', 0.92 * v.select);
-      ctx.shadowColor = '#ffffff';
-      ctx.shadowBlur = 12 * v.select;
-      ctx.stroke(v.path);
+      this.glowStroke(ctx, v.path, '#ffffff', 2.6, 0.92 * v.select, f.lowFx);
       ctx.restore();
     }
     if (f.currentZone === z.index && !detail) {
@@ -585,7 +617,7 @@ export class WorldRenderer {
       ctx.stroke(v.path);
     }
 
-    if (z.tier === 'CITADEL' && !detail) this.drawBeacon(ctx, f, v, tier.accent);
+    if (z.tier === 'CITADEL' && !detail && !f.lowFx) this.drawBeacon(ctx, f, v, tier.accent);
     if (v.mineCount > 0 && !detail) this.drawPennant(ctx, z, f.meColor, f.anim);
 
     ctx.restore();
@@ -642,7 +674,7 @@ export class WorldRenderer {
     ctx.globalAlpha = 1;
   }
 
-  private drawBrackets(ctx: CanvasRenderingContext2D, z: Zone, color: string, width: number, anim: number) {
+  private drawBrackets(ctx: CanvasRenderingContext2D, z: Zone, color: string, width: number, anim: number, low: boolean) {
     const b = z.box;
     const len = Math.max(9, Math.min(34, Math.min(b.w, b.h) * 0.16));
     const inset = 1.5;
@@ -650,10 +682,6 @@ export class WorldRenderer {
     ctx.strokeStyle = color;
     ctx.lineWidth = width;
     ctx.lineCap = 'square';
-    if (z.tier === 'CITADEL') {
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 8 + 4 * Math.sin(anim * 2.4 + z.seed * 8);
-    }
     ctx.beginPath();
     const corners = [
       [b.x + inset, b.y + inset, 1, 1],
@@ -665,6 +693,14 @@ export class WorldRenderer {
       ctx.moveTo(x, y + len * dy);
       ctx.lineTo(x, y);
       ctx.lineTo(x + len * dx, y);
+    }
+    if (z.tier === 'CITADEL' && !low) {
+      // a soft halo under the bright strokes
+      ctx.globalAlpha = 0.2 + (anim ? 0.08 * Math.sin(anim * 2.4 + z.seed * 8) : 0);
+      ctx.lineWidth = width * 3.4;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = width;
     }
     ctx.stroke();
     ctx.restore();
@@ -935,9 +971,7 @@ export class WorldRenderer {
       ctx.lineWidth = 3 * unit * Math.max(1, 0.8);
       ctx.setLineDash([0.1, 11 * unit]);
       ctx.lineDashOffset = f.reduced ? 0 : -f.anim * 30 * unit;
-      ctx.strokeStyle = rgba(PALETTE.cyan, 0.85);
-      ctx.shadowColor = PALETTE.cyan;
-      ctx.shadowBlur = 8;
+      ctx.strokeStyle = rgba(PALETTE.cyan, 0.9);
       ctx.beginPath();
       ctx.moveTo(player.x, player.y);
       for (let i = f.routeIndex; i < route.length; i++) ctx.lineTo(route[i].x, route[i].y);
@@ -1120,6 +1154,7 @@ export class WorldRenderer {
   // -------------------------------------------------------------- atmosphere
 
   private drawClouds(ctx: CanvasRenderingContext2D, f: Frame) {
+    if (f.zoom > 1.2) return; // close up they are just a smudge, and a costly one
     const W = this.campus.width;
     for (const c of this.clouds) {
       const span = W + c.r * 2 + 400;
@@ -1150,19 +1185,22 @@ export class WorldRenderer {
     ctx.globalCompositeOperation = 'source-over';
   }
 
-  /** Edge-of-screen pointer toward a pinned waypoint that is off-screen. */
+  /**
+   * Compass arrow toward a pinned waypoint that is off-screen. It orbits the
+   * avatar on an ellipse (rather than hugging the screen edge) so it always
+   * lands in clear space instead of under the HUD panels.
+   */
   private drawWaypointArrow(ctx: CanvasRenderingContext2D, f: Frame) {
     const w = f.waypoint;
     if (!w) return;
     const { vw, vh, zoom } = f;
     const sx = vw / 2 + (w.x - f.cx) * zoom;
     const sy = vh / 2 + (w.y - f.cy) * zoom;
-    const m = 46;
-    if (sx > m && sx < vw - m && sy > m + 70 && sy < vh - m - 70) return;
+    if (sx > 30 && sx < vw - 30 && sy > 30 && sy < vh - 30) return; // the in-world pin is visible
 
-    const px = Math.max(m, Math.min(vw - m, sx));
-    const py = Math.max(m + 70, Math.min(vh - m - 70, sy));
     const ang = Math.atan2(sy - vh / 2, sx - vw / 2);
+    const px = vw / 2 + Math.cos(ang) * vw * 0.27;
+    const py = vh / 2 + Math.sin(ang) * vh * 0.3;
     const dist = Math.round(Math.hypot(w.x - f.player.x, w.y - f.player.y) * 0.5);
     const pulse = f.reduced ? 0 : Math.sin(f.anim * 4) * 2;
 
@@ -1177,8 +1215,6 @@ export class WorldRenderer {
     ctx.stroke();
     ctx.rotate(ang);
     ctx.fillStyle = PALETTE.gold;
-    ctx.shadowColor = PALETTE.gold;
-    ctx.shadowBlur = 10;
     ctx.beginPath();
     ctx.moveTo(9 + pulse, 0);
     ctx.lineTo(-4, -7);
@@ -1193,8 +1229,8 @@ export class WorldRenderer {
     ctx.textBaseline = 'middle';
     const label = `${dist} m`;
     const tw = ctx.measureText(label).width + 12;
-    const lx = Math.max(tw / 2 + 4, Math.min(vw - tw / 2 - 4, px - Math.cos(ang) * 40));
-    const ly = Math.max(14, Math.min(vh - 14, py - Math.sin(ang) * 40));
+    const lx = px - Math.cos(ang) * 38;
+    const ly = py - Math.sin(ang) * 30;
     ctx.fillStyle = 'rgba(4,10,18,0.82)';
     ctx.beginPath();
     ctx.roundRect(lx - tw / 2, ly - 10, tw, 20, 10);

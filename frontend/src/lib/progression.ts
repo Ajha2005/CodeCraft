@@ -40,14 +40,3 @@ export function levelFromScore(score: number): LevelInfo {
 export function formatXp(n: number): string {
   return n.toLocaleString('en-US');
 }
-
-/** A short flavour title for a level band, shown beside the badge. */
-export function levelTitle(level: number): string {
-  if (level >= 24) return 'Warlord';
-  if (level >= 18) return 'General';
-  if (level >= 12) return 'Commander';
-  if (level >= 7) return 'Captain';
-  if (level >= 4) return 'Raider';
-  if (level >= 2) return 'Scout';
-  return 'Recruit';
-}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTerritories } from './hooks/useTerritories';
 import { useTerritoryCells } from './hooks/useTerritoryCells';
 import { useCollegeLeaderboard } from './hooks/useLeaderboard';
@@ -13,6 +13,7 @@ import { Icon } from '../../components/ui/Icon';
 import { createChallenge } from '../contest/api';
 import { MapEngine, type HoverInfo } from './world/engine';
 import { getWorld, sectorOf, toMeters } from './world/campus';
+import { TIER_META } from '../../lib/tiers';
 import type { Zone } from './world/geometry';
 import type { TerritoryCellDto } from '../../lib/api';
 import { LeaderboardPanel } from './LeaderboardPanel';
@@ -20,17 +21,16 @@ import { PlayerCard } from './hud/PlayerCard';
 import { LocationChip, ZoneSplash, type Splash } from './hud/LocationBanner';
 import { Minimap } from './hud/Minimap';
 import { ControlsDock } from './hud/ControlsDock';
-import { ZonePanel } from './hud/ZonePanel';
 import { QuickTravel } from './hud/QuickTravel';
 import { LiveFeed, type FeedItem } from './hud/LiveFeed';
-import { TravelBar } from './hud/TravelBar';
+import { TravelBarLive, WaypointChip, ZonePanelLive } from './hud/LiveHud';
 import { ActionHints, FirstRunHint } from './hud/ActionHints';
 import { HelpOverlay } from './hud/HelpOverlay';
 import { Joystick } from './hud/Joystick';
 import { HoverTooltip } from './hud/HoverTooltip';
 import { ChallengeModal } from './hud/ChallengeModal';
-import { summarizeZone, type ZoneSummary } from './hud/zoneSummary';
-import { useEngineStats } from './hud/useEngineStats';
+import { STATUS_LABEL, summarizeZone, type ZoneSummary } from './hud/zoneSummary';
+import { useEngineSelector } from './hud/useEngineStats';
 
 const FEED_TTL_MS = 12000;
 const SPLASH_MS = 2600;
@@ -67,12 +67,15 @@ export function MapFullScreen() {
   const { user, flavorTextEnabled } = useAuth();
   const { refresh: refreshStats } = usePlayerStats();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { toasts, push, dismiss } = useToasts();
 
   const userId = user?.userId ?? null;
   const world = getWorld();
   const [engine] = useState(() => new MapEngine(world));
-  const stats = useEngineStats(engine);
+  const traveling = useEngineSelector(engine, (s) => s.traveling);
+  const sector = useEngineSelector(engine, (s) => s.sector);
+  const explored = useEngineSelector(engine, (s) => s.explored);
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const nextId = useRef(1);
@@ -240,6 +243,20 @@ export function MapFullScreen() {
     engine.setWaypoint(pinnedId);
   }, [engine, pinnedId]);
 
+  // Deep link: /map?territory=<id> (used by the dashboard's "Show on map")
+  // walks the commander to that zone once the world has loaded.
+  const deepLink = searchParams.get('territory');
+  useEffect(() => {
+    if (!ready || !deepLink) return;
+    const target = Object.values(territories).find((t) => t.id === deepLink);
+    if (!target) return;
+    const timer = window.setTimeout(() => {
+      engine.travelToZone(target.svgPathId, { boost: true });
+      setSearchParams({}, { replace: true });
+    }, 1400);
+    return () => window.clearTimeout(timer);
+  }, [engine, ready, deepLink, territories, setSearchParams]);
+
   useEffect(() => {
     if (!splash) return;
     const t = window.setTimeout(() => setSplash(null), SPLASH_MS);
@@ -345,7 +362,7 @@ export function MapFullScreen() {
           ? 'Your cell'
           : 'Unclaimed cell'
       : null;
-  const showZonePanel = !!selected && !stats.traveling;
+  const showZonePanel = !!selected && !traveling;
   const loadingLabel = flavorTextEnabled ? 'Surveying the campus…' : 'Loading map…';
 
   return (
@@ -364,21 +381,27 @@ export function MapFullScreen() {
         className="pointer-events-none absolute inset-0"
         style={{ background: 'radial-gradient(ellipse at 50% 45%, transparent 52%, rgba(2,6,12,0.62) 100%)' }}
       />
+      <p className="sr-only" role="status" aria-live="polite">
+        {current ? `You are at ${current.name}, ${TIER_META[current.tier].label}. ${STATUS_LABEL[current.status]}.` : 'You are on open ground.'}
+      </p>
 
       {ready && (
         <>
           {/* top-left: commander + exploration */}
           <div className="absolute left-3 top-3 z-10 flex flex-col gap-2">
             <PlayerCard />
+            <div className="sm:hidden">
+              <LocationChip summary={current} sector={sector} compact />
+            </div>
             <div className="hud-panel hud-panel-quiet hidden w-[19.5rem] items-center gap-3 px-3 py-2 animate-slide-in-left sm:flex">
               <div className="min-w-0 flex-1">
                 <p className="hud-label !text-[0.6rem] !tracking-[0.14em]">Explored</p>
                 <div className="mt-1 flex items-center gap-2">
                   <div className="xp-track !h-1.5 flex-1">
-                    <div className="xp-fill xp-fill-cyan" style={{ width: `${(stats.explored / Math.max(1, world.campus.zones.length)) * 100}%` }} />
+                    <div className="xp-fill xp-fill-cyan" style={{ width: `${(explored / Math.max(1, world.campus.zones.length)) * 100}%` }} />
                   </div>
                   <span className="font-mono text-[0.66rem] font-bold tabular-nums text-cyan-200">
-                    {stats.explored}/{world.campus.zones.length}
+                    {explored}/{world.campus.zones.length}
                   </span>
                 </div>
               </div>
@@ -399,12 +422,7 @@ export function MapFullScreen() {
           {/* top-center: where you are */}
           <div className="pointer-events-none absolute inset-x-0 top-3 z-10 hidden justify-center sm:flex">
             <div className="pointer-events-auto">
-              <LocationChip summary={current} sector={stats.sector} />
-            </div>
-          </div>
-          <div className="pointer-events-none absolute inset-x-0 top-[4.9rem] z-10 flex justify-center sm:hidden">
-            <div className="pointer-events-auto">
-              <LocationChip summary={current} sector={stats.sector} />
+              <LocationChip summary={current} sector={sector} />
             </div>
           </div>
           <ZoneSplash splash={splash} />
@@ -448,22 +466,20 @@ export function MapFullScreen() {
           </div>
 
           {/* bottom-center: the contextual stack */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex flex-col items-center gap-2 px-2 max-sm:bottom-2">
+          <div className={`pointer-events-none absolute inset-x-0 bottom-3 z-10 flex flex-col items-center gap-2 px-2 max-sm:bottom-2 ${isTouch && !selected ? 'max-sm:bottom-[8.75rem]' : ''}`}>
             {welcome && !selected && (
-              <div className="pointer-events-auto">
+              <div className="pointer-events-auto max-sm:self-start">
                 <FirstRunHint onDismiss={dismissWelcome} touch={isTouch} />
               </div>
             )}
             {showZonePanel && selected && (
               <div className="pointer-events-auto">
-                <ZonePanel
+                <ZonePanelLive
+                  engine={engine}
+                  world={world}
                   summary={selected}
                   territory={territories[selected.id] ?? null}
                   sector={sectorOf(world.campus, world.campus.byId.get(selected.id)?.anchor.x ?? 0, world.campus.byId.get(selected.id)?.anchor.y ?? 0)}
-                  distanceMeters={(() => {
-                    const z = world.campus.byId.get(selected.id);
-                    return z ? toMeters(Math.hypot(z.anchor.x - stats.px, z.anchor.y - stats.py)) : null;
-                  })()}
                   here={currentZoneId === selected.id}
                   pinned={pinnedId === selected.id}
                   onTravel={() => travelToZone(selected.id)}
@@ -473,25 +489,15 @@ export function MapFullScreen() {
                 />
               </div>
             )}
-            {stats.traveling && (
+            {traveling && (
               <div className="pointer-events-auto">
-                <TravelBar target={travelTarget} meters={stats.destinationMeters} onCancel={() => engine.cancelTravel()} />
+                <TravelBarLive engine={engine} target={travelTarget} />
               </div>
             )}
-            {pinnedId && waypointSummary && !stats.traveling && !showZonePanel && (
-              <div className="hud-panel hud-panel-quiet pointer-events-auto flex items-center gap-2 px-3 py-1.5 text-xs animate-slide-down">
-                <Icon name="pin" filled className="h-3.5 w-3.5 text-amber-300" />
-                <span className="font-semibold text-slate-200">{waypointSummary.name}</span>
-                <span className="font-mono font-bold text-amber-300">{stats.waypointMeters ?? 0} m</span>
-                <button type="button" onClick={() => travelToZone(pinnedId)} className="btn-ghost h-6 rounded px-2 text-[0.68rem] font-bold">
-                  Go
-                </button>
-                <button type="button" onClick={() => setPinnedId(null)} aria-label="Unpin waypoint" className="text-slate-500 hover:text-slate-200">
-                  <Icon name="x" className="h-3.5 w-3.5" />
-                </button>
-              </div>
+            {pinnedId && waypointSummary && !traveling && !showZonePanel && (
+              <WaypointChip engine={engine} name={waypointSummary.name} onGo={() => travelToZone(pinnedId)} onClear={() => setPinnedId(null)} />
             )}
-            {!isTouch && !showZonePanel && !stats.traveling && !welcome && (
+            {!isTouch && !showZonePanel && !traveling && !welcome && (
               <div className="pointer-events-auto">
                 <ActionHints inZone={!!currentZoneId} />
               </div>
@@ -503,7 +509,7 @@ export function MapFullScreen() {
             <ControlsDock engine={engine} />
           </div>
 
-          {isTouch && !selected && !stats.traveling && (
+          {isTouch && !selected && !traveling && (
             <div className="absolute bottom-4 left-4 z-10">
               <Joystick engine={engine} />
             </div>
