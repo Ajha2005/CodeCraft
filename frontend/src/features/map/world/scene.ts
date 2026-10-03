@@ -155,9 +155,15 @@ export function applySceneData(
   return change;
 }
 
-/** Roof translation for a zone: the roof floats `height` above its footprint. */
+/** How far a zone's block is currently raised: its height plus hover/select lift. */
+export function liftedHeight(view: ZoneView): number {
+  return view.height + view.hover * (view.height < 0 ? 2.5 : 5) + view.select * 4;
+}
+
+/** Roof translation for a zone: the roof floats `liftedHeight` above its footprint. */
 export function roofOffset(view: ZoneView): { dx: number; dy: number } {
-  return { dx: -OBL_X * view.height, dy: -view.height };
+  const h = liftedHeight(view);
+  return { dx: -OBL_X * h, dy: -h };
 }
 
 /**

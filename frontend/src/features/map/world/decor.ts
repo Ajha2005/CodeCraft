@@ -1,5 +1,5 @@
 import { mix } from './color';
-import { PALETTE, type ZoneKind } from './theme';
+import { PALETTE, TIER_STYLE, type Tier, type ZoneKind } from './theme';
 import type { ZoneView } from './scene';
 import type { Pt } from './geometry';
 
@@ -19,8 +19,11 @@ export function mulberry32(seed: number) {
   };
 }
 
-/** Base roof color for an *unclaimed* zone of this kind. */
-export function baseRoof(kind: ZoneKind): string {
+/** Share of the tier accent mixed into an unclaimed building roof (Outpost -> Citadel). */
+const TIER_TINT = [0.05, 0.1, 0.15, 0.2] as const;
+
+/** Base roof color for an *unclaimed* zone of this kind and tier. */
+export function baseRoof(kind: ZoneKind, tier: Tier = 'OUTPOST'): string {
   switch (kind) {
     case 'field':
       return '#15402c';
@@ -28,23 +31,28 @@ export function baseRoof(kind: ZoneKind): string {
       return '#29382f';
     case 'court':
       return '#1c3855';
-    case 'parking':
-      return '#1a232f';
     case 'water':
       return '#0b4560';
     case 'forest':
       return '#0b3322';
+    case 'parking':
+      return tierTint('#1a232f', tier, 0.5);
     case 'plaza':
-      return '#2a3441';
+      return tierTint('#2a3441', tier, 0.7);
     case 'gate':
-      return '#262f3b';
+      return tierTint('#262f3b', tier, 0.7);
     case 'medical':
-      return '#2d3945';
+      return tierTint('#2d3945', tier, 0.7);
     case 'construction':
-      return '#33302b';
+      return tierTint('#33302b', tier, 0.5);
     default:
-      return PALETTE.stone;
+      return tierTint(PALETTE.stone, tier, 1);
   }
+}
+
+/** Unclaimed ground keeps a faint tier color so the map has hierarchy before anyone owns it. */
+function tierTint(base: string, tier: Tier, strength: number): string {
+  return mix(base, TIER_STYLE[tier].accent, TIER_TINT[TIER_STYLE[tier].rank] * strength);
 }
 
 /** How strongly the owner's color should cover the terrain art. */

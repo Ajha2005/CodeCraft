@@ -3,7 +3,7 @@ import type { LaneMark } from './nav';
 import type { Fx } from './fx';
 import { DecorKit, baseRoof, tintStrength } from './decor';
 import { darken, lighten, mix, rgba } from './color';
-import { OBL_X, cellKey, type ZoneView } from './scene';
+import { OBL_X, cellKey, liftedHeight, type ZoneView } from './scene';
 import { FONT_DISPLAY, FONT_MONO, PALETTE, TIER_STYLE } from './theme';
 
 // The world renderer. One call to `draw` paints a whole frame:
@@ -104,6 +104,17 @@ interface Mote {
   vx: number;
 }
 
+/** Rounded rectangle via arcTo, which every browser has (roundRect is newer). */
+function roundedRect(t: CanvasRenderingContext2D | Path2D, x: number, y: number, w: number, h: number, r: number) {
+  const rr = Math.max(0, Math.min(r, w / 2, h / 2));
+  t.moveTo(x + rr, y);
+  t.arcTo(x + w, y, x + w, y + h, rr);
+  t.arcTo(x + w, y + h, x, y + h, rr);
+  t.arcTo(x, y + h, x, y, rr);
+  t.arcTo(x, y, x + w, y, rr);
+  t.closePath();
+}
+
 const ICONS = new Map<string, Path2D>();
 function iconPath(d: string): Path2D {
   let p = ICONS.get(d);
@@ -175,7 +186,7 @@ export class WorldRenderer {
     const w = campus.width + SLAB_MARGIN * 2;
     const h = campus.height + SLAB_MARGIN * 2;
     this.slabPath = new Path2D();
-    this.slabPath.roundRect(x0, y0, w, h, 52);
+    roundedRect(this.slabPath, x0, y0, w, h, 52);
     this.slabOutside = new Path2D();
     this.slabOutside.rect(-6000, -6000, 15000, 15000);
     this.slabOutside.addPath(this.slabPath);
@@ -424,7 +435,7 @@ export class WorldRenderer {
 
   /** The color a zone's roof reads as, given who holds it. */
   private roofColor(v: ZoneView): string {
-    const base = baseRoof(v.zone.kind);
+    const base = baseRoof(v.zone.kind, v.zone.tier);
     if (!v.topColor || v.fraction <= 0) return base;
     return mix(base, v.topColor, Math.min(1, (0.35 + 0.65 * v.fraction) * tintStrength(v.zone.kind)));
   }
@@ -433,8 +444,7 @@ export class WorldRenderer {
     const z = v.zone;
     const zoom = f.zoom;
     const h0 = v.height;
-    const lift = v.hover * (h0 < 0 ? 2.5 : 5) + v.select * 4;
-    const h = h0 + lift;
+    const h = liftedHeight(v);
     const ox = -OBL_X * h;
     const oy = -h;
     const tier = TIER_STYLE[z.tier];
@@ -516,7 +526,7 @@ export class WorldRenderer {
 
     // A single owner over an opaque base is just a blended color, so paint it
     // in one fill; striped (contested) and terrain-first zones layer instead.
-    let roofFill = baseRoof(z.kind);
+    let roofFill = baseRoof(z.kind, z.tier);
     let blended = false;
     if (!detail && !terrainFirst && v.shares.length === 1 && v.stripes.length === 0) {
       const a = Math.min(1, (0.3 + 0.7 * v.fraction) * tintStrength(z.kind) + 0.05);
@@ -851,8 +861,7 @@ export class WorldRenderer {
       const z = v.zone;
       if (!this.visible(z, 20)) continue;
 
-      const lift = v.hover * (v.height < 0 ? 2.5 : 5) + v.select * 4;
-      const h = v.height + lift;
+      const h = liftedHeight(v);
       const ax = z.anchor.x - OBL_X * h;
       const ay = z.anchor.y - h;
       const text = v.label || v.territory?.name || z.id;
@@ -898,7 +907,7 @@ export class WorldRenderer {
         const padY = fs * 0.42;
         ctx.fillStyle = 'rgba(4,10,18,0.78)';
         ctx.beginPath();
-        ctx.roundRect(x - padX, y - fs / 2 - padY, total + padX * 2, fs + padY * 2, fs * 0.5);
+        roundedRect(ctx, x - padX, y - fs / 2 - padY, total + padX * 2, fs + padY * 2, fs * 0.5);
         ctx.fill();
         ctx.strokeStyle = rgba(tier.accent, 0.7);
         ctx.lineWidth = 1.2 / zoom;
@@ -1140,7 +1149,7 @@ export class WorldRenderer {
       const ty = sy - r * 1.9;
       ctx.fillStyle = 'rgba(3,9,16,0.82)';
       ctx.beginPath();
-      ctx.roundRect(sx - w / 2, ty - fs * 0.85, w, fs * 1.7, fs * 0.85);
+      roundedRect(ctx, sx - w / 2, ty - fs * 0.85, w, fs * 1.7, fs * 0.85);
       ctx.fill();
       ctx.strokeStyle = rgba(p.color, 0.9);
       ctx.lineWidth = 1.2 * unit;
@@ -1233,7 +1242,7 @@ export class WorldRenderer {
     const ly = py - Math.sin(ang) * 30;
     ctx.fillStyle = 'rgba(4,10,18,0.82)';
     ctx.beginPath();
-    ctx.roundRect(lx - tw / 2, ly - 10, tw, 20, 10);
+    roundedRect(ctx, lx - tw / 2, ly - 10, tw, 20, 10);
     ctx.fill();
     ctx.fillStyle = PALETTE.gold;
     ctx.fillText(label, lx, ly + 0.5);
@@ -1269,7 +1278,7 @@ export class WorldRenderer {
 
     for (const idx of f.order) {
       const v = f.views[idx];
-      const base = baseRoof(v.zone.kind);
+      const base = baseRoof(v.zone.kind, v.zone.tier);
       const color = v.topColor && v.fraction > 0 ? mix(base, v.topColor, 0.35 + 0.65 * v.fraction) : mix(base, '#0a1522', 0.15);
       ctx.fillStyle = v.discovered ? color : mix(color, '#050b12', 0.55);
       ctx.fill(v.path);

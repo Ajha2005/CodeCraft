@@ -18,6 +18,7 @@ import type { Zone } from './world/geometry';
 import type { TerritoryCellDto } from '../../lib/api';
 import { LeaderboardPanel } from './LeaderboardPanel';
 import { PlayerCard } from './hud/PlayerCard';
+import { MissionCard } from './hud/MissionCard';
 import { LocationChip, ZoneSplash, type Splash } from './hud/LocationBanner';
 import { Minimap } from './hud/Minimap';
 import { ControlsDock } from './hud/ControlsDock';
@@ -38,6 +39,7 @@ const SPLASH_MS = 2600;
 const posKey = (uid: string) => `cc.map.pos.v1:${uid}`;
 const exploredKey = (uid: string) => `cc.map.explored.v1:${uid}`;
 const WELCOME_KEY = 'cc.map.welcomed.v1';
+const INTRO_KEY = 'cc.map.intro.v1';
 
 function readJson<T>(key: string): T | null {
   try {
@@ -63,7 +65,10 @@ function isTypingTarget(t: EventTarget | null) {
 export function MapFullScreen() {
   const { territories, loading: territoriesLoading, error: territoriesError, retry: retryTerritories } = useTerritories();
   const { cellsByTerritory, loading: cellsLoading, error: cellsError, retry: retryCells } = useTerritoryCells();
-  const { entries: boardEntries, loading: boardLoading } = useCollegeLeaderboard();
+  // Names for the live feed come from one snapshot; it only goes live (and
+  // refetches on score changes) while the ranks panel is actually open.
+  const [showBoard, setShowBoard] = useState(false);
+  const { entries: boardEntries, loading: boardLoading } = useCollegeLeaderboard(50, showBoard);
   const { user, flavorTextEnabled } = useAuth();
   const { refresh: refreshStats } = usePlayerStats();
   const navigate = useNavigate();
@@ -86,7 +91,6 @@ export function MapFullScreen() {
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [challenge, setChallenge] = useState<{ cell: TerritoryCellDto; zone: Zone } | null>(null);
   const [challengeBusy, setChallengeBusy] = useState(false);
-  const [showBoard, setShowBoard] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [travelSnapshot, setTravelSnapshot] = useState<{ x: number; y: number; explored: Set<string> } | null>(null);
   const [pinnedId, setPinnedId] = useState<string | null>(null);
@@ -223,10 +227,18 @@ export function MapFullScreen() {
   // Feed the engine its player + world data once everything has loaded.
   useEffect(() => {
     if (!ready) return;
+    let seenIntro = false;
+    try {
+      seenIntro = sessionStorage.getItem(INTRO_KEY) !== null;
+      sessionStorage.setItem(INTRO_KEY, '1');
+    } catch {
+      // private mode etc.: just play the flyover
+    }
     engine.setUser({
       userId,
       startPos: userId ? readJson<{ x: number; y: number }>(posKey(userId)) : null,
       explored: userId ? (readJson<string[]>(exploredKey(userId)) ?? []) : null,
+      skipIntro: seenIntro,
     });
   }, [engine, ready, userId]);
 
@@ -413,6 +425,9 @@ export function MapFullScreen() {
                   <span className="text-slate-500">/{summaryList.length}</span>
                 </p>
               </div>
+            </div>
+            <div className="hidden sm:block">
+              <MissionCard />
             </div>
             <div className="hidden sm:block">
               <LiveFeed items={feed} />

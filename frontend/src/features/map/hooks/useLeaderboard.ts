@@ -6,7 +6,12 @@ import {
 } from '../../../lib/api';
 import { getSocket } from '../../../lib/socket';
 
-export function useCollegeLeaderboard(limit = 50) {
+/**
+ * `live` keeps the board in sync with `leaderboard:updated` socket events. Pass
+ * false when you only need a snapshot: every subscribed client refetches on
+ * every score change anywhere, so idle subscribers are pure server load.
+ */
+export function useCollegeLeaderboard(limit = 50, live = true) {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -27,6 +32,12 @@ export function useCollegeLeaderboard(limit = 50) {
       if (!cancelled) setLoading(false);
     });
 
+    if (!live) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
     // The payload only says *a* score changed, not the new ranking - the
     // simplest correct move is to refetch rather than patch client-side.
     const socket = getSocket();
@@ -35,7 +46,7 @@ export function useCollegeLeaderboard(limit = 50) {
       cancelled = true;
       socket.off('leaderboard:updated', load);
     };
-  }, [limit]);
+  }, [limit, live]);
 
   return { entries, loading };
 }

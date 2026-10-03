@@ -99,6 +99,8 @@ function isTypingTarget(t: EventTarget | null): boolean {
 export class MapEngine {
   readonly views: ZoneView[];
   readonly order: number[];
+  /** `views` in draw order (back to front), for hit-testing front to back. */
+  private readonly orderedViews: ZoneView[];
 
   private handlers: EngineHandlers = {};
   private canvas: HTMLCanvasElement | null = null;
@@ -142,6 +144,7 @@ export class MapEngine {
   // adaptive quality: watch the real interval between animation frames and
   // shed purely decorative effects (and pixel density) if it stays slow
   private frameMs = 16;
+  private failures = 0;
   private slowRun = 0;
   private fastRun = 0;
   private lowFx = false;
@@ -190,6 +193,7 @@ export class MapEngine {
   private discovered = new Set<string>();
   private hasData = false;
   private pendingIntro = true;
+  private skipIntro = false;
 
   // stats store (useSyncExternalStore friendly)
   private stats: EngineStats;
@@ -210,6 +214,8 @@ export class MapEngine {
         const zb = world.campus.zones[b].box;
         return za.y + za.h - (zb.y + zb.h) || za.x - zb.x;
       });
+
+    this.orderedViews = this.order.map((i) => this.views[i]);
 
     const start = spawnPoint(world);
     this.player.x = start.x;
@@ -373,8 +379,9 @@ export class MapEngine {
   // ================================================================ data
 
   /** Who is playing; call before the first setData. */
-  setUser(opts: { userId: string | null; startPos?: Pt | null; explored?: string[] | null }) {
+  setUser(opts: { userId: string | null; startPos?: Pt | null; explored?: string[] | null; skipIntro?: boolean }) {
     this.userId = opts.userId;
+    this.skipIntro = !!opts.skipIntro;
     this.meColor = colorForUser(opts.userId);
     this.playerRender.color = this.meColor;
     this.frame.meId = opts.userId;
@@ -444,12 +451,20 @@ export class MapEngine {
   private startIntro() {
     this.pendingIntro = false;
     const { campus } = this.world;
-    this.cam.x = campus.width / 2;
-    this.cam.y = campus.height / 2;
-    this.cam.zoom = this.fitZoom;
-    this.tgt.zoom = this.defaultZoom;
     this.following = true;
-    this.introUntil = this.reduced ? 0 : this.clock + 2.6;
+    this.tgt.zoom = this.defaultZoom;
+    if (this.skipIntro || this.reduced) {
+      // Returning visitors (and reduced-motion users) land right on their commander.
+      this.cam.x = this.player.x;
+      this.cam.y = this.player.y;
+      this.cam.zoom = this.defaultZoom;
+      this.introUntil = 0;
+    } else {
+      this.cam.x = campus.width / 2;
+      this.cam.y = campus.height / 2;
+      this.cam.zoom = this.fitZoom;
+      this.introUntil = this.clock + 2.6;
+    }
     this.syncCurrentZone(true);
     this.touch();
   }
@@ -547,6 +562,7 @@ export class MapEngine {
   }
 
   private setFollowing(v: boolean) {
+    if (v) this.anchor = null; // a zoom anchor only makes sense for a free camera
     if (this.following === v) return;
     this.following = v;
     this.touch();
@@ -689,6 +705,10 @@ export class MapEngine {
       return;
     }
     if (!this.inputEnabled) return;
+
+    // A focused button/link keeps Space and Enter, so the HUD stays operable
+    // from the keyboard; walking and camera keys still work.
+    if ((code === 'Space' || code === 'Enter') && e.target instanceof HTMLElement && e.target.closest('button, a, summary, [role="button"]')) return;
 
     if (movement.includes(code) || code === 'ShiftLeft' || code === 'ShiftRight') {
       if (movement.includes(code)) e.preventDefault();
@@ -896,7 +916,7 @@ export class MapEngine {
   }
 
   private zoneViewsInOrder(): ZoneView[] {
-    return this.order.map((i) => this.views[i]);
+    return this.orderedViews;
   }
 
   private updateHover(sx: number, sy: number) {
@@ -944,9 +964,20 @@ export class MapEngine {
     if (!idle) this.adaptQuality(rawGap);
     const dt = this.lastTs ? clamp(rawGap / 1000, 0, 0.05) : 0.016;
     this.lastTs = ts;
-    this.update(dt);
-    this.render();
-    this.emitStats(ts);
+    try {
+      this.update(dt);
+      this.render();
+      this.emitStats(ts);
+      this.failures = 0;
+    } catch (err) {
+      // One bad frame must not spam the console or take the page down; a
+      // persistent failure stops the loop instead of burning CPU.
+      if (this.failures === 0) console.error('[map] frame failed', err);
+      if (++this.failures > 120) {
+        this.running = false;
+        console.error('[map] giving up after repeated frame failures');
+      }
+    }
   }
 
   private update(dt: number) {
@@ -1092,7 +1123,8 @@ export class MapEngine {
       const hoverTarget = v.zone.index === this.hoverIdx || v.zone.index === this.highlightIdx ? 1 : 0;
       v.hover += (hoverTarget - v.hover) * kh;
       v.select += ((v.zone.index === this.selectedIdx ? 1 : 0) - v.select) * ks;
-      if (Math.abs(v.hover - hoverTarget) > 0.01 || v.select > 0.01) this.touch();
+      const selectTarget = v.zone.index === this.selectedIdx ? 1 : 0;
+      if (Math.abs(v.hover - hoverTarget) > 0.01 || Math.abs(v.select - selectTarget) > 0.01) this.touch();
 
       // cell detail with hysteresis; per-zone so only relevant zones pay
       const cellPx = Math.min(v.cw, v.ch) * this.viewZoom;
