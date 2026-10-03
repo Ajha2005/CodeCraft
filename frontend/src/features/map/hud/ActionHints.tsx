@@ -13,52 +13,41 @@ function Hint({ keys, children }: { keys: string[]; children: ReactNode }) {
   );
 }
 
-/** Contextual key prompts along the bottom edge (desktop only). */
-export function ActionHints({ inZone }: { inZone: boolean }) {
+/** The only standing key prompt: it appears while you stand inside a zone. */
+export function InspectHint() {
   return (
-    <div className="hud-panel hud-panel-quiet hidden items-center gap-4 px-4 py-2 animate-fade-in-up lg:flex">
-      <Hint keys={['W', 'A', 'S', 'D']}>Move</Hint>
-      <Hint keys={['Shift']}>Sprint</Hint>
-      {inZone && (
-        <>
-          <Hint keys={['E']}>Inspect</Hint>
-          <Hint keys={['Space']}>Dive in</Hint>
-        </>
-      )}
-      <Hint keys={['Click']}>Travel</Hint>
-      <Hint keys={['F']}>Fast travel</Hint>
-      <Hint keys={['?']}>Help</Hint>
+    <div className="hud-panel hud-panel-quiet hidden !rounded-full px-3.5 py-1.5 animate-fade-in-up lg:block">
+      <Hint keys={['E']}>Inspect</Hint>
     </div>
   );
 }
 
-/** One-time welcome card for first-time map visitors. */
+/** One-time welcome card for first-time map visitors. It leaves as soon as you move. */
 export function FirstRunHint({ onDismiss, touch }: { onDismiss: () => void; touch: boolean }) {
   return (
-    <div className="hud-panel w-[min(30rem,calc(100vw-1.5rem))] p-4 text-center animate-pop-in max-sm:w-[calc(100vw-5.25rem)] max-sm:p-3" role="dialog" aria-label="How to move">
-      <p className="font-display text-xl font-bold uppercase tracking-[0.18em] text-cyan-300">Welcome to campus</p>
-      <p className="mt-1 text-sm text-slate-300">You’re standing at the Main Gate. Walk the map, explore every zone, and take territory.</p>
-      <div className="mt-3 grid grid-cols-2 gap-2 text-left text-xs text-slate-300">
+    <div
+      className="hud-panel w-[min(28rem,calc(100vw-1.5rem))] px-4 py-3.5 text-center animate-pop-in max-sm:w-[calc(100vw-5.25rem)] max-sm:px-3"
+      role="dialog"
+      aria-label="How to move"
+    >
+      <p className="font-display text-base font-bold uppercase tracking-[0.2em] text-cyan-300">Welcome to campus</p>
+      <div className="mt-2.5 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
         {touch ? (
           <>
             <Hint keys={['Stick']}>Move</Hint>
-            <Hint keys={['Tap']}>Select / travel</Hint>
-            <Hint keys={['Drag']}>Look around</Hint>
+            <Hint keys={['Tap']}>Travel</Hint>
             <Hint keys={['Pinch']}>Zoom</Hint>
           </>
         ) : (
           <>
             <Hint keys={['W', 'A', 'S', 'D']}>Move</Hint>
-            <Hint keys={['Shift']}>Sprint</Hint>
-            <Hint keys={['Click']}>Select zone / travel</Hint>
+            <Hint keys={['Click']}>Travel</Hint>
             <Hint keys={['Scroll']}>Zoom</Hint>
-            <Hint keys={['Drag']}>Look around</Hint>
-            <Hint keys={['E']}>Inspect zone</Hint>
           </>
         )}
       </div>
-      <button type="button" onClick={onDismiss} className="btn-primary mt-4 h-10 rounded-lg px-6 text-sm">
-        Let’s go
+      <button type="button" onClick={onDismiss} className="btn-primary mt-3 h-9 rounded-lg px-5 text-sm">
+        Got it
       </button>
     </div>
   );

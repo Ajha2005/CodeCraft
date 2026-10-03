@@ -13,7 +13,6 @@ import { STATUS_COLOR, STATUS_LABEL, type ZoneSummary } from './zoneSummary';
 export interface ZonePanelProps {
   summary: ZoneSummary;
   territory: TerritoryDto | null;
-  sector: string;
   distanceMeters: number | null;
   here: boolean;
   pinned: boolean;
@@ -24,7 +23,7 @@ export interface ZonePanelProps {
 }
 
 /** Inspect a zone: who holds it, how much, and what you can do about it. */
-export function ZonePanel({ summary, territory, sector, distanceMeters, here, pinned, onTravel, onDive, onPin, onClose }: ZonePanelProps) {
+export function ZonePanel({ summary, territory, distanceMeters, here, pinned, onTravel, onDive, onPin, onClose }: ZonePanelProps) {
   const { user, flavorTextEnabled } = useAuth();
   const [showBoard, setShowBoard] = useState(false);
   const { entries } = useTerritoryLeaderboard(summary.territoryId);
@@ -36,7 +35,7 @@ export function ZonePanel({ summary, territory, sector, distanceMeters, here, pi
   return (
     <div
       key={summary.id}
-      className="hud-panel w-[min(27rem,calc(100vw-1rem))] p-4 animate-pop-in"
+      className="hud-panel w-[min(24rem,calc(100vw-1rem))] p-3.5 animate-pop-in"
       style={{ borderColor: `${meta.accent}55` }}
       role="dialog"
       aria-label={`${summary.name} details`}
@@ -54,9 +53,7 @@ export function ZonePanel({ summary, territory, sector, distanceMeters, here, pi
           <h3 className="font-display truncate text-2xl font-bold leading-none tracking-wide text-slate-50">{summary.name}</h3>
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
             <TierBadge tier={summary.tier} />
-            <span className="font-mono text-[0.68rem] font-bold text-cyan-300/80">SEC {sector}</span>
             {distanceMeters !== null && !here && <span className="text-[0.7rem] font-semibold text-slate-400">{distanceMeters} m away</span>}
-            {here && <span className="rounded bg-emerald-400/15 px-1.5 py-0.5 text-[0.62rem] font-bold uppercase tracking-wide text-emerald-300">You are here</span>}
           </div>
         </div>
         <button type="button" onClick={onClose} aria-label="Close" className="rounded p-1 text-slate-500 transition-colors hover:text-slate-100">
@@ -64,7 +61,7 @@ export function ZonePanel({ summary, territory, sector, distanceMeters, here, pi
         </button>
       </div>
 
-      <div className="mt-3.5 rounded-lg border border-slate-700/60 bg-slate-950/50 p-3">
+      <div className="mt-3 rounded-lg border border-slate-700/60 bg-slate-950/50 p-3">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold uppercase tracking-[0.14em]" style={{ color: STATUS_COLOR[summary.status] }}>
             {STATUS_LABEL[summary.status]}
@@ -84,7 +81,7 @@ export function ZonePanel({ summary, territory, sector, distanceMeters, here, pi
         </div>
         {summary.shares.length > 0 ? (
           <ul className="mt-2.5 grid grid-cols-1 gap-1">
-            {summary.shares.slice(0, 4).map((s) => {
+            {summary.shares.slice(0, 3).map((s) => {
               const me = s.userId === user?.userId;
               return (
                 <li key={s.userId} className="flex items-center gap-2 text-xs">
@@ -96,7 +93,7 @@ export function ZonePanel({ summary, territory, sector, distanceMeters, here, pi
                 </li>
               );
             })}
-            {summary.shares.length > 4 && <li className="text-[0.7rem] text-slate-500">+{summary.shares.length - 4} more</li>}
+            {summary.shares.length > 3 && <li className="text-[0.7rem] text-slate-500">+{summary.shares.length - 3} more</li>}
           </ul>
         ) : (
           <p className="mt-2 text-xs italic text-slate-500">{flavorTextEnabled ? EMPTY_ZONE_TAP : 'No one holds this zone yet.'}</p>
@@ -104,19 +101,16 @@ export function ZonePanel({ summary, territory, sector, distanceMeters, here, pi
       </div>
 
       {rivals.length > 0 && (
-        <p className="mt-2.5 flex items-start gap-2 text-xs leading-snug text-orange-300/90">
-          <Icon name="swords" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>
-            {here ? 'Dive in' : 'Travel here and dive in'}, then click a rival’s cell to challenge them to a duel for it.
-          </span>
+        <p className="mt-2.5 flex items-center gap-2 text-xs leading-snug text-slate-400">
+          <Icon name="swords" className="h-3.5 w-3.5 shrink-0 text-orange-300/90" />
+          <span>Dive in, then click a rival’s cell to duel for it.</span>
         </p>
       )}
 
-      <div className="mt-3.5 grid grid-cols-[1fr_auto_auto_auto] gap-2">
-        <button type="button" onClick={onTravel} disabled={here} className="btn-primary h-10 rounded-lg px-3 text-sm">
+      <div className="mt-3 grid grid-cols-[1fr_auto_auto_auto] gap-2">
+        <button type="button" onClick={onTravel} disabled={here} className="btn-primary h-10 whitespace-nowrap rounded-lg px-3 text-sm">
           <Icon name="arrowRight" className="h-4 w-4" />
-          {here ? 'Already here' : 'Travel'}
-          {!here && <span className="keycap">T</span>}
+          {here ? 'You’re here' : 'Travel'}
         </button>
         <button type="button" onClick={onDive} className="btn-ghost h-10 rounded-lg px-3 text-sm font-semibold" title="Zoom in on the cell grid (Space)">
           <Icon name="target" className="h-4 w-4" />

@@ -294,6 +294,21 @@ code {
   .hud-panel-quiet::after {
     display: none;
   }
+  /* The always-on HUD: lighter glass, a hairline border, almost no shadow. */
+  .hud-panel-quiet {
+    background: linear-gradient(180deg, rgba(12, 23, 38, 0.72), rgba(7, 13, 23, 0.8));
+    border-color: rgba(148, 197, 230, 0.15);
+    box-shadow: 0 10px 22px -14px rgba(0, 0, 0, 0.8);
+  }
+
+  /* Corner widgets step back while the commander is moving, and return the
+     moment the pointer or keyboard focus reaches them. */
+  .hud-fade {
+    transition: opacity 0.4s ease;
+  }
+  [data-moving='true'] .hud-fade:not(:hover):not(:focus-within) {
+    opacity: 0.4;
+  }
 
   .hud-label {
     font-family: var(--font-display);

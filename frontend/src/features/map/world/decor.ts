@@ -108,8 +108,23 @@ export class DecorKit {
     ctx.globalAlpha /= alpha || 1;
   }
 
-  /** Paint the terrain/props for one zone. `t` is seconds, for animation. */
-  draw(ctx: CanvasRenderingContext2D, view: ZoneView, t: number, zoom: number, low = false, dpr = 1) {
+  /** Alpha the current zone's art is drawn at (kinds that animate their own alpha build on it). */
+  private base = 1;
+
+  /**
+   * Paint the terrain/props for one zone. `t` is seconds, for animation.
+   * `art` (0..1) scales how loudly the roof art reads; the renderer turns it
+   * down for blocks nobody is looking at.
+   */
+  draw(ctx: CanvasRenderingContext2D, view: ZoneView, t: number, zoom: number, low = false, dpr = 1, art = 1) {
+    const prev = ctx.globalAlpha;
+    this.base = prev * art;
+    ctx.globalAlpha = this.base;
+    this.paint(ctx, view, t, zoom, low, dpr);
+    ctx.globalAlpha = prev;
+  }
+
+  private paint(ctx: CanvasRenderingContext2D, view: ZoneView, t: number, zoom: number, low: boolean, dpr: number) {
     this.level = Math.min(4, Math.max(0.25, 2 ** Math.round(Math.log2(Math.max(0.05, zoom * dpr)))));
     const z = view.zone;
     const b = z.box;
@@ -190,13 +205,13 @@ export class DecorKit {
         ctx.strokeStyle = 'rgba(120,210,255,0.4)';
         ctx.lineWidth = 2;
         for (let k = 0; k < 3; k++) {
-          const wave = fine ? ((t * 0.5 + k / 3) % 1) : 0.5;
-          ctx.globalAlpha = 1 - wave;
+          const wave = fine ? ((t * 0.35 + k / 3) % 1) : 0.5;
+          ctx.globalAlpha = this.base * (1 - wave);
           ctx.beginPath();
           ctx.arc(cx, cy, r * (0.35 + wave * 0.85), 0, Math.PI * 2);
           ctx.stroke();
         }
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha = this.base;
         ctx.fillStyle = 'rgba(80,180,230,0.28)';
         ctx.beginPath();
         ctx.arc(cx, cy, r * 0.4, 0, Math.PI * 2);
@@ -332,11 +347,11 @@ export class DecorKit {
           ctx.stroke();
         }
         if (fine) {
-          for (let k = 0; k < 6; k++) {
+          for (let k = 0; k < 4; k++) {
             const sx = b.x + rng() * b.w;
             const sy = b.y + rng() * b.h;
-            const tw = 0.5 + 0.5 * Math.sin(t * 2.3 + k * 2.1);
-            ctx.fillStyle = `rgba(255,255,255,${0.18 + 0.5 * tw})`;
+            const tw = 0.5 + 0.5 * Math.sin(t * 1.1 + k * 2.1);
+            ctx.fillStyle = `rgba(255,255,255,${0.12 + 0.3 * tw})`;
             ctx.fillRect(sx - 1, sy - 1, 2.4, 2.4);
           }
         }

@@ -79,9 +79,9 @@ flowchart LR
 
 **Gamification**
 - A live, navigable **game world** of the campus (canvas-rendered): zones are extruded blocks whose height follows their tier, with themed terrain (forest, pond, pitch, track, parking...), streets, and a grid of ownable `TerritoryCell`s generated via point-in-polygon rasterization of campus zones
-- You control a **commander** on the map: walk with WASD/arrows, sprint, or click to auto-travel along streets (A* pathfinding); a spring-follow camera, minimap, fast-travel list, waypoints, and zone-entry banners make it feel like moving around inside the map
-- Fog of war: zones are hatched until you walk into them, with an exploration meter and a "Cartographer" achievement
-- Level/XP derived from your Performance Score, daily-quest pips, streak flame, a quest-board problem list, an achievements wall, and a level-up celebration
+- You control a **commander** on the map: walk with WASD/arrows, sprint, or click to auto-travel along streets (A* pathfinding); a spring-follow camera, minimap, fast-travel list, and waypoints make it feel like moving around inside the map
+- Fog of war: zones are dimmed until you walk into them (the fast-travel list counts how many you have explored), plus a "Cartographer" achievement
+- Level/XP derived from your Performance Score, today's solve pips, a streak flame, a quest-board problem list, an achievements wall, and a level-up celebration
 - Optional synthesized sound effects (off by default)
 - Territory tier (Outpost → Settlement → Stronghold → Citadel) is driven by the Performance Score formula, not manual admin assignment
 - A soft daily qualifying-problem cap (6/day) so territory farming is bounded without discouraging practice
@@ -234,6 +234,8 @@ The map is a small game. Everything below is also listed in-app (press `?`).
 | `F` | Fast-travel list (search, filter, pin a waypoint) |
 | `L` | College leaderboard |
 | `Esc` | Cancel a route / close a panel |
+
+**A calm HUD, on purpose:** only a location pill, the minimap, three small buttons and the zoom dock are always on screen, and the corner widgets fade while you walk. Zone names are shown only where they fit and never overlap, roof art and outlines stay quiet until you hover or select a block, nothing pulses, and the activity feed carries only news that concerns you (your captures, and rivals moving on zones you hold). Details live in the zone panel, the fast-travel list and the ranks panel.
 
 On touch devices a virtual stick replaces the keyboard. The page deep-links too: `/map?territory=<territoryId>` walks you to that zone (the dashboard's "Show on map" uses it).
 

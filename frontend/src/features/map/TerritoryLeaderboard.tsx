@@ -41,7 +41,7 @@ export function TerritoryLeaderboard({ territory }: TerritoryLeaderboardProps) {
           >
             <span className="flex min-w-0 items-center gap-2 text-slate-200">
               <span className="w-5 shrink-0 text-center text-xs">{MEDAL[i] ?? `#${i + 1}`}</span>
-              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color, boxShadow: `0 0 8px ${color}` }} />
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
               <span className="truncate">{entry.name}</span>
               {me && <span className="shrink-0 rounded bg-cyan-400/20 px-1 text-[0.6rem] font-bold uppercase text-cyan-300">you</span>}
             </span>

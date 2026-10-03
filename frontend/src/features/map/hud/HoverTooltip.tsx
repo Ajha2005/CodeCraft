@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import { TierBadge } from '../../../components/ui/TierBadge';
 import { STATUS_COLOR, STATUS_LABEL, type ZoneSummary } from './zoneSummary';
 
 interface HoverTooltipProps {
@@ -29,12 +28,13 @@ export function HoverTooltip({ summary, x, y, cellNote }: HoverTooltipProps) {
   }, [x, y]);
 
   return (
-    <div ref={ref} className="hud-panel hud-panel-quiet pointer-events-none fixed left-0 top-0 z-40 w-56 !rounded-lg px-3 py-2" style={{ transform: `translate(${x + 18}px, ${y + 20}px)` }}>
-      <div className="flex items-center justify-between gap-2">
-        <p className="font-display truncate text-base font-bold leading-tight text-slate-50">{summary.name}</p>
-        <TierBadge tier={summary.tier} />
-      </div>
-      <p className="mt-1 text-[0.7rem] font-bold uppercase tracking-wide" style={{ color: STATUS_COLOR[summary.status] }}>
+    <div
+      ref={ref}
+      className="hud-panel hud-panel-quiet pointer-events-none fixed left-0 top-0 z-40 w-max min-w-[9rem] max-w-[16rem] !rounded-lg px-3 py-2"
+      style={{ transform: `translate(${x + 18}px, ${y + 20}px)` }}
+    >
+      <p className="font-display truncate text-[0.95rem] font-bold leading-tight text-slate-50">{summary.name}</p>
+      <p className="mt-0.5 text-[0.68rem] font-bold uppercase tracking-wide" style={{ color: STATUS_COLOR[summary.status] }}>
         {STATUS_LABEL[summary.status]}
         <span className="ml-1.5 font-mono font-semibold text-slate-400">
           {summary.owned}/{summary.total}

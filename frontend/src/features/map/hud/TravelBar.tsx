@@ -6,26 +6,15 @@ interface TravelBarProps {
   onCancel: () => void;
 }
 
-/** Shown while the commander auto-runs a route. */
+/** Shown while the commander auto-runs a route. Esc (or the x) stops it. */
 export function TravelBar({ target, meters, onCancel }: TravelBarProps) {
-  const eta = meters === null ? null : Math.max(1, Math.round((meters * 2) / 520));
   return (
-    <div className="hud-panel hud-panel-quiet flex items-center gap-3 px-4 py-2.5 animate-slide-down" role="status">
-      <span className="relative flex h-3 w-3">
-        <span className="absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-70" style={{ animation: 'ping-ring 1.2s ease-out infinite' }} />
-        <span className="relative inline-flex h-3 w-3 rounded-full bg-cyan-300" />
-      </span>
-      <div className="min-w-0">
-        <p className="hud-label !text-[0.6rem] !text-cyan-300">En route</p>
-        <p className="font-display truncate text-base font-bold leading-tight text-slate-50">{target ?? 'Selected point'}</p>
-      </div>
-      {meters !== null && (
-        <p className="font-mono text-xs font-bold tabular-nums text-slate-300">
-          {meters} m{eta !== null ? ` · ~${eta}s` : ''}
-        </p>
-      )}
-      <button type="button" onClick={onCancel} className="btn-ghost ml-1 h-8 rounded-md px-2.5 text-xs font-semibold">
-        <Icon name="x" className="h-3.5 w-3.5" /> Cancel <span className="keycap !h-5">Esc</span>
+    <div className="hud-panel hud-panel-quiet flex items-center gap-2.5 !rounded-full py-1.5 pl-4 pr-1.5 animate-slide-down" role="status">
+      <span className="h-2 w-2 shrink-0 rounded-full bg-cyan-300" />
+      <p className="font-display min-w-0 truncate text-sm font-bold leading-none text-slate-50">{target ?? 'Selected point'}</p>
+      {meters !== null && <p className="shrink-0 font-mono text-xs font-bold tabular-nums text-slate-400">{meters} m</p>}
+      <button type="button" onClick={onCancel} aria-label="Cancel travel (Esc)" title="Cancel (Esc)" className="btn-ghost h-7 w-7 shrink-0 rounded-full">
+        <Icon name="x" className="h-3.5 w-3.5" />
       </button>
     </div>
   );

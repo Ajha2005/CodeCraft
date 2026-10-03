@@ -12,20 +12,18 @@ import { ToastStack } from '../../components/ToastStack';
 import { Icon } from '../../components/ui/Icon';
 import { createChallenge } from '../contest/api';
 import { MapEngine, type HoverInfo } from './world/engine';
-import { getWorld, sectorOf, toMeters } from './world/campus';
+import { getWorld, toMeters } from './world/campus';
 import { TIER_META } from '../../lib/tiers';
 import type { Zone } from './world/geometry';
 import type { TerritoryCellDto } from '../../lib/api';
 import { LeaderboardPanel } from './LeaderboardPanel';
-import { PlayerCard } from './hud/PlayerCard';
-import { MissionCard } from './hud/MissionCard';
 import { LocationChip, ZoneSplash, type Splash } from './hud/LocationBanner';
 import { Minimap } from './hud/Minimap';
 import { ControlsDock } from './hud/ControlsDock';
 import { QuickTravel } from './hud/QuickTravel';
 import { LiveFeed, type FeedItem } from './hud/LiveFeed';
 import { TravelBarLive, WaypointChip, ZonePanelLive } from './hud/LiveHud';
-import { ActionHints, FirstRunHint } from './hud/ActionHints';
+import { FirstRunHint, InspectHint } from './hud/ActionHints';
 import { HelpOverlay } from './hud/HelpOverlay';
 import { Joystick } from './hud/Joystick';
 import { HoverTooltip } from './hud/HoverTooltip';
@@ -33,8 +31,9 @@ import { ChallengeModal } from './hud/ChallengeModal';
 import { STATUS_LABEL, summarizeZone, type ZoneSummary } from './hud/zoneSummary';
 import { useEngineSelector } from './hud/useEngineStats';
 
-const FEED_TTL_MS = 12000;
-const SPLASH_MS = 2600;
+const FEED_TTL_MS = 6000;
+const FEED_MAX = 2;
+const SPLASH_MS = 2200;
 
 const posKey = (uid: string) => `cc.map.pos.v1:${uid}`;
 const exploredKey = (uid: string) => `cc.map.explored.v1:${uid}`;
@@ -79,8 +78,9 @@ export function MapFullScreen() {
   const world = getWorld();
   const [engine] = useState(() => new MapEngine(world));
   const traveling = useEngineSelector(engine, (s) => s.traveling);
-  const sector = useEngineSelector(engine, (s) => s.sector);
   const explored = useEngineSelector(engine, (s) => s.explored);
+  // The corner widgets step back while you are on the move (see .hud-fade).
+  const moving = useEngineSelector(engine, (s) => s.speed > 12);
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const nextId = useRef(1);
@@ -119,7 +119,6 @@ export function MapFullScreen() {
   }, [world, territories, cellsByTerritory, userId]);
 
   const summaryList = useMemo(() => [...summaries.values()], [summaries]);
-  const heldCount = useMemo(() => summaryList.filter((s) => s.owned > 0).length, [summaryList]);
 
   const selected = selectedId ? (summaries.get(selectedId) ?? null) : null;
   const current = currentZoneId ? (summaries.get(currentZoneId) ?? null) : null;
@@ -129,8 +128,17 @@ export function MapFullScreen() {
 
   const pushFeed = useCallback((item: Omit<FeedItem, 'id'>) => {
     const id = nextId.current++;
-    setFeed((prev) => [{ ...item, id }, ...prev].slice(0, 4));
+    setFeed((prev) => [{ ...item, id }, ...prev].slice(0, FEED_MAX));
     window.setTimeout(() => setFeed((prev) => prev.filter((f) => f.id !== id)), FEED_TTL_MS);
+  }, []);
+
+  const dismissWelcome = useCallback(() => {
+    setWelcome(false);
+    try {
+      localStorage.setItem(WELCOME_KEY, '1');
+    } catch {
+      // ignore
+    }
   }, []);
 
   // ---- engine lifecycle ---------------------------------------------------
@@ -150,27 +158,28 @@ export function MapFullScreen() {
 
   // Events from the engine. Wrapped in an Effect Event so they always see the
   // latest summaries / flags without re-subscribing the engine.
+  // Walking into a zone just updates the location pill - a full-screen title on
+  // every border you cross gets tiring fast. Only a first discovery earns one.
   const handleZoneChange = useEffectEvent((zone: Zone | null, traveling: boolean) => {
     setCurrentZoneId(zone?.id ?? null);
-    // While auto-running through town, only discoveries earn a banner.
-    if (!zone || traveling) return;
-    const summary = summaries.get(zone.id);
-    if (!summary) return;
-    sfx.play('zone');
-    setSplash({ key: nextId.current++, kind: 'enter', summary });
+    if (zone && !traveling) sfx.play('zone');
   });
 
   const handleDiscover = useEffectEvent((zone: Zone, found: number, total: number) => {
     const summary = summaries.get(zone.id);
     if (!summary) return;
     sfx.play('discover');
-    setSplash({ key: nextId.current++, kind: 'discover', summary, progress: { found, total } });
-    pushFeed({ kind: 'discover', color: '#fbbf24', text: `Discovered ${summary.name} (${found}/${total} explored)` });
+    setSplash({ key: nextId.current++, summary, progress: { found, total } });
     if (userId) writeJson(exploredKey(userId), engine.getExplored());
   });
 
   const handleCapture = useEffectEvent((e: { zone: Zone; cell: TerritoryCellDto; byMe: boolean }) => {
-    const name = summaries.get(e.zone.id)?.name ?? e.zone.id;
+    const summary = summaries.get(e.zone.id);
+    // The feed only carries news that concerns you: your own captures, and
+    // rivals moving on a zone you hold ground in or are standing in. Everything
+    // else still flashes on the map, it just does not ask for your attention.
+    if (!e.byMe && (summary?.mine ?? 0) === 0 && e.zone.id !== currentZoneId) return;
+    const name = summary?.name ?? e.zone.id;
     const who = e.byMe ? 'You' : (nameFor(e.cell.ownerId) ?? 'A rival');
     sfx.play('capture');
     pushFeed({
@@ -204,6 +213,7 @@ export function MapFullScreen() {
   const handleCellChallenge = useEffectEvent((cell: TerritoryCellDto, zone: Zone) => setChallenge({ cell, zone }));
   const handleMoved = useEffectEvent((pos: { x: number; y: number }) => {
     if (userId) writeJson(posKey(userId), pos);
+    if (welcome) dismissWelcome();
   });
   const handleInteract = useEffectEvent(() => {
     if (!currentZoneId) return;
@@ -282,15 +292,6 @@ export function MapFullScreen() {
   }, [welcome]);
 
   // ---- actions ------------------------------------------------------------
-  const dismissWelcome = useCallback(() => {
-    setWelcome(false);
-    try {
-      localStorage.setItem(WELCOME_KEY, '1');
-    } catch {
-      // ignore
-    }
-  }, []);
-
   const openTravel = useCallback(() => {
     setTravelSnapshot((prev) => (prev ? null : { ...engine.getPlayerPos(), explored: new Set(engine.getExplored()) }));
     setShowBoard(false);
@@ -380,6 +381,7 @@ export function MapFullScreen() {
   return (
     <div
       ref={hostRef}
+      data-moving={moving ? 'true' : undefined}
       className="relative w-full overflow-hidden bg-[#03060b]"
       style={{ height: 'calc(100dvh - var(--nav-h) - var(--tabbar-h))' }}
     >
@@ -399,88 +401,66 @@ export function MapFullScreen() {
 
       {ready && (
         <>
-          {/* top-left: commander + exploration */}
-          <div className="absolute left-3 top-3 z-10 flex flex-col gap-2">
-            <PlayerCard />
-            <div className="sm:hidden">
-              <LocationChip summary={current} sector={sector} compact />
-            </div>
-            <div className="hud-panel hud-panel-quiet hidden w-[19.5rem] items-center gap-3 px-3 py-2 animate-slide-in-left sm:flex">
-              <div className="min-w-0 flex-1">
-                <p className="hud-label !text-[0.6rem] !tracking-[0.14em]">Explored</p>
-                <div className="mt-1 flex items-center gap-2">
-                  <div className="xp-track !h-1.5 flex-1">
-                    <div className="xp-fill xp-fill-cyan" style={{ width: `${(explored / Math.max(1, world.campus.zones.length)) * 100}%` }} />
-                  </div>
-                  <span className="font-mono text-[0.66rem] font-bold tabular-nums text-cyan-200">
-                    {explored}/{world.campus.zones.length}
-                  </span>
-                </div>
-              </div>
-              <div className="h-7 w-px bg-slate-700/70" />
-              <div className="text-right">
-                <p className="hud-label !text-[0.6rem] !tracking-[0.14em]">Zones held</p>
-                <p className="font-mono text-[0.78rem] font-bold tabular-nums text-slate-100">
-                  {heldCount}
-                  <span className="text-slate-500">/{summaryList.length}</span>
-                </p>
-              </div>
-            </div>
-            <div className="hidden sm:block">
-              <MissionCard />
-            </div>
-            <div className="hidden sm:block">
-              <LiveFeed items={feed} />
-            </div>
-          </div>
-
-          {/* top-center: where you are */}
-          <div className="pointer-events-none absolute inset-x-0 top-3 z-10 hidden justify-center sm:flex">
+          {/* top-center: where you are - one small pill */}
+          <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center max-sm:justify-start max-sm:pl-3">
             <div className="pointer-events-auto">
-              <LocationChip summary={current} sector={sector} />
+              <LocationChip summary={current} />
             </div>
           </div>
           <ZoneSplash splash={splash} />
 
-          {/* top-right: panels */}
-          <div className="absolute right-3 top-3 z-10 flex flex-col items-end gap-2 max-sm:top-[8.4rem]">
-            <div className="hud-panel hud-panel-quiet flex items-center gap-1 p-1 animate-slide-in-right">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowBoard((v) => !v);
-                  setTravelSnapshot(null);
-                }}
-                aria-pressed={showBoard}
-                className={`btn-ghost h-9 gap-1.5 rounded-lg px-2.5 text-xs font-bold uppercase tracking-wide ${showBoard ? '!border-amber-400/70 !text-amber-200' : ''}`}
-              >
-                <Icon name="trophy" className="h-4 w-4" />
-                <span className="hidden sm:inline">Ranks</span>
-                <span className="keycap hidden lg:inline-flex">L</span>
-              </button>
-              <button
-                type="button"
-                onClick={openTravel}
-                aria-pressed={!!travelSnapshot}
-                className={`btn-ghost h-9 gap-1.5 rounded-lg px-2.5 text-xs font-bold uppercase tracking-wide ${travelSnapshot ? '!border-cyan-400/70 !text-cyan-200' : ''}`}
-              >
-                <Icon name="compass" className="h-4 w-4" />
-                <span className="hidden sm:inline">Travel</span>
-                <span className="keycap hidden lg:inline-flex">F</span>
-              </button>
-              <button type="button" onClick={() => setShowHelp(true)} aria-label="Controls help" className="btn-ghost h-9 w-9 rounded-lg">
-                <Icon name="help" className="h-4 w-4" />
-              </button>
+          {/* top-left: news that concerns you, briefly */}
+          <div className="absolute left-3 top-3 z-10 max-sm:top-12">
+            <LiveFeed items={feed} />
+          </div>
+
+          {/* top-right: three quiet buttons */}
+          <div className="absolute right-3 top-3 z-10 flex flex-col items-end gap-2 max-sm:top-[6.4rem]">
+            <div className="hud-fade">
+              <div className="hud-panel hud-panel-quiet flex items-center gap-0.5 p-1 animate-slide-in-right">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowBoard((v) => !v);
+                    setTravelSnapshot(null);
+                  }}
+                  aria-pressed={showBoard}
+                  title="Ranks (L)"
+                  className={`btn-ghost h-8 gap-1.5 rounded-lg !border-transparent px-2.5 text-xs font-bold uppercase tracking-wide ${showBoard ? '!border-amber-400/60 !text-amber-200' : ''}`}
+                >
+                  <Icon name="trophy" className="h-4 w-4" />
+                  <span className="hidden sm:inline">Ranks</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={openTravel}
+                  aria-pressed={!!travelSnapshot}
+                  title="Fast travel (F)"
+                  className={`btn-ghost h-8 gap-1.5 rounded-lg !border-transparent px-2.5 text-xs font-bold uppercase tracking-wide ${travelSnapshot ? '!border-cyan-400/60 !text-cyan-200' : ''}`}
+                >
+                  <Icon name="compass" className="h-4 w-4" />
+                  <span className="hidden sm:inline">Travel</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowHelp(true)}
+                  aria-label="Controls help"
+                  title="Controls (?)"
+                  className="btn-ghost h-8 w-8 rounded-lg !border-transparent max-sm:hidden"
+                >
+                  <Icon name="help" className="h-4 w-4" />
+                </button>
+              </div>
             </div>
             {showBoard && <LeaderboardPanel entries={boardEntries} loading={boardLoading} onClose={() => setShowBoard(false)} />}
           </div>
 
           {/* minimap: bottom-left on desktop, top-right on phones */}
-          <div className="absolute bottom-3 left-3 z-10 max-sm:bottom-auto max-sm:left-auto max-sm:right-3 max-sm:top-3">
+          <div className="hud-fade absolute bottom-3 left-3 z-10 max-sm:bottom-auto max-sm:left-auto max-sm:right-3 max-sm:top-3">
             <Minimap engine={engine} />
           </div>
 
-          {/* bottom-center: the contextual stack */}
+          {/* bottom-center: the contextual stack - only what you are doing right now */}
           <div className={`pointer-events-none absolute inset-x-0 bottom-3 z-10 flex flex-col items-center gap-2 px-2 max-sm:bottom-2 ${isTouch && !selected ? 'max-sm:bottom-[8.75rem]' : ''}`}>
             {welcome && !selected && (
               <div className="pointer-events-auto max-sm:self-start">
@@ -494,7 +474,6 @@ export function MapFullScreen() {
                   world={world}
                   summary={selected}
                   territory={territories[selected.id] ?? null}
-                  sector={sectorOf(world.campus, world.campus.byId.get(selected.id)?.anchor.x ?? 0, world.campus.byId.get(selected.id)?.anchor.y ?? 0)}
                   here={currentZoneId === selected.id}
                   pinned={pinnedId === selected.id}
                   onTravel={() => travelToZone(selected.id)}
@@ -512,15 +491,11 @@ export function MapFullScreen() {
             {pinnedId && waypointSummary && !traveling && !showZonePanel && (
               <WaypointChip engine={engine} name={waypointSummary.name} onGo={() => travelToZone(pinnedId)} onClear={() => setPinnedId(null)} />
             )}
-            {!isTouch && !showZonePanel && !traveling && !welcome && (
-              <div className="pointer-events-auto">
-                <ActionHints inZone={!!currentZoneId} />
-              </div>
-            )}
+            {!isTouch && !!currentZoneId && !showZonePanel && !traveling && !welcome && <InspectHint />}
           </div>
 
           {/* bottom-right: camera controls */}
-          <div className="absolute bottom-3 right-3 z-10 max-sm:bottom-2 max-sm:right-2">
+          <div className={`hud-fade absolute bottom-3 right-3 z-10 max-sm:bottom-2 max-sm:right-2 ${showZonePanel ? 'max-sm:hidden' : ''}`}>
             <ControlsDock engine={engine} />
           </div>
 
@@ -536,6 +511,7 @@ export function MapFullScreen() {
                 zones={summaryList}
                 distances={distances}
                 explored={travelSnapshot.explored}
+                exploredCount={explored}
                 pinnedId={pinnedId}
                 onTravel={(id) => travelToZone(id, true)}
                 onHover={(id) => engine.setHighlight(id)}

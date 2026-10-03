@@ -1173,15 +1173,14 @@ export class MapEngine {
     this.pingTimer = 1;
     this.handlers.onZoneChange?.(zone, prev, this.route.length > 0);
 
+    // Crossing a border is already marked by the avatar's own ping; only a
+    // first discovery gets sparks (the page adds the title card).
     if (zone) {
-      const accent = TIER_STYLE[zone.tier].accent;
-      this.fx.ring(this.player.x, this.player.y, accent, 70, 0.7, 2.4);
       const view = this.views[zone.index];
       if (!this.discovered.has(zone.id) && this.fogEnabled) {
         this.discovered.add(zone.id);
         view.discovered = true;
-        this.fx.burst(zone.anchor.x, zone.anchor.y - view.height, accent, 30, 240);
-        this.fx.text(zone.anchor.x, zone.anchor.y - view.height - 26, 'DISCOVERED', accent, 20, 2);
+        this.fx.burst(zone.anchor.x, zone.anchor.y - view.height, TIER_STYLE[zone.tier].accent, 18, 200);
         this.handlers.onDiscover?.(zone, this.discovered.size, this.world.campus.zones.length);
       }
     }

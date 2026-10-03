@@ -18,6 +18,8 @@ interface QuickTravelProps {
   /** Straight-line distance in metres from the commander, by zone id. */
   distances: Record<string, number>;
   explored: Set<string> | null;
+  /** How many zones the commander has set foot in, out of all of them. */
+  exploredCount: number;
   pinnedId: string | null;
   onTravel: (id: string) => void;
   onHover: (id: string | null) => void;
@@ -26,7 +28,7 @@ interface QuickTravelProps {
 }
 
 /** Searchable fast-travel list. Sorted by distance at the moment it opens. */
-export function QuickTravel({ zones, distances, explored, pinnedId, onTravel, onHover, onPin, onClose }: QuickTravelProps) {
+export function QuickTravel({ zones, distances, explored, exploredCount, pinnedId, onTravel, onHover, onPin, onClose }: QuickTravelProps) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
 
@@ -48,7 +50,9 @@ export function QuickTravel({ zones, distances, explored, pinnedId, onTravel, on
       <div className="mb-2.5 flex items-center gap-2">
         <Icon name="compass" className="h-4 w-4 text-cyan-300" />
         <h2 className="font-display flex-1 text-sm font-bold uppercase tracking-[0.16em] text-slate-100">Fast travel</h2>
-        <span className="keycap">F</span>
+        <span className="font-mono text-[0.68rem] font-bold tabular-nums text-slate-400" title="Zones explored">
+          {exploredCount}/{zones.length} explored
+        </span>
         <button type="button" onClick={onClose} aria-label="Close" className="rounded p-1 text-slate-500 transition-colors hover:text-slate-100">
           <Icon name="x" className="h-4 w-4" />
         </button>

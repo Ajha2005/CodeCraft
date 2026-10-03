@@ -13,13 +13,11 @@ import { Pips } from './components/ui/Pips'
 import { ProgressRing } from './components/ui/ProgressRing'
 import { XPBar } from './components/ui/XPBar'
 import {
-  DIFFICULTY_TAG,
   EMPTY_PROBLEM_LIST,
   JUDGE_RUNNING,
   PROBLEM_HOVER_REMATCH,
   PROBLEM_HOVER_UNSOLVED,
   pickRandom,
-  rankTitle,
   streakToast,
   verdictFlavor,
 } from './lib/flavorText'
@@ -90,7 +88,7 @@ interface SubmissionResult {
 
 type ProblemStatus = 'AC' | 'ATTEMPTED'
 
-function DifficultyBadge({ level, flavor }: { level: string; flavor: boolean }) {
+function DifficultyBadge({ level }: { level: string }) {
   const meta = DIFFICULTY[level] ?? DEFAULT_DIFFICULTY
   return (
     <span
@@ -98,7 +96,6 @@ function DifficultyBadge({ level, flavor }: { level: string; flavor: boolean }) 
     >
       <Icon name={meta.icon} className="h-3 w-3" />
       {level}
-      {flavor && DIFFICULTY_TAG[level] && <span className="opacity-60">· {DIFFICULTY_TAG[level]}</span>}
     </span>
   )
 }
@@ -295,8 +292,6 @@ function ProblemsPage() {
   const solvedCount = Object.values(problemStatus).filter((s) => s === 'AC').length
   const solvedPct = total > 0 ? Math.min(1, solvedCount / total) : 0
   const name = user?.name?.trim()?.split(/\s+/)[0] || user?.email?.split('@')[0] || 'Commander'
-  const page = Math.floor(offset / limit) + 1
-  const pageCount = Math.max(1, Math.ceil(total / limit))
 
   // ======================================================== mission briefing
   if (selectedProblem) {
@@ -322,7 +317,7 @@ function ProblemsPage() {
             {/* ------------------------------------------------ briefing */}
             <section className="hud-panel p-5 md:p-6 animate-fade-in-up">
               <div className="flex flex-wrap items-center gap-2">
-                <DifficultyBadge level={selectedProblem.difficultyLevel} flavor={flavorTextEnabled} />
+                <DifficultyBadge level={selectedProblem.difficultyLevel} />
                 <span className="inline-flex items-center gap-1 rounded-md border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 font-display text-[0.7rem] font-bold uppercase tracking-[0.12em] text-amber-300">
                   <Icon name="bolt" className="h-3 w-3" />+{meta.xp} XP base
                 </span>
@@ -520,43 +515,14 @@ function ProblemsPage() {
                 ? 'Pick a front, clear it, and claim the ground. Every accepted solve earns XP and a cell of campus.'
                 : 'Solve problems to earn score and territory on the campus map.'}
             </p>
-            <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-3">
-              <div className="flex items-center gap-3">
-                <LevelBadge level={stats.level.level} size={46} />
-                <div className="w-44">
-                  <p className="font-display text-sm font-bold uppercase tracking-wide text-slate-100">
-                    {stats.rank ? (
-                      <>
-                        {flavorTextEnabled ? rankTitle(stats.rank) : 'Rank'} <span className="text-cyan-300/80">#{stats.rank}</span>
-                      </>
-                    ) : (
-                      `Level ${stats.level.level}`
-                    )}
-                  </p>
-                  <XPBar pct={stats.level.pct} className="mt-1" />
-                  <p className="mt-0.5 text-[0.68rem] font-semibold tabular-nums text-slate-500">
-                    {stats.level.xpIntoLevel} / {stats.level.xpSpan} XP
-                  </p>
-                </div>
+            {stats.daily && (
+              <div className="mt-5 w-40" title="Qualifying solves today">
+                <p className="hud-label !text-[0.58rem] mb-1">
+                  Today · {stats.daily.qualifyingCount}/{stats.daily.cap}
+                </p>
+                <Pips filled={Math.min(stats.daily.qualifyingCount, stats.daily.cap)} total={stats.daily.cap} />
               </div>
-              {stats.streak && stats.streak.current > 0 && (
-                <div className="flex items-center gap-2 text-orange-300">
-                  <Icon name="flame" filled className="h-6 w-6 drop-shadow-[0_0_8px_rgba(251,146,60,0.9)] animate-float" />
-                  <div className="leading-tight">
-                    <p className="font-mono text-lg font-bold tabular-nums">{stats.streak.current}</p>
-                    <p className="hud-label !text-[0.58rem]">day streak</p>
-                  </div>
-                </div>
-              )}
-              {stats.daily && (
-                <div className="w-36">
-                  <p className="hud-label !text-[0.58rem] mb-1">
-                    Daily quest · {stats.daily.qualifyingCount}/{stats.daily.cap}
-                  </p>
-                  <Pips filled={Math.min(stats.daily.qualifyingCount, stats.daily.cap)} total={stats.daily.cap} />
-                </div>
-              )}
-            </div>
+            )}
           </div>
 
           <div className="relative flex items-center justify-center md:pr-4">
@@ -605,8 +571,8 @@ function ProblemsPage() {
                 }
               >
                 {meta && <Icon name={meta.icon} className="h-4 w-4" />}
-                {d || 'All quests'}
-                {d && flavorTextEnabled && <span className="text-[0.68rem] font-semibold opacity-70">{DIFFICULTY_TAG[d]}</span>}
+                {d || (flavorTextEnabled ? 'All quests' : 'All')}
+                {meta && <span className="text-[0.68rem] font-semibold opacity-60">+{meta.xp} XP</span>}
               </button>
             )
           })}
@@ -643,45 +609,28 @@ function ProblemsPage() {
                 onClick={() => openProblem(p.id)}
                 title={hoverTitle}
                 style={{ animationDelay: `${Math.min(i, 12) * 40}ms`, ['--accent' as string]: meta.accent }}
-                className={`group relative overflow-hidden rounded-xl border bg-slate-900/60 p-4 pl-5 text-left backdrop-blur transition-all duration-200 hover:-translate-y-1 animate-fade-in-up ${
+                className={`group relative overflow-hidden rounded-xl border bg-slate-900/60 p-4 pl-5 text-left transition-all duration-200 hover:-translate-y-0.5 animate-fade-in-up ${
                   status === 'AC' ? 'border-emerald-500/40 hover:border-emerald-400/70' : 'border-slate-800 hover:border-[color:var(--accent)]'
                 }`}
               >
-                <span className="absolute inset-y-0 left-0 w-1" style={{ background: `linear-gradient(180deg, ${meta.accent}, ${meta.accent}44)`, boxShadow: `0 0 14px ${meta.accent}88` }} />
-                <span
-                  className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full opacity-0 blur-2xl transition-opacity duration-300 group-hover:opacity-40"
-                  style={{ background: status === 'AC' ? '#34d399' : meta.accent }}
-                />
+                <span className="absolute inset-y-0 left-0 w-1" style={{ background: meta.accent, opacity: 0.7 }} />
                 {status === 'AC' && (
-                  <span className="absolute right-3 top-3 flex -rotate-6 items-center gap-1 rounded border-2 border-emerald-400/70 px-1.5 py-0.5 font-display text-[0.62rem] font-bold uppercase tracking-[0.14em] text-emerald-300 shadow-[0_0_14px_-3px_rgba(52,211,153,0.7)]">
+                  <span className="absolute right-3 top-3 flex items-center gap-1 font-display text-[0.64rem] font-bold uppercase tracking-[0.14em] text-emerald-300">
                     <Icon name="check" className="h-3 w-3" />
                     Cleared
                   </span>
                 )}
                 {status === 'ATTEMPTED' && (
-                  <span className="absolute right-3 top-3 flex items-center gap-1 rounded border border-amber-400/50 bg-amber-400/10 px-1.5 py-0.5 font-display text-[0.62rem] font-bold uppercase tracking-[0.14em] text-amber-300">
+                  <span className="absolute right-3 top-3 flex items-center gap-1 font-display text-[0.64rem] font-bold uppercase tracking-[0.14em] text-amber-300">
                     <Icon name="swords" className="h-3 w-3" />
                     Retry
                   </span>
                 )}
 
-                <div className="flex items-start gap-3">
-                  <span
-                    className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-transform duration-200 group-hover:scale-110 group-hover:rotate-3"
-                    style={{ color: meta.accent, borderColor: `${meta.accent}55`, background: `${meta.accent}14` }}
-                  >
-                    <Icon name={meta.icon} className="h-[18px] w-[18px]" />
-                  </span>
-                  <div className={`min-w-0 flex-1 ${status ? 'pr-24' : 'pr-2'}`}>
-                    <p className="font-mono text-[0.66rem] font-bold text-slate-500">#{String(p.id).padStart(3, '0')}</p>
-                    <p className="text-[0.95rem] font-semibold leading-snug text-slate-100">{p.title}</p>
-                  </div>
-                </div>
-                <div className="mt-3 flex items-center justify-between">
-                  <DifficultyBadge level={p.difficultyLevel} flavor={flavorTextEnabled} />
-                  <span className="inline-flex items-center gap-1 font-mono text-xs font-bold text-amber-300/90">
-                    <Icon name="bolt" className="h-3 w-3" />+{meta.xp} XP
-                  </span>
+                <p className="font-mono text-[0.66rem] font-bold text-slate-500">#{String(p.id).padStart(3, '0')}</p>
+                <p className={`mt-0.5 text-[0.95rem] font-semibold leading-snug text-slate-100 ${status ? 'pr-20' : 'pr-2'}`}>{p.title}</p>
+                <div className="mt-3">
+                  <DifficultyBadge level={p.difficultyLevel} />
                 </div>
               </button>
             )
@@ -697,7 +646,7 @@ function ProblemsPage() {
             <Icon name="arrowLeft" className="h-4 w-4" /> Previous
           </button>
           <span className="font-mono text-xs font-bold tabular-nums text-slate-500">
-            PAGE {page} / {pageCount} · {total === 0 ? 0 : offset + 1}–{Math.min(offset + limit, total)} of {total}
+            {total === 0 ? 0 : offset + 1}–{Math.min(offset + limit, total)} of {total}
           </span>
           <button
             disabled={offset + limit >= total}

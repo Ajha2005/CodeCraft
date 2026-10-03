@@ -1,5 +1,5 @@
 import { useAuth } from '../../auth/AuthContext';
-import { EMPTY_LEADERBOARD, rankTitle } from '../../lib/flavorText';
+import { EMPTY_LEADERBOARD } from '../../lib/flavorText';
 import { colorForUser } from '../../lib/playerColor';
 import type { LeaderboardEntry } from '../../lib/api';
 import { Icon } from '../../components/ui/Icon';
@@ -16,10 +16,10 @@ export function LeaderboardPanel({ entries, loading, onClose }: LeaderboardPanel
   const { user, flavorTextEnabled } = useAuth();
 
   return (
-    <div className="hud-panel w-[18.5rem] max-w-[calc(100vw-1.5rem)] p-3 animate-slide-in-right">
+    <div className="hud-panel hud-panel-quiet w-[18rem] max-w-[calc(100vw-1.5rem)] p-3 animate-slide-in-right">
       <div className="mb-2 flex items-center gap-2">
         <Icon name="trophy" className="h-4 w-4 text-amber-300" />
-        <h2 className="font-display flex-1 text-sm font-bold uppercase tracking-[0.16em] text-slate-100">College leaderboard</h2>
+        <h2 className="font-display flex-1 text-sm font-bold uppercase tracking-[0.16em] text-slate-100">Leaderboard</h2>
         <button type="button" onClick={onClose} aria-label="Close leaderboard" className="rounded p-1 text-slate-500 transition-colors hover:text-slate-200">
           <Icon name="x" className="h-4 w-4" />
         </button>
@@ -42,11 +42,8 @@ export function LeaderboardPanel({ entries, loading, onClose }: LeaderboardPanel
               >
                 <span className="flex min-w-0 items-center gap-2 text-slate-200">
                   <span className="w-5 shrink-0 text-center text-xs">{MEDAL[i] ?? <span className="text-slate-500">{i + 1}</span>}</span>
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color, boxShadow: `0 0 8px ${color}` }} />
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
                   <span className="truncate">{entry.name}</span>
-                  {flavorTextEnabled && (
-                    <span className="hidden shrink-0 text-[0.58rem] font-bold uppercase tracking-wide text-cyan-400/70 sm:inline">{rankTitle(i + 1)}</span>
-                  )}
                 </span>
                 <span className="shrink-0 font-mono text-xs font-bold text-emerald-400">{entry.score.toFixed(1)}</span>
               </li>

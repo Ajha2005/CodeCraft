@@ -6,12 +6,10 @@ import {
   fetchDailyProgress,
   fetchUserRank,
   fetchNearMiss,
-  fetchCampaignSummary,
   type ScoreResponse,
   type Territory,
   type DailyProgress,
   type NearMiss,
-  type CampaignSummary,
 } from '../api/client';
 import { fetchStreak, type StreakInfo } from '../lib/api';
 import { useAuth } from '../auth/AuthContext';
@@ -24,7 +22,6 @@ import { TIER_META, tierOf, type Tier } from '../lib/tiers';
 import { AnimatedNumber } from '../components/ui/AnimatedNumber';
 import { Icon } from '../components/ui/Icon';
 import { LevelBadge } from '../components/ui/LevelBadge';
-import { Pips } from '../components/ui/Pips';
 import { ProgressRing } from '../components/ui/ProgressRing';
 import { SectionTitle } from '../components/ui/SectionTitle';
 import { Sparkline } from '../components/ui/Sparkline';
@@ -34,6 +31,7 @@ import { XPBar } from '../components/ui/XPBar';
 const RANK_STORAGE_PREFIX = 'lastKnownRankTitle:';
 const ACHIEVEMENTS_PREFIX = 'cc.achievements.v1:';
 const EXPLORED_PREFIX = 'cc.map.explored.v1:';
+const SOLVES_SHOWN = 8;
 
 function readExploredCount(userId: string): number {
   try {
@@ -45,9 +43,23 @@ function readExploredCount(userId: string): number {
   }
 }
 
-function StatTile({ label, children, accent, delay, sub }: { label: string; children: React.ReactNode; accent: string; delay: number; sub?: React.ReactNode }) {
+function StatTile({
+  label,
+  children,
+  accent,
+  delay,
+  sub,
+  className = '',
+}: {
+  label: string;
+  children: React.ReactNode;
+  accent: string;
+  delay: number;
+  sub?: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="hud-panel relative overflow-hidden p-4 animate-fade-in-up" style={{ animationDelay: `${delay}ms` }}>
+    <div className={`hud-panel relative overflow-hidden p-4 animate-fade-in-up ${className}`} style={{ animationDelay: `${delay}ms` }}>
       <span className="absolute inset-x-0 top-0 h-[2px]" style={{ background: `linear-gradient(90deg, transparent, ${accent}, transparent)` }} />
       <p className="hud-label !text-[0.64rem]">{label}</p>
       <div className="mt-1.5 font-mono text-3xl font-bold tabular-nums text-slate-50">{children}</div>
@@ -64,8 +76,8 @@ export default function ScoringDashboard() {
   const [progress, setProgress] = useState<DailyProgress | null>(null);
   const [rank, setRank] = useState<number | null>(null);
   const [nearMiss, setNearMiss] = useState<NearMiss | null>(null);
-  const [campaign, setCampaign] = useState<CampaignSummary | null>(null);
   const [streak, setStreak] = useState<StreakInfo | null>(null);
+  const [showAllSolves, setShowAllSolves] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,16 +89,14 @@ export default function ScoringDashboard() {
       fetchDailyProgress(user.userId),
       fetchUserRank(user.userId),
       fetchNearMiss(user.userId),
-      fetchCampaignSummary(user.userId),
       fetchStreak(user.userId).catch(() => null),
     ])
-      .then(([scores, terr, prog, rankInfo, miss, campaignSummary, streakInfo]) => {
+      .then(([scores, terr, prog, rankInfo, miss, streakInfo]) => {
         setScoreData(scores);
         setTerritories(terr);
         setProgress(prog);
         setRank(rankInfo.rank);
         setNearMiss(miss);
-        setCampaign(campaignSummary);
         setStreak(streakInfo);
 
         const title = rankTitle(rankInfo.rank);
@@ -178,7 +188,6 @@ export default function ScoringDashboard() {
   }
 
   const name = user?.name?.trim() || user?.email?.split('@')[0] || 'Commander';
-  const dailyPct = progress ? Math.min(1, progress.qualifyingCount / progress.cap) : 0;
 
   return (
     <div className="hud-grid-bg min-h-[calc(100dvh-var(--nav-h))] flex-1">
@@ -186,10 +195,9 @@ export default function ScoringDashboard() {
         <ToastStack toasts={toasts} dismiss={dismiss} placement="top-right" />
 
         {/* ------------------------------------------------------ hero */}
-        <header className="hud-panel relative mb-6 overflow-hidden p-5 md:p-8 animate-fade-in-up">
+        <header className="hud-panel relative mb-6 overflow-hidden p-5 md:p-7 animate-fade-in-up">
           <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-amber-400/10 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-28 right-0 h-72 w-72 rounded-full bg-cyan-400/10 blur-3xl" />
-          <div className="relative grid items-center gap-6 md:grid-cols-[auto_1fr_auto]">
+          <div className="relative grid items-center gap-6 md:grid-cols-[auto_1fr]">
             <ProgressRing pct={level.pct} size={148} stroke={9} color="#fbbf24" className="mx-auto md:mx-0">
               <LevelBadge level={level.level} size={96} />
             </ProgressRing>
@@ -203,11 +211,10 @@ export default function ScoringDashboard() {
                     {flavorTextEnabled ? rankTitle(rank) : 'Rank'} <span className="text-slate-100">#{rank}</span>
                   </span>
                 )}
-                {streak && (
+                {streak && streak.current > 0 && (
                   <span className="flex items-center gap-1.5 text-sm font-semibold text-orange-300">
-                    <Icon name="flame" filled className="h-5 w-5 drop-shadow-[0_0_8px_rgba(251,146,60,0.9)]" />
+                    <Icon name="flame" filled className="h-5 w-5" />
                     {streak.current}-day streak
-                    <span className="text-xs font-medium text-slate-500">· best {streak.longest}</span>
                   </span>
                 )}
               </div>
@@ -222,78 +229,45 @@ export default function ScoringDashboard() {
                   </span>
                 </p>
               </div>
-            </div>
-
-            <div className="text-center md:text-right">
-              <p className="hud-label">College rank</p>
-              <p className="font-mono text-6xl font-bold tabular-nums text-cyan-300 drop-shadow-[0_0_18px_rgba(34,211,238,0.5)]">{rank ? `#${rank}` : '—'}</p>
-              {flavorTextEnabled && nearMiss && nearMiss.pointsToNext > 0 ? (
-                <p className="mx-auto mt-1 max-w-[14rem] text-xs leading-snug text-slate-400 md:ml-auto md:mr-0">{nearMissNudge(nearMiss.pointsToNext, nearMiss.nextRankName)}</p>
-              ) : (
-                <p className="mt-1 text-xs text-slate-500">{rank ? 'Keep climbing.' : 'Unranked'}</p>
+              {flavorTextEnabled && nearMiss && nearMiss.pointsToNext > 0 && (
+                <p className="mt-3 text-xs leading-snug text-slate-400">{nearMissNudge(nearMiss.pointsToNext, nearMiss.nextRankName)}</p>
               )}
             </div>
           </div>
         </header>
 
-        {flavorTextEnabled && campaign && (
-          <div
-            className="hud-panel hud-panel-quiet mb-6 flex flex-wrap items-center gap-x-6 gap-y-2 px-5 py-3 text-sm animate-fade-in-up"
-            style={{ animationDelay: '60ms' }}
-          >
-            <span className="hud-label !text-cyan-300">Today’s campaign</span>
-            <span className="text-slate-300">
-              {campaign.territoriesHeld} {campaign.territoriesHeld === 1 ? 'territory' : 'territories'} held
-            </span>
-            <span className="font-semibold text-emerald-400">▲ {campaign.cellsGainedToday} gained</span>
-            <span className="font-semibold text-rose-400">▼ {campaign.cellsLostToday} lost</span>
-            <span className="text-slate-500">Tomorrow’s a new front.</span>
-          </div>
-        )}
-
         {/* ------------------------------------------------ stat tiles */}
-        <div className="mb-10 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="mb-10 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <StatTile label="Performance score" accent="#34d399" delay={100}>
             <span className="text-emerald-300">
               <AnimatedNumber value={totalScore} decimals={1} />
             </span>
           </StatTile>
-          <StatTile
-            label="Daily quest"
-            accent="#22d3ee"
-            delay={160}
-            sub={
-              progress && progress.qualifyingCount >= progress.cap ? (
-                <span className="text-amber-300">Practice mode — cap reached</span>
-              ) : (
-                <Pips filled={progress?.qualifyingCount ?? 0} total={progress?.cap ?? 6} />
-              )
-            }
-          >
-            <AnimatedNumber value={progress?.qualifyingCount ?? 0} />
-            <span className="text-lg text-slate-500"> / {progress?.cap ?? 6}</span>
-          </StatTile>
-          <StatTile label="Problems cleared" accent="#a78bfa" delay={220} sub={<span>{dailyPct >= 1 ? 'Daily cap reached today' : 'Each clear scores XP'}</span>}>
+          <StatTile label="Problems cleared" accent="#a78bfa" delay={160}>
             <AnimatedNumber value={scoreData?.scores.length ?? 0} />
           </StatTile>
           <StatTile
+            className="col-span-2 sm:col-span-1"
             label="Zones held"
             accent="#fbbf24"
-            delay={280}
+            delay={220}
             sub={
-              <span className="flex items-center gap-2.5">
-                {(Object.keys(tierMix) as Tier[])
-                  .filter((t) => tierMix[t] > 0)
-                  .map((t) => (
-                    <span key={t} className="flex items-center gap-1" style={{ color: TIER_META[t].accent }} title={TIER_META[t].label}>
-                      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor">
-                        <path d={TIER_META[t].icon} />
-                      </svg>
-                      <span className="font-mono font-bold">{tierMix[t]}</span>
-                    </span>
-                  ))}
-                {territories.length === 0 && <span>None yet</span>}
-              </span>
+              territories.length === 0 ? (
+                <span>None yet</span>
+              ) : (
+                <span className="flex items-center gap-2.5">
+                  {(Object.keys(tierMix) as Tier[])
+                    .filter((t) => tierMix[t] > 0)
+                    .map((t) => (
+                      <span key={t} className="flex items-center gap-1" style={{ color: TIER_META[t].accent }} title={TIER_META[t].label}>
+                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor">
+                          <path d={TIER_META[t].icon} />
+                        </svg>
+                        <span className="font-mono font-bold">{tierMix[t]}</span>
+                      </span>
+                    ))}
+                </span>
+              )
             }
           >
             <AnimatedNumber value={territories.length} />
@@ -328,30 +302,21 @@ export default function ScoringDashboard() {
               </Link>
             </div>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {territories.map((t, i) => {
                 const meta = TIER_META[tierOf(t.territory.tier)];
                 return (
                   <Link
                     key={t.id}
                     to={`/map?territory=${t.territory.id}`}
-                    className="group hud-panel hud-panel-quiet relative overflow-hidden p-4 transition-all hover:-translate-y-1 animate-fade-in-up"
-                    style={{ animationDelay: `${Math.min(i, 10) * 45}ms`, borderColor: `${meta.accent}44` }}
+                    title="Show on map"
+                    className="group hud-panel hud-panel-quiet relative flex items-center gap-3 overflow-hidden py-2.5 pl-4 pr-3 transition-colors hover:border-cyan-400/40 animate-fade-in-up"
+                    style={{ animationDelay: `${Math.min(i, 10) * 35}ms` }}
                   >
-                    <span className="absolute inset-y-0 left-0 w-1" style={{ background: meta.accent, boxShadow: `0 0 14px ${meta.accent}` }} />
-                    <span className="pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full opacity-20 blur-2xl transition-opacity group-hover:opacity-50" style={{ background: meta.accent }} />
-                    <div className="flex items-start justify-between gap-3 pl-1">
-                      <div className="min-w-0">
-                        <p className="font-display truncate text-xl font-bold tracking-wide text-slate-50">{t.territory.name}</p>
-                        <p className="mt-0.5 text-xs text-slate-500">
-                          via {t.sourceType.toLowerCase()} · {new Date(t.assignedAt).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <TierBadge tier={t.territory.tier} />
-                    </div>
-                    <p className="mt-3 flex items-center gap-1.5 pl-1 text-xs font-bold uppercase tracking-wide text-cyan-300 opacity-70 transition-opacity group-hover:opacity-100">
-                      <Icon name="map" className="h-3.5 w-3.5" /> Show on map <Icon name="arrowRight" className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
-                    </p>
+                    <span className="absolute inset-y-0 left-0 w-1" style={{ background: meta.accent, opacity: 0.8 }} />
+                    <p className="font-display min-w-0 flex-1 truncate text-lg font-bold tracking-wide text-slate-50">{t.territory.name}</p>
+                    <TierBadge tier={t.territory.tier} />
+                    <Icon name="arrowRight" className="h-4 w-4 shrink-0 text-slate-600 transition-all group-hover:translate-x-0.5 group-hover:text-cyan-300" />
                   </Link>
                 );
               })}
@@ -371,30 +336,33 @@ export default function ScoringDashboard() {
           >
             Achievements
           </SectionTitle>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {achievements.map((a, i) => (
               <div
                 key={a.id}
-                className={`hud-panel hud-panel-quiet relative overflow-hidden p-3.5 text-center transition-all animate-fade-in-up ${a.unlocked ? 'hover:-translate-y-1' : ''}`}
-                style={{ animationDelay: `${Math.min(i, 12) * 40}ms`, borderColor: a.unlocked ? `${a.color}66` : undefined, boxShadow: a.unlocked ? `0 0 28px -12px ${a.color}` : undefined }}
+                className="hud-panel hud-panel-quiet flex items-center gap-3 p-2.5 animate-fade-in-up"
+                style={{ animationDelay: `${Math.min(i, 12) * 30}ms`, borderColor: a.unlocked ? `${a.color}55` : undefined }}
                 title={a.description}
               >
-                <div className="relative mx-auto mb-2 h-14 w-14">
+                <div className="relative h-11 w-11 shrink-0">
                   <div className="hex absolute inset-0" style={{ background: a.unlocked ? `linear-gradient(160deg, ${a.color}, ${a.color}44)` : 'rgba(51,65,85,0.6)' }} />
                   <div className="hex absolute inset-[2px] flex items-center justify-center bg-slate-950">
-                    <Icon name={a.unlocked ? a.icon : 'lock'} className="h-6 w-6" style={{ color: a.unlocked ? a.color : '#475569', filter: a.unlocked ? `drop-shadow(0 0 6px ${a.color})` : undefined }} />
+                    <Icon name={a.unlocked ? a.icon : 'lock'} className="h-5 w-5" style={{ color: a.unlocked ? a.color : '#475569' }} />
                   </div>
                 </div>
-                <p className={`font-display text-sm font-bold uppercase tracking-wide ${a.unlocked ? 'text-slate-50' : 'text-slate-500'}`}>{a.name}</p>
-                <p className="mt-0.5 text-[0.7rem] leading-snug text-slate-500">{a.description}</p>
-                {!a.unlocked && (
-                  <div className="mt-2">
-                    <XPBar pct={a.progress / a.target} tone="cyan" height={5} />
-                    <p className="mt-0.5 font-mono text-[0.62rem] font-bold tabular-nums text-slate-500">
-                      {a.progress}/{a.target}
-                    </p>
-                  </div>
-                )}
+                <div className="min-w-0 flex-1">
+                  <p className={`font-display truncate text-sm font-bold uppercase tracking-wide ${a.unlocked ? 'text-slate-50' : 'text-slate-500'}`}>{a.name}</p>
+                  {a.unlocked ? (
+                    <p className="truncate text-[0.7rem] text-slate-500">{a.description}</p>
+                  ) : (
+                    <div className="mt-1 flex items-center gap-2">
+                      <XPBar pct={a.progress / a.target} tone="cyan" height={4} className="flex-1" />
+                      <span className="font-mono text-[0.62rem] font-bold tabular-nums text-slate-500">
+                        {a.progress}/{a.target}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -423,7 +391,7 @@ export default function ScoringDashboard() {
                       </td>
                     </tr>
                   )}
-                  {scoreData?.scores.map((s) => (
+                  {(showAllSolves ? scoreData?.scores : scoreData?.scores.slice(0, SOLVES_SHOWN))?.map((s) => (
                     <tr key={s.id} className="border-t border-slate-800/80 transition-colors hover:bg-cyan-400/5">
                       <td className="whitespace-nowrap p-3 text-slate-300">{new Date(s.createdAt).toLocaleString()}</td>
                       <td className="p-3 text-right font-mono">{s.difficultyWeight}</td>
@@ -438,6 +406,11 @@ export default function ScoringDashboard() {
               </table>
             </div>
           </div>
+          {(scoreData?.scores.length ?? 0) > SOLVES_SHOWN && (
+            <button type="button" onClick={() => setShowAllSolves((v) => !v)} className="btn-ghost mx-auto mt-3 h-9 rounded-lg px-4 text-xs font-bold uppercase tracking-wide">
+              {showAllSolves ? 'Show fewer' : `Show all ${scoreData?.scores.length}`}
+            </button>
+          )}
         </section>
       </div>
     </div>
