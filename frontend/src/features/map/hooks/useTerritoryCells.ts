@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import { fetchTerritoryCells } from '../../../lib/api';
 import { getSocket } from '../../../lib/socket';
 import type { TerritoryCellDto } from '../../../lib/api';
@@ -6,12 +6,29 @@ import type { TerritoryCellDto } from '../../../lib/api';
 export function useTerritoryCells() {
   const [cells, setCells] = useState<TerritoryCellDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  const retry = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    setAttempt((n) => n + 1);
+  }, []);
 
   useEffect(() => {
-    fetchTerritoryCells().then((data) => {
-      setCells(data);
-      setLoading(false);
-    });
+    let cancelled = false;
+
+    fetchTerritoryCells()
+      .then((data) => {
+        if (cancelled) return;
+        setCells(data);
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : 'Could not load the territory grid');
+        setLoading(false);
+      });
 
     const socket = getSocket();
     const handleUpdate = (payload: {
@@ -23,19 +40,16 @@ export function useTerritoryCells() {
       ownerColor: string;
     }) => {
       setCells((prev) =>
-        prev.map((c) =>
-          c.id === payload.cellId
-            ? { ...c, ownerId: payload.ownerId, ownerColor: payload.ownerColor }
-            : c,
-        ),
+        prev.map((c) => (c.id === payload.cellId ? { ...c, ownerId: payload.ownerId, ownerColor: payload.ownerColor } : c)),
       );
     };
 
     socket.on('cell:updated', handleUpdate);
     return () => {
+      cancelled = true;
       socket.off('cell:updated', handleUpdate);
     };
-  }, []);
+  }, [attempt]);
 
   const cellsByTerritory = useMemo(() => {
     const grouped: Record<string, TerritoryCellDto[]> = {};
@@ -45,5 +59,5 @@ export function useTerritoryCells() {
     return grouped;
   }, [cells]);
 
-  return { cells, cellsByTerritory, loading };
+  return { cells, cellsByTerritory, loading, error, retry };
 }

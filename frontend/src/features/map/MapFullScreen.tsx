@@ -1,371 +1,581 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TransformWrapper, TransformComponent, type ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
-import { CampusMap } from './CampusMap';
-import { LeaderboardPanel } from './LeaderboardPanel';
-import { TerritoryLeaderboard } from './TerritoryLeaderboard';
 import { useTerritories } from './hooks/useTerritories';
 import { useTerritoryCells } from './hooks/useTerritoryCells';
-import { getSocket } from '../../lib/socket';
+import { useCollegeLeaderboard } from './hooks/useLeaderboard';
 import { useAuth } from '../../auth/AuthContext';
-import { EMPTY_ZONE_TAP } from '../../lib/flavorText';
-import type { TerritoryDto } from '../../types/territory';
-import type { TerritoryCellDto } from '../../lib/api';
-import { createChallenge } from '../contest/api';
-import { ToastStack } from '../../components/ToastStack';
+import { usePlayerStats } from '../../lib/playerStatsContext';
 import { useToasts } from '../../lib/useToasts';
 import { getApiErrorMessage } from '../../lib/apiError';
-import campusMapSvg from '../../assets/campus-map.svg?raw';
+import { sfx } from '../../lib/sfx';
+import { ToastStack } from '../../components/ToastStack';
+import { Icon } from '../../components/ui/Icon';
+import { createChallenge } from '../contest/api';
+import { MapEngine, type HoverInfo } from './world/engine';
+import { getWorld, sectorOf, toMeters } from './world/campus';
+import type { Zone } from './world/geometry';
+import type { TerritoryCellDto } from '../../lib/api';
+import { LeaderboardPanel } from './LeaderboardPanel';
+import { PlayerCard } from './hud/PlayerCard';
+import { LocationChip, ZoneSplash, type Splash } from './hud/LocationBanner';
+import { Minimap } from './hud/Minimap';
+import { ControlsDock } from './hud/ControlsDock';
+import { ZonePanel } from './hud/ZonePanel';
+import { QuickTravel } from './hud/QuickTravel';
+import { LiveFeed, type FeedItem } from './hud/LiveFeed';
+import { TravelBar } from './hud/TravelBar';
+import { ActionHints, FirstRunHint } from './hud/ActionHints';
+import { HelpOverlay } from './hud/HelpOverlay';
+import { Joystick } from './hud/Joystick';
+import { HoverTooltip } from './hud/HoverTooltip';
+import { ChallengeModal } from './hud/ChallengeModal';
+import { summarizeZone, type ZoneSummary } from './hud/zoneSummary';
+import { useEngineStats } from './hud/useEngineStats';
 
-const DURATION_OPTIONS = [
-  { label: '5 min', seconds: 300 },
-  { label: '10 min', seconds: 600 },
-  { label: '15 min', seconds: 900 },
-];
+const FEED_TTL_MS = 12000;
+const SPLASH_MS = 2600;
 
-const ENTER_CELL_DETAIL = 3.2;
-const EXIT_CELL_DETAIL = 2.2;
-const MIN_SCALE = 0.6;
-const MAX_SCALE = 12;
-const TICKER_TTL_MS = 8000;
-const NAV_HINT_TTL_MS = 6000;
+const posKey = (uid: string) => `cc.map.pos.v1:${uid}`;
+const exploredKey = (uid: string) => `cc.map.explored.v1:${uid}`;
+const WELCOME_KEY = 'cc.map.welcomed.v1';
 
-interface TickerEntry {
-  id: string;
-  text: string;
+function readJson<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
 }
 
-interface CapturePing {
-  svgPathId: string;
-  nonce: number;
+function writeJson(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // progress is a convenience; losing it must never break the map
+  }
+}
+
+function isTypingTarget(t: EventTarget | null) {
+  return t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName));
 }
 
 export function MapFullScreen() {
-  const { territories, loading: territoriesLoading } = useTerritories();
-  const { cellsByTerritory, loading: cellsLoading } = useTerritoryCells();
+  const { territories, loading: territoriesLoading, error: territoriesError, retry: retryTerritories } = useTerritories();
+  const { cellsByTerritory, loading: cellsLoading, error: cellsError, retry: retryCells } = useTerritoryCells();
+  const { entries: boardEntries, loading: boardLoading } = useCollegeLeaderboard();
   const { user, flavorTextEnabled } = useAuth();
+  const { refresh: refreshStats } = usePlayerStats();
   const navigate = useNavigate();
   const { toasts, push, dismiss } = useToasts();
-  const [challengeTarget, setChallengeTarget] = useState<{ cell: TerritoryCellDto; territory: TerritoryDto } | null>(
-    null,
-  );
-  const [challengeDuration, setChallengeDuration] = useState(600);
+
+  const userId = user?.userId ?? null;
+  const world = getWorld();
+  const [engine] = useState(() => new MapEngine(world));
+  const stats = useEngineStats(engine);
+  const hostRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const nextId = useRef(1);
+
+  const [isTouch] = useState(() => window.matchMedia('(pointer: coarse)').matches);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [currentZoneId, setCurrentZoneId] = useState<string | null>(null);
+  const [hover, setHover] = useState<HoverInfo | null>(null);
+  const [challenge, setChallenge] = useState<{ cell: TerritoryCellDto; zone: Zone } | null>(null);
   const [challengeBusy, setChallengeBusy] = useState(false);
-  const [scale, setScale] = useState(1);
-  const [showCellDetail, setShowCellDetail] = useState(false);
-  const [showLeaderboard, setShowLeaderboard] = useState(false);
-  const [selectedTerritory, setSelectedTerritory] = useState<TerritoryDto | null>(null);
-  const [emptyZoneNote, setEmptyZoneNote] = useState(false);
-  const [ticker, setTicker] = useState<TickerEntry[]>([]);
-  const [showNavHint, setShowNavHint] = useState(true);
-  const [hoveredTerritory, setHoveredTerritory] = useState<TerritoryDto | null>(null);
-  const [pointer, setPointer] = useState({ x: 0, y: 0 });
-  const [capturePing, setCapturePing] = useState<CapturePing | null>(null);
-  const transformRef = useRef<ReactZoomPanPinchRef>(null);
-  const showCellDetailRef = useRef(false);
+  const [showBoard, setShowBoard] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const [travelSnapshot, setTravelSnapshot] = useState<{ x: number; y: number; explored: Set<string> } | null>(null);
+  const [pinnedId, setPinnedId] = useState<string | null>(null);
+  const [travelTarget, setTravelTarget] = useState<string | null>(null);
+  const [splash, setSplash] = useState<Splash | null>(null);
+  const [feed, setFeed] = useState<FeedItem[]>([]);
+  const [welcome, setWelcome] = useState(() => {
+    try {
+      return localStorage.getItem(WELCOME_KEY) === null;
+    } catch {
+      return false;
+    }
+  });
 
+  const ready = !territoriesLoading && !cellsLoading && !territoriesError && !cellsError;
+  const loadError = territoriesError ?? cellsError;
+
+  // ---- derived per-zone summaries (names, tiers, ownership) --------------
+  const summaries = useMemo(() => {
+    const map = new Map<string, ZoneSummary>();
+    for (const z of world.campus.zones) {
+      const t = territories[z.id];
+      map.set(z.id, summarizeZone(z.id, t, t ? (cellsByTerritory[t.id] ?? []) : [], userId));
+    }
+    return map;
+  }, [world, territories, cellsByTerritory, userId]);
+
+  const summaryList = useMemo(() => [...summaries.values()], [summaries]);
+  const heldCount = useMemo(() => summaryList.filter((s) => s.owned > 0).length, [summaryList]);
+
+  const selected = selectedId ? (summaries.get(selectedId) ?? null) : null;
+  const current = currentZoneId ? (summaries.get(currentZoneId) ?? null) : null;
+  const hoverSummary = hover ? (summaries.get(hover.zoneId) ?? null) : null;
+
+  const nameFor = useCallback((ownerId: string | null) => boardEntries.find((e) => e.userId === ownerId)?.name ?? null, [boardEntries]);
+
+  const pushFeed = useCallback((item: Omit<FeedItem, 'id'>) => {
+    const id = nextId.current++;
+    setFeed((prev) => [{ ...item, id }, ...prev].slice(0, 4));
+    window.setTimeout(() => setFeed((prev) => prev.filter((f) => f.id !== id)), FEED_TTL_MS);
+  }, []);
+
+  // ---- engine lifecycle ---------------------------------------------------
   useEffect(() => {
-    const interval = setInterval(() => {
-      const currentScale = transformRef.current?.state?.scale;
-      if (currentScale === undefined) return;
-
-      setScale((prev) => (currentScale !== prev ? currentScale : prev));
-
-      if (!showCellDetailRef.current && currentScale >= ENTER_CELL_DETAIL) {
-        showCellDetailRef.current = true;
-        setShowCellDetail(true);
-      } else if (showCellDetailRef.current && currentScale <= EXIT_CELL_DETAIL) {
-        showCellDetailRef.current = false;
-        setShowCellDetail(false);
+    const canvas = canvasRef.current;
+    const host = hostRef.current;
+    if (!canvas || !host) return;
+    engine.attach(canvas, host);
+    return () => {
+      if (userId) {
+        writeJson(posKey(userId), engine.getPlayerPos());
+        writeJson(exploredKey(userId), engine.getExplored());
       }
-    }, 100);
-    return () => clearInterval(interval);
+      engine.detach();
+    };
+  }, [engine, userId]);
+
+  // Events from the engine. Wrapped in an Effect Event so they always see the
+  // latest summaries / flags without re-subscribing the engine.
+  const handleZoneChange = useEffectEvent((zone: Zone | null, traveling: boolean) => {
+    setCurrentZoneId(zone?.id ?? null);
+    // While auto-running through town, only discoveries earn a banner.
+    if (!zone || traveling) return;
+    const summary = summaries.get(zone.id);
+    if (!summary) return;
+    sfx.play('zone');
+    setSplash({ key: nextId.current++, kind: 'enter', summary });
+  });
+
+  const handleDiscover = useEffectEvent((zone: Zone, found: number, total: number) => {
+    const summary = summaries.get(zone.id);
+    if (!summary) return;
+    sfx.play('discover');
+    setSplash({ key: nextId.current++, kind: 'discover', summary, progress: { found, total } });
+    pushFeed({ kind: 'discover', color: '#fbbf24', text: `Discovered ${summary.name} (${found}/${total} explored)` });
+    if (userId) writeJson(exploredKey(userId), engine.getExplored());
+  });
+
+  const handleCapture = useEffectEvent((e: { zone: Zone; cell: TerritoryCellDto; byMe: boolean }) => {
+    const name = summaries.get(e.zone.id)?.name ?? e.zone.id;
+    const who = e.byMe ? 'You' : (nameFor(e.cell.ownerId) ?? 'A rival');
+    sfx.play('capture');
+    pushFeed({
+      kind: e.byMe ? 'mine' : 'capture',
+      color: e.cell.ownerColor,
+      text: flavorTextEnabled ? (e.byMe ? `Flag planted in ${name}!` : `${who} took ground in ${name}.`) : `${who} captured a cell in ${name}.`,
+    });
+    if (e.byMe) void refreshStats();
+  });
+
+  const handleTravel = useEffectEvent((event: 'start' | 'arrive' | 'cancel', zone: Zone | null) => {
+    if (event === 'start') {
+      setTravelTarget(zone ? (summaries.get(zone.id)?.name ?? null) : null);
+      setSelectedId(null);
+      sfx.play('travel');
+    } else if (event === 'arrive') {
+      setTravelTarget(null);
+      sfx.play('arrive');
+      // Walking up to a zone should end with its details in front of you.
+      if (zone) engine.selectZone(zone.id);
+    } else {
+      setTravelTarget(null);
+    }
+  });
+
+  const handleHover = useEffectEvent((info: HoverInfo | null) => setHover(info));
+  const handleSelect = useEffectEvent((id: string | null) => {
+    setSelectedId(id);
+    if (id) sfx.play('click');
+  });
+  const handleCellChallenge = useEffectEvent((cell: TerritoryCellDto, zone: Zone) => setChallenge({ cell, zone }));
+  const handleMoved = useEffectEvent((pos: { x: number; y: number }) => {
+    if (userId) writeJson(posKey(userId), pos);
+  });
+  const handleInteract = useEffectEvent(() => {
+    if (!currentZoneId) return;
+    engine.selectZone(selectedId === currentZoneId ? null : currentZoneId);
+  });
+
+  useEffect(() => {
+    engine.setHandlers({
+      onZoneChange: (z, _prev, traveling) => handleZoneChange(z, traveling),
+      onDiscover: (z, f, t) => handleDiscover(z, f, t),
+      onCapture: (e) => handleCapture(e),
+      onTravel: (ev, z) => handleTravel(ev, z),
+      onHover: (info) => handleHover(info),
+      onSelect: (id) => handleSelect(id),
+      onCellChallenge: (c, z) => handleCellChallenge(c, z),
+      onPlayerMoved: (p) => handleMoved(p),
+      onInteract: () => handleInteract(),
+    });
+  }, [engine]);
+
+  // Feed the engine its player + world data once everything has loaded.
+  useEffect(() => {
+    if (!ready) return;
+    engine.setUser({
+      userId,
+      startPos: userId ? readJson<{ x: number; y: number }>(posKey(userId)) : null,
+      explored: userId ? (readJson<string[]>(exploredKey(userId)) ?? []) : null,
+    });
+  }, [engine, ready, userId]);
+
+  useEffect(() => {
+    if (ready) engine.setData(territories, cellsByTerritory);
+  }, [engine, ready, territories, cellsByTerritory]);
+
+  // Pause walking while a dialog owns the keyboard.
+  useEffect(() => {
+    engine.setInputEnabled(!challenge && !showHelp);
+  }, [engine, challenge, showHelp]);
+
+  useEffect(() => {
+    engine.setWaypoint(pinnedId);
+  }, [engine, pinnedId]);
+
+  useEffect(() => {
+    if (!splash) return;
+    const t = window.setTimeout(() => setSplash(null), SPLASH_MS);
+    return () => window.clearTimeout(t);
+  }, [splash]);
+
+  useEffect(() => {
+    if (!welcome) return;
+    const t = window.setTimeout(() => setWelcome(false), 16000);
+    return () => window.clearTimeout(t);
+  }, [welcome]);
+
+  // ---- actions ------------------------------------------------------------
+  const dismissWelcome = useCallback(() => {
+    setWelcome(false);
+    try {
+      localStorage.setItem(WELCOME_KEY, '1');
+    } catch {
+      // ignore
+    }
   }, []);
 
+  const openTravel = useCallback(() => {
+    setTravelSnapshot((prev) => (prev ? null : { ...engine.getPlayerPos(), explored: new Set(engine.getExplored()) }));
+    setShowBoard(false);
+  }, [engine]);
+
+  const distances = useMemo(() => {
+    const out: Record<string, number> = {};
+    if (!travelSnapshot) return out;
+    for (const z of world.campus.zones) out[z.id] = toMeters(Math.hypot(z.anchor.x - travelSnapshot.x, z.anchor.y - travelSnapshot.y));
+    return out;
+  }, [travelSnapshot, world]);
+
+  const travelToZone = useCallback(
+    (id: string, boost = false) => {
+      engine.travelToZone(id, { boost });
+      setTravelSnapshot(null);
+    },
+    [engine],
+  );
+
+  const handleKey = useEffectEvent((e: KeyboardEvent) => {
+    if (isTypingTarget(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
+    switch (e.key) {
+      case 'l':
+      case 'L':
+        setShowBoard((v) => !v);
+        setTravelSnapshot(null);
+        break;
+      case 'f':
+      case 'F':
+        e.preventDefault();
+        openTravel();
+        break;
+      case '?':
+      case 'h':
+      case 'H':
+        setShowHelp((v) => !v);
+        break;
+      case 't':
+      case 'T':
+        if (selectedId) travelToZone(selectedId);
+        break;
+      case 'Escape':
+        if (showHelp) setShowHelp(false);
+        else if (travelSnapshot) setTravelSnapshot(null);
+        else if (selectedId) engine.selectZone(null);
+        else if (showBoard) setShowBoard(false);
+        break;
+      default:
+    }
+  });
+
   useEffect(() => {
-    const timer = setTimeout(() => setShowNavHint(false), NAV_HINT_TTL_MS);
-    return () => clearTimeout(timer);
+    const onKey = (e: KeyboardEvent) => handleKey(e);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  useEffect(() => {
-    if (!flavorTextEnabled) return;
-    const socket = getSocket();
-
-    const handleCellUpdate = (payload: { territoryId: string; ownerId: string | null }) => {
-      const territory = Object.values(territories).find((t) => t.id === payload.territoryId);
-      if (!territory || !payload.ownerId) return;
-
-      const entry: TickerEntry = {
-        id: `${payload.territoryId}-${Date.now()}`,
-        text: `Zone captured: ${territory.name} has changed hands.`,
-      };
-      setTicker((prev) => [entry, ...prev].slice(0, 3));
-      setTimeout(() => {
-        setTicker((prev) => prev.filter((t) => t.id !== entry.id));
-      }, TICKER_TTL_MS);
-    };
-
-    socket.on('cell:updated', handleCellUpdate);
-    return () => {
-      socket.off('cell:updated', handleCellUpdate);
-    };
-  }, [territories, flavorTextEnabled]);
-
-  // Radar-ping on capture — a visual effect, not narrative copy, so unlike
-  // the ticker above it fires regardless of the flavor-text toggle.
-  useEffect(() => {
-    const socket = getSocket();
-
-    const handleCellCaptured = (payload: { territoryId: string; ownerId: string | null }) => {
-      if (!payload.ownerId) return;
-      const territory = Object.values(territories).find((t) => t.id === payload.territoryId);
-      if (!territory) return;
-      setCapturePing({ svgPathId: territory.svgPathId, nonce: Date.now() });
-    };
-
-    socket.on('cell:updated', handleCellCaptured);
-    return () => {
-      socket.off('cell:updated', handleCellCaptured);
-    };
-  }, [territories]);
-
-  if (territoriesLoading || cellsLoading) {
-    return (
-      <div className="w-full h-[calc(100vh-4rem)] flex items-center justify-center hud-grid-bg text-slate-400">
-        Loading map…
-      </div>
-    );
-  }
-
-  const zoomIn = () => transformRef.current?.zoomIn(0.5, 200, 'easeOut');
-  const zoomOut = () => transformRef.current?.zoomOut(0.5, 200, 'easeOut');
-  const resetView = () => transformRef.current?.resetTransform(300, 'easeOut');
-
-  async function handleConfirmChallenge() {
-    if (!challengeTarget) return;
+  async function confirmChallenge(durationSeconds: number) {
+    if (!challenge) return;
     setChallengeBusy(true);
     try {
-      const contest = await createChallenge(challengeTarget.cell.id, { durationSeconds: challengeDuration });
-      setChallengeTarget(null);
+      const contest = await createChallenge(challenge.cell.id, { durationSeconds });
+      setChallenge(null);
       navigate(`/contest/${contest.id}`);
     } catch (err: unknown) {
+      sfx.play('error');
       push(getApiErrorMessage(err, 'Could not send challenge'), 'warning');
     } finally {
       setChallengeBusy(false);
     }
   }
 
-  function handleTerritoryClick(territory: TerritoryDto) {
-    if (territory.ownerId) {
-      setSelectedTerritory(territory);
-      setEmptyZoneNote(false);
-    } else {
-      setSelectedTerritory(null);
-      setEmptyZoneNote(true);
-      setTimeout(() => setEmptyZoneNote(false), 4000);
-    }
-  }
-
-  const territoryList = Object.values(territories);
-  const capturedCount = territoryList.filter((t) => t.ownerId).length;
-  const totalCount = territoryList.length;
+  const waypointSummary = pinnedId ? summaries.get(pinnedId) : null;
+  const challengeSummary = challenge ? summaries.get(challenge.zone.id) : null;
+  const hoverNote =
+    hover?.cell && hoverSummary
+      ? hover.challengeable
+        ? 'Rival cell · click to challenge'
+        : hover.cell.ownerId
+          ? 'Your cell'
+          : 'Unclaimed cell'
+      : null;
+  const showZonePanel = !!selected && !stats.traveling;
+  const loadingLabel = flavorTextEnabled ? 'Surveying the campus…' : 'Loading map…';
 
   return (
     <div
-      className="relative w-full h-[calc(100vh-4rem)] overflow-hidden bg-[#0A0E14]"
-      onMouseMove={(e) => setPointer({ x: e.clientX, y: e.clientY })}
+      ref={hostRef}
+      className="relative w-full overflow-hidden bg-[#03060b]"
+      style={{ height: 'calc(100dvh - var(--nav-h) - var(--tabbar-h))' }}
     >
-      <ToastStack toasts={toasts} dismiss={dismiss} />
-      <TransformWrapper
-        ref={transformRef}
-        initialScale={1}
-        minScale={MIN_SCALE}
-        maxScale={MAX_SCALE}
-        wheel={{ step: 0.08 }}
-        pinch={{ step: 5 }}
-        doubleClick={{ mode: 'zoomIn', step: 0.7, animationTime: 200 }}
-        panning={{ velocityDisabled: false, excluded: [] }}
-        onPanningStart={() => setShowNavHint(false)}
-      >
-        <TransformComponent
-          wrapperStyle={{ width: '100%', height: '100%', cursor: 'grab' }}
-          contentStyle={{ width: '100%', aspectRatio: '3018 / 1597' }}
-        >
-          <CampusMap
-            svgMarkup={campusMapSvg}
-            territories={territories}
-            cellsByTerritory={cellsByTerritory}
-            showCellDetail={showCellDetail}
-            hoveredSvgPathId={hoveredTerritory?.svgPathId ?? null}
-            capturePing={capturePing}
-            currentUserId={user?.userId ?? null}
-            onTerritoryClick={handleTerritoryClick}
-            onTerritoryHover={setHoveredTerritory}
-            onCellChallenge={(cell, territory) => {
-              setChallengeDuration(600);
-              setChallengeTarget({ cell, territory });
-            }}
-          />
-        </TransformComponent>
-      </TransformWrapper>
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 block touch-none select-none outline-none"
+        role="application"
+        aria-label="Interactive campus map. Move with W A S D or the arrow keys, click a zone to inspect it."
+      />
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{ background: 'radial-gradient(ellipse at 50% 45%, transparent 52%, rgba(2,6,12,0.62) 100%)' }}
+      />
 
-      <div className="absolute top-6 left-6 pointer-events-none select-none">
-        <h2
-          className="text-xl tracking-[0.08em] text-cyan-400 drop-shadow-[0_0_12px_rgba(34,211,238,0.4)]"
-          style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700 }}
-        >
-          TERRITORY CONTROL — THAPAR CAMPUS
-        </h2>
-        <div className="mt-2 flex items-center gap-2">
-          <div className="w-32 h-1.5 rounded-full bg-slate-800/80 overflow-hidden border border-slate-700/50">
-            <div
-              className="h-full bg-gradient-to-r from-cyan-400 to-teal-300 transition-[width] duration-500"
-              style={{ width: `${totalCount > 0 ? (capturedCount / totalCount) * 100 : 0}%` }}
-            />
+      {ready && (
+        <>
+          {/* top-left: commander + exploration */}
+          <div className="absolute left-3 top-3 z-10 flex flex-col gap-2">
+            <PlayerCard />
+            <div className="hud-panel hud-panel-quiet hidden w-[19.5rem] items-center gap-3 px-3 py-2 animate-slide-in-left sm:flex">
+              <div className="min-w-0 flex-1">
+                <p className="hud-label !text-[0.6rem] !tracking-[0.14em]">Explored</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <div className="xp-track !h-1.5 flex-1">
+                    <div className="xp-fill xp-fill-cyan" style={{ width: `${(stats.explored / Math.max(1, world.campus.zones.length)) * 100}%` }} />
+                  </div>
+                  <span className="font-mono text-[0.66rem] font-bold tabular-nums text-cyan-200">
+                    {stats.explored}/{world.campus.zones.length}
+                  </span>
+                </div>
+              </div>
+              <div className="h-7 w-px bg-slate-700/70" />
+              <div className="text-right">
+                <p className="hud-label !text-[0.6rem] !tracking-[0.14em]">Zones held</p>
+                <p className="font-mono text-[0.78rem] font-bold tabular-nums text-slate-100">
+                  {heldCount}
+                  <span className="text-slate-500">/{summaryList.length}</span>
+                </p>
+              </div>
+            </div>
+            <div className="hidden sm:block">
+              <LiveFeed items={feed} />
+            </div>
           </div>
-          <span className="text-xs text-slate-400 tracking-wide">
-            {capturedCount}/{totalCount} zones held
-          </span>
-        </div>
-      </div>
 
-      {hoveredTerritory && (
-        <div
-          className="fixed z-30 pointer-events-none px-3 py-2 rounded-lg bg-black/85 border border-cyan-600/40 backdrop-blur text-xs text-slate-200 max-w-[220px] shadow-lg shadow-black/50 animate-fade-in-up"
-          style={{ left: pointer.x + 18, top: pointer.y + 18 }}
-        >
-          <div className="font-semibold text-cyan-300 text-sm">{hoveredTerritory.name}</div>
-          <div className="text-slate-400 mt-0.5 uppercase tracking-wide">{hoveredTerritory.tier}</div>
-          <div className="mt-1">
-            {hoveredTerritory.ownerId ? (
-              <span className="text-emerald-400">● Held</span>
-            ) : (
-              <span className="text-slate-500">○ Unclaimed</span>
+          {/* top-center: where you are */}
+          <div className="pointer-events-none absolute inset-x-0 top-3 z-10 hidden justify-center sm:flex">
+            <div className="pointer-events-auto">
+              <LocationChip summary={current} sector={stats.sector} />
+            </div>
+          </div>
+          <div className="pointer-events-none absolute inset-x-0 top-[4.9rem] z-10 flex justify-center sm:hidden">
+            <div className="pointer-events-auto">
+              <LocationChip summary={current} sector={stats.sector} />
+            </div>
+          </div>
+          <ZoneSplash splash={splash} />
+
+          {/* top-right: panels */}
+          <div className="absolute right-3 top-3 z-10 flex flex-col items-end gap-2 max-sm:top-[8.4rem]">
+            <div className="hud-panel hud-panel-quiet flex items-center gap-1 p-1 animate-slide-in-right">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowBoard((v) => !v);
+                  setTravelSnapshot(null);
+                }}
+                aria-pressed={showBoard}
+                className={`btn-ghost h-9 gap-1.5 rounded-lg px-2.5 text-xs font-bold uppercase tracking-wide ${showBoard ? '!border-amber-400/70 !text-amber-200' : ''}`}
+              >
+                <Icon name="trophy" className="h-4 w-4" />
+                <span className="hidden sm:inline">Ranks</span>
+                <span className="keycap hidden lg:inline-flex">L</span>
+              </button>
+              <button
+                type="button"
+                onClick={openTravel}
+                aria-pressed={!!travelSnapshot}
+                className={`btn-ghost h-9 gap-1.5 rounded-lg px-2.5 text-xs font-bold uppercase tracking-wide ${travelSnapshot ? '!border-cyan-400/70 !text-cyan-200' : ''}`}
+              >
+                <Icon name="compass" className="h-4 w-4" />
+                <span className="hidden sm:inline">Travel</span>
+                <span className="keycap hidden lg:inline-flex">F</span>
+              </button>
+              <button type="button" onClick={() => setShowHelp(true)} aria-label="Controls help" className="btn-ghost h-9 w-9 rounded-lg">
+                <Icon name="help" className="h-4 w-4" />
+              </button>
+            </div>
+            {showBoard && <LeaderboardPanel entries={boardEntries} loading={boardLoading} onClose={() => setShowBoard(false)} />}
+          </div>
+
+          {/* minimap: bottom-left on desktop, top-right on phones */}
+          <div className="absolute bottom-3 left-3 z-10 max-sm:bottom-auto max-sm:left-auto max-sm:right-3 max-sm:top-3">
+            <Minimap engine={engine} />
+          </div>
+
+          {/* bottom-center: the contextual stack */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex flex-col items-center gap-2 px-2 max-sm:bottom-2">
+            {welcome && !selected && (
+              <div className="pointer-events-auto">
+                <FirstRunHint onDismiss={dismissWelcome} touch={isTouch} />
+              </div>
+            )}
+            {showZonePanel && selected && (
+              <div className="pointer-events-auto">
+                <ZonePanel
+                  summary={selected}
+                  territory={territories[selected.id] ?? null}
+                  sector={sectorOf(world.campus, world.campus.byId.get(selected.id)?.anchor.x ?? 0, world.campus.byId.get(selected.id)?.anchor.y ?? 0)}
+                  distanceMeters={(() => {
+                    const z = world.campus.byId.get(selected.id);
+                    return z ? toMeters(Math.hypot(z.anchor.x - stats.px, z.anchor.y - stats.py)) : null;
+                  })()}
+                  here={currentZoneId === selected.id}
+                  pinned={pinnedId === selected.id}
+                  onTravel={() => travelToZone(selected.id)}
+                  onDive={() => engine.focusZone(selected.id)}
+                  onPin={() => setPinnedId((p) => (p === selected.id ? null : selected.id))}
+                  onClose={() => engine.selectZone(null)}
+                />
+              </div>
+            )}
+            {stats.traveling && (
+              <div className="pointer-events-auto">
+                <TravelBar target={travelTarget} meters={stats.destinationMeters} onCancel={() => engine.cancelTravel()} />
+              </div>
+            )}
+            {pinnedId && waypointSummary && !stats.traveling && !showZonePanel && (
+              <div className="hud-panel hud-panel-quiet pointer-events-auto flex items-center gap-2 px-3 py-1.5 text-xs animate-slide-down">
+                <Icon name="pin" filled className="h-3.5 w-3.5 text-amber-300" />
+                <span className="font-semibold text-slate-200">{waypointSummary.name}</span>
+                <span className="font-mono font-bold text-amber-300">{stats.waypointMeters ?? 0} m</span>
+                <button type="button" onClick={() => travelToZone(pinnedId)} className="btn-ghost h-6 rounded px-2 text-[0.68rem] font-bold">
+                  Go
+                </button>
+                <button type="button" onClick={() => setPinnedId(null)} aria-label="Unpin waypoint" className="text-slate-500 hover:text-slate-200">
+                  <Icon name="x" className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+            {!isTouch && !showZonePanel && !stats.traveling && !welcome && (
+              <div className="pointer-events-auto">
+                <ActionHints inZone={!!currentZoneId} />
+              </div>
             )}
           </div>
-        </div>
-      )}
 
-      {flavorTextEnabled && ticker.length > 0 && (
-        <div className="absolute top-24 left-6 flex flex-col gap-1 max-w-md">
-          {ticker.map((t) => (
-            <div
-              key={t.id}
-              className="text-xs text-cyan-200 bg-black/60 border border-cyan-700/40 rounded px-3 py-1.5 backdrop-blur animate-fade-in-up"
-            >
-              {t.text}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <button
-        onClick={() => setShowLeaderboard((s) => !s)}
-        className="absolute top-6 right-6 px-3 py-1.5 rounded-lg text-sm font-medium border border-cyan-600/40 text-cyan-300 bg-black/50 backdrop-blur hover:bg-cyan-950/40 hover:border-cyan-500/60 transition-colors"
-      >
-        🏆 {showLeaderboard ? 'Hide' : 'Show'} leaderboard
-      </button>
-
-      {showLeaderboard && (
-        <div className="absolute top-20 right-6 w-72">
-          <LeaderboardPanel />
-        </div>
-      )}
-
-      {selectedTerritory && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-72">
-          <TerritoryLeaderboard territory={selectedTerritory} />
-          <button
-            onClick={() => setSelectedTerritory(null)}
-            className="mt-1.5 text-xs text-slate-400 hover:text-slate-200 underline block mx-auto"
-          >
-            Close
-          </button>
-        </div>
-      )}
-
-      {emptyZoneNote && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg bg-black/70 border border-slate-700 text-sm text-gray-200 backdrop-blur animate-pop-in">
-          {EMPTY_ZONE_TAP}
-        </div>
-      )}
-
-      {showNavHint && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none px-4 py-2 rounded-full bg-black/60 border border-slate-700 backdrop-blur text-slate-300 text-sm flex items-center gap-2 animate-pop-in">
-          <span>🖐️</span>
-          <span>Drag to move around · scroll to zoom · double-click to dive in</span>
-        </div>
-      )}
-
-      <div className="absolute bottom-6 right-4 flex flex-col gap-1 bg-black/50 backdrop-blur border border-cyan-600/30 rounded-lg overflow-hidden">
-        <button
-          onClick={zoomIn}
-          className="w-10 h-10 flex items-center justify-center text-slate-200 hover:bg-cyan-500/20 hover:text-cyan-300 transition-colors border-b border-slate-700 text-lg"
-          aria-label="Zoom in"
-        >
-          +
-        </button>
-        <button
-          onClick={zoomOut}
-          className="w-10 h-10 flex items-center justify-center text-slate-200 hover:bg-cyan-500/20 hover:text-cyan-300 transition-colors border-b border-slate-700 text-lg"
-          aria-label="Zoom out"
-        >
-          −
-        </button>
-        <button
-          onClick={resetView}
-          className="w-10 h-10 flex items-center justify-center text-slate-200 hover:bg-cyan-500/20 hover:text-cyan-300 transition-colors text-xs"
-          aria-label="Reset view"
-        >
-          ⤢
-        </button>
-      </div>
-      <div className="absolute bottom-6 left-4 text-xs text-slate-500 font-mono select-none pointer-events-none">
-        {Math.round(scale * 100)}%
-      </div>
-
-      {challengeTarget && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="w-80 rounded-2xl border border-cyan-600/40 bg-slate-900 p-6 animate-pop-in">
-            <h3 className="text-lg font-bold text-slate-100 mb-1">Challenge for this cell?</h3>
-            <p className="text-sm text-slate-400 mb-4">
-              {challengeTarget.territory.name} · <span className="uppercase text-xs">{challengeTarget.territory.tier}</span>
-            </p>
-            <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Match length</p>
-            <div className="flex gap-2 mb-6">
-              {DURATION_OPTIONS.map((opt) => (
-                <button
-                  key={opt.seconds}
-                  onClick={() => setChallengeDuration(opt.seconds)}
-                  className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${
-                    challengeDuration === opt.seconds
-                      ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300'
-                      : 'border-slate-700 text-slate-400 hover:border-slate-500'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={handleConfirmChallenge}
-                disabled={challengeBusy}
-                className="flex-1 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-600 text-slate-950 text-sm font-bold disabled:opacity-50 hover:scale-[1.02] active:scale-[0.98] transition-transform"
-              >
-                {challengeBusy ? 'Sending…' : 'Send Challenge'}
-              </button>
-              <button
-                onClick={() => setChallengeTarget(null)}
-                disabled={challengeBusy}
-                className="px-4 py-2 rounded-lg border border-slate-700 text-slate-400 text-sm hover:text-slate-200 hover:border-slate-500 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
+          {/* bottom-right: camera controls */}
+          <div className="absolute bottom-3 right-3 z-10 max-sm:bottom-2 max-sm:right-2">
+            <ControlsDock engine={engine} />
           </div>
+
+          {isTouch && !selected && !stats.traveling && (
+            <div className="absolute bottom-4 left-4 z-10">
+              <Joystick engine={engine} />
+            </div>
+          )}
+
+          {travelSnapshot && (
+            <div className="absolute inset-y-3 left-3 z-20">
+              <QuickTravel
+                zones={summaryList}
+                distances={distances}
+                explored={travelSnapshot.explored}
+                pinnedId={pinnedId}
+                onTravel={(id) => travelToZone(id, true)}
+                onHover={(id) => engine.setHighlight(id)}
+                onPin={(id) => setPinnedId((p) => (p === id ? null : id))}
+                onClose={() => {
+                  engine.setHighlight(null);
+                  setTravelSnapshot(null);
+                }}
+              />
+            </div>
+          )}
+
+          {hover && hoverSummary && !isTouch && <HoverTooltip key={hover.zoneId} summary={hoverSummary} x={hover.clientX} y={hover.clientY} cellNote={hoverNote} />}
+        </>
+      )}
+
+      {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
+
+      {challenge && challengeSummary && (
+        <ChallengeModal
+          zoneName={challengeSummary.name}
+          tier={challengeSummary.tier}
+          cellLabel={`Cell R${challenge.cell.row + 1} · C${challenge.cell.col + 1}`}
+          busy={challengeBusy}
+          onConfirm={confirmChallenge}
+          onCancel={() => setChallenge(null)}
+        />
+      )}
+
+      {/* loading + error cover */}
+      {!ready && (
+        <div className="hud-grid-bg absolute inset-0 z-30 flex flex-col items-center justify-center gap-5 text-slate-300">
+          {loadError ? (
+            <>
+              <Icon name="skull" className="h-10 w-10 text-rose-400" />
+              <p className="max-w-sm text-center text-sm text-rose-300">Couldn’t load the campus: {loadError}</p>
+              <button
+                type="button"
+                className="btn-primary h-10 rounded-lg px-6 text-sm"
+                onClick={() => {
+                  retryTerritories();
+                  retryCells();
+                }}
+              >
+                Try again
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="relative h-16 w-16">
+                <div className="hex absolute inset-0 bg-gradient-to-b from-cyan-400/80 to-teal-600/30 animate-spin-slow" />
+                <div className="hex absolute inset-[3px] bg-slate-950" />
+                <Icon name="compass" className="absolute inset-0 m-auto h-6 w-6 text-cyan-300 animate-pulse" />
+              </div>
+              <p className="font-display text-lg font-bold uppercase tracking-[0.3em] text-cyan-300">{loadingLabel}</p>
+            </>
+          )}
         </div>
       )}
+
+      <ToastStack toasts={toasts} dismiss={dismiss} placement="top-center" />
     </div>
   );
 }
