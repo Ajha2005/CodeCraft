@@ -42,7 +42,7 @@ export class AuthService {
           username,
         },
       });
-      return this.signToken(user.id, user.email);
+      return this.signToken(user.id, user.email, user.username);
     } catch (err) {
       if (!isUniqueViolation(err)) throw err;
       // Two signups can pass the checks above at the same moment; the unique
@@ -66,7 +66,7 @@ export class AuthService {
     if (!passwordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
-    return this.signToken(user.id, user.email);
+    return this.signToken(user.id, user.email, user.username);
   }
 
   async loginWithGoogle(googleUser: { email: string; googleId: string; name: string }) {
@@ -85,7 +85,7 @@ export class AuthService {
       });
     }
 
-    return this.signToken(user.id, user.email);
+    return this.signToken(user.id, user.email, user.username);
   }
 
   // An unused default username. The unique index is the real guard; this
@@ -102,16 +102,16 @@ export class AuthService {
     throw new InternalServerErrorException('Could not generate a username, please try again');
   }
 
-  async signToken(userId: string, email: string) {
-    const payload = { sub: userId, email };
+  async signToken(userId: string, email: string, username: string) {
+    const payload = { sub: userId, email, username };
     const accessToken = await this.jwtService.signAsync(payload);
-    return { accessToken };
+    return { accessToken, username };
   }
 
   async getProfile(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, name: true, flavorTextEnabled: true },
+      select: { id: true, email: true, username: true, name: true, flavorTextEnabled: true },
     });
     if (!user) {
       throw new UnauthorizedException('User not found');
@@ -119,6 +119,7 @@ export class AuthService {
     return {
       userId: user.id,
       email: user.email,
+      username: user.username,
       name: user.name,
       flavorTextEnabled: user.flavorTextEnabled,
     };

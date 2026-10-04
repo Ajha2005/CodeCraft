@@ -13,8 +13,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  // whatever this returns becomes `req.user` in protected routes
-  async validate(payload: { sub: string; email: string }) {
-    return { userId: payload.sub, email: payload.email };
+  // whatever this returns becomes `req.user` in protected routes.
+  // `username` is missing on tokens issued before it was added; GET /auth/me is the source of truth.
+  async validate(payload: { sub: string; email: string; username?: string }) {
+    return { userId: payload.sub, email: payload.email, username: payload.username };
   }
 }
