@@ -2,6 +2,8 @@ export interface OwnerShare {
   userId: string;
   color: string;
   cellCount: number;
+  /** Public handle, when the server sent one with the cells. */
+  username?: string | null;
 }
 
 export interface StripeSegment extends OwnerShare {
@@ -32,23 +34,26 @@ export function computeStripeWidths(ownership: OwnerShare[]): StripeSegment[] {
 }
 interface CellOwnershipInput {
   ownerId?: string | null;
+  ownerUsername?: string | null;
   ownerColor?: string;
 }
 
 export function aggregateOwnership(cells: CellOwnershipInput[]): OwnerShare[] {
-  const counts = new Map<string, { color: string; cellCount: number }>();
+  const counts = new Map<string, { color: string; username: string | null; cellCount: number }>();
   for (const cell of cells) {
     if (!cell.ownerId) continue; // unclaimed cells don't count toward ownership
     const existing = counts.get(cell.ownerId);
     if (existing) {
       existing.cellCount += 1;
+      if (!existing.username) existing.username = cell.ownerUsername ?? null;
     } else {
-      counts.set(cell.ownerId, { color: cell.ownerColor ?? '#999999', cellCount: 1 });
+      counts.set(cell.ownerId, { color: cell.ownerColor ?? '#999999', username: cell.ownerUsername ?? null, cellCount: 1 });
     }
   }
   return Array.from(counts.entries()).map(([userId, v]) => ({
     userId,
     color: v.color,
+    username: v.username,
     cellCount: v.cellCount,
   }));
 }

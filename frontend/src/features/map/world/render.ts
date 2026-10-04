@@ -1365,6 +1365,8 @@ export class WorldRenderer {
 
   drawMinimap(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: number, f: Frame) {
     const { s, ox, oy } = this.minimapTransform(w, h);
+    // A canvas with no room (just removed from the page, or not laid out yet) gives a negative scale.
+    if (!(s > 0)) return;
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
