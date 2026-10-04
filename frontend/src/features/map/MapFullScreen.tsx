@@ -180,7 +180,7 @@ export function MapFullScreen() {
     // else still flashes on the map, it just does not ask for your attention.
     if (!e.byMe && (summary?.mine ?? 0) === 0 && e.zone.id !== currentZoneId) return;
     const name = summary?.name ?? e.zone.id;
-    const who = e.byMe ? 'You' : (nameFor(e.cell.ownerId) ?? 'A rival');
+    const who = e.byMe ? 'You' : (e.cell.ownerUsername ?? nameFor(e.cell.ownerId) ?? 'A rival');
     sfx.play('capture');
     pushFeed({
       kind: e.byMe ? 'mine' : 'capture',
@@ -370,7 +370,7 @@ export function MapFullScreen() {
   const hoverNote =
     hover?.cell && hoverSummary
       ? hover.challengeable
-        ? 'Rival cell · click to challenge'
+        ? `${hover.cell.ownerUsername ? `Held by ${hover.cell.ownerUsername}` : 'Rival cell'} · click to challenge`
         : hover.cell.ownerId
           ? 'Your cell'
           : 'Unclaimed cell'

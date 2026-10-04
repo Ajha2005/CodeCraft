@@ -16,6 +16,26 @@ export interface FlashCell {
   start: number;
 }
 
+/** A straight stretch of cells in one row. */
+export interface CellRun {
+  row: number;
+  col: number;
+  span: number;
+}
+
+/** A patch of touching cells held by one player: what a username is written across. */
+export interface OwnerBlob {
+  ownerId: string;
+  username: string;
+  size: number;
+  /**
+   * Where the name can go, best first: the widest straight runs of the patch,
+   * nearest its middle. A few are kept so the name can shift a row when the
+   * best spot is taken (by the avatar, say) instead of disappearing.
+   */
+  runs: CellRun[];
+}
+
 /**
  * Everything the renderer needs to know about one zone *right now*. The
  * object is long-lived: data updates mutate it in place so animation state
@@ -32,6 +52,8 @@ export interface ZoneView {
   ch: number;
   shares: OwnerShare[];
   stripes: StripeSegment[];
+  /** Every patch of cells held by one player, for the username labels. */
+  blobs: OwnerBlob[];
   total: number;
   ownedCount: number;
   /** Fraction of the zone's cells that are captured (0..1). */
@@ -69,6 +91,7 @@ export function createZoneView(zone: Zone): ZoneView {
     ch: 0,
     shares: [],
     stripes: [],
+    blobs: [],
     total: 0,
     ownedCount: 0,
     fraction: 0,
@@ -140,6 +163,7 @@ export function applySceneData(
 
     view.shares = aggregateOwnership(cells);
     view.stripes = view.shares.length > 1 ? computeStripeWidths(view.shares) : [];
+    view.blobs = ownerBlobs(cells, view.cellIndex);
     view.total = cells.length;
     view.ownedCount = view.shares.reduce((s, x) => s + x.cellCount, 0);
     view.fraction = view.total > 0 ? view.ownedCount / view.total : 0;
@@ -153,6 +177,73 @@ export function applySceneData(
   }
 
   return change;
+}
+
+const NEIGHBORS: [number, number][] = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+
+/** Group a zone's cells into patches of touching cells with the same owner. */
+export function ownerBlobs(cells: TerritoryCellDto[], index: Map<number, TerritoryCellDto>): OwnerBlob[] {
+  const seen = new Set<number>();
+  const blobs: OwnerBlob[] = [];
+
+  for (const start of cells) {
+    const startKey = cellKey(start.row, start.col);
+    if (!start.ownerId || seen.has(startKey)) continue;
+
+    const patch: TerritoryCellDto[] = [];
+    const stack = [start];
+    seen.add(startKey);
+    while (stack.length > 0) {
+      const cell = stack.pop() as TerritoryCellDto;
+      patch.push(cell);
+      for (const [dr, dc] of NEIGHBORS) {
+        const next = index.get(cellKey(cell.row + dr, cell.col + dc));
+        if (!next || next.ownerId !== start.ownerId) continue;
+        const key = cellKey(next.row, next.col);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        stack.push(next);
+      }
+    }
+
+    const username = patch.find((c) => c.ownerUsername)?.ownerUsername;
+    if (username) blobs.push({ ownerId: start.ownerId, username, size: patch.length, runs: bestRuns(patch) });
+  }
+  return blobs;
+}
+
+/** How many alternative spots a name keeps (see OwnerBlob.runs). */
+const RUNS_KEPT = 4;
+
+/** The longest straight (same-row) runs in a patch; among equals, the ones nearest its middle first. */
+function bestRuns(patch: TerritoryCellDto[]): CellRun[] {
+  const rows = new Map<number, number[]>();
+  let rowSum = 0;
+  for (const c of patch) {
+    const cols = rows.get(c.row);
+    if (cols) cols.push(c.col);
+    else rows.set(c.row, [c.col]);
+    rowSum += c.row;
+  }
+  const midRow = rowSum / patch.length;
+
+  const runs: (CellRun & { off: number })[] = [];
+  for (const [row, cols] of rows) {
+    cols.sort((a, b) => a - b);
+    let from = cols[0];
+    for (let i = 1; i <= cols.length; i++) {
+      if (i < cols.length && cols[i] === cols[i - 1] + 1) continue;
+      runs.push({ row, col: from, span: cols[i - 1] - from + 1, off: Math.abs(row - midRow) });
+      from = cols[i];
+    }
+  }
+  runs.sort((a, b) => b.span - a.span || a.off - b.off || a.row - b.row || a.col - b.col);
+  return runs.slice(0, RUNS_KEPT).map(({ row, col, span }) => ({ row, col, span }));
 }
 
 /** How far a zone's block is currently raised: its height plus hover/select lift. */
