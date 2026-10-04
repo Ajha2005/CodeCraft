@@ -70,14 +70,15 @@ export class LeaderboardController {
     const userIds = raw.map((r) => r.userId);
     const users = await this.prisma.user.findMany({
       where: { id: { in: userIds } },
-      select: { id: true, name: true, email: true },
+      select: { id: true, username: true },
     });
 
     const userMap = new Map(users.map((u) => [u.id, u]));
 
     return raw.map((entry) => {
       const user = userMap.get(entry.userId);
-      const displayName = user?.name?.trim() || user?.email?.split('@')[0] || entry.userId.slice(0, 8);
+      // The public name of a player is their username, never their real name or email.
+      const displayName = user?.username ?? entry.userId.slice(0, 8);
       return {
         userId: entry.userId,
         name: displayName,

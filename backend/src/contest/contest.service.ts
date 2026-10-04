@@ -33,8 +33,7 @@ const PENDING_EXPIRY_MS = 5 * 60 * 1000;
 
 interface DisplayUser {
   id: string;
-  name: string | null;
-  email: string;
+  username: string;
 }
 
 @Injectable()
@@ -150,8 +149,8 @@ export class ContestService {
       where: { id },
       include: {
         cell: { include: { territory: true } },
-        challenger: { select: { id: true, name: true, email: true } },
-        defender: { select: { id: true, name: true, email: true } },
+        challenger: { select: { id: true, username: true } },
+        defender: { select: { id: true, username: true } },
         participants: true,
       },
     });
@@ -530,7 +529,7 @@ export class ContestService {
       });
       const ownership = await tx.territoryCellOwnership.create({
         data: { cellId, userId: newOwnerId, sourceType: 'contest' },
-        include: { cell: true },
+        include: { cell: true, user: { select: { username: true } } },
       });
 
       this.territoryGateway.broadcastCellUpdate({
@@ -539,6 +538,7 @@ export class ContestService {
         row: ownership.cell.row,
         col: ownership.cell.col,
         ownerId: newOwnerId,
+        ownerUsername: ownership.user.username,
         ownerColor: getColorForUser(newOwnerId),
       });
 
@@ -546,16 +546,17 @@ export class ContestService {
     });
   }
 
+  // The public name of a player is their username, never their real name or email.
   private displayUser(u: DisplayUser) {
-    return { id: u.id, name: u.name?.trim() || u.email.split('@')[0] };
+    return { id: u.id, name: u.username };
   }
 
   private summaryInclude() {
     return {
       cell: { include: { territory: true } },
       problem: { select: { id: true, title: true, difficultyLevel: true } },
-      challenger: { select: { id: true, name: true, email: true } },
-      defender: { select: { id: true, name: true, email: true } },
+      challenger: { select: { id: true, username: true } },
+      defender: { select: { id: true, username: true } },
     } as const;
   }
 

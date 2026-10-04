@@ -37,10 +37,15 @@ export function useTerritoryCells() {
       row: number;
       col: number;
       ownerId: string | null;
+      ownerUsername: string | null;
       ownerColor: string;
     }) => {
       setCells((prev) =>
-        prev.map((c) => (c.id === payload.cellId ? { ...c, ownerId: payload.ownerId, ownerColor: payload.ownerColor } : c)),
+        prev.map((c) =>
+          c.id === payload.cellId
+            ? { ...c, ownerId: payload.ownerId, ownerUsername: payload.ownerUsername ?? null, ownerColor: payload.ownerColor }
+            : c,
+        ),
       );
     };
 

@@ -54,6 +54,7 @@ export class TerritoryGateway implements OnGatewayConnection, OnGatewayDisconnec
   row: number;
   col: number;
   ownerId: string | null;
+  ownerUsername: string | null;
   ownerColor: string;
 }) {
   this.server.emit('cell:updated', payload);

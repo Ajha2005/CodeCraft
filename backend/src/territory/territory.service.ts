@@ -8,6 +8,7 @@ export interface TerritoryDto {
   svgPathId: string;
   ownerColor: string;
   ownerId: string | null;
+  ownerUsername: string | null;
   tier: string;
 }
 
@@ -17,8 +18,12 @@ export interface TerritoryCellDto {
   row: number;
   col: number;
   ownerId: string | null;
+  ownerUsername: string | null;
   ownerColor: string;
 }
+
+// Only the username of an owner is ever sent to the map (never email or real name).
+const ownerUsernameOnly = { user: { select: { username: true } } } as const;
 
 @Injectable()
 export class TerritoryService {
@@ -29,6 +34,7 @@ export class TerritoryService {
       include: {
         ownerships: {
           where: { closedAt: null },
+          include: ownerUsernameOnly,
         },
       },
     });
@@ -43,6 +49,7 @@ export class TerritoryService {
         svgPathId: t.svgPathId,
         ownerColor: ownerId ? getColorForUser(ownerId) : UNCLAIMED_COLOR,
         ownerId,
+        ownerUsername: currentOwnership?.user.username ?? null,
         tier: t.tier,
       };
     });
@@ -53,6 +60,7 @@ export class TerritoryService {
       include: {
         ownerships: {
           where: { closedAt: null },
+          include: ownerUsernameOnly,
         },
       },
     });
@@ -67,6 +75,7 @@ export class TerritoryService {
         row: c.row,
         col: c.col,
         ownerId,
+        ownerUsername: current?.user.username ?? null,
         ownerColor: ownerId ? getColorForUser(ownerId) : UNCLAIMED_COLOR,
       };
     });

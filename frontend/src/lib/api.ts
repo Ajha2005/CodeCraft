@@ -15,6 +15,7 @@ export interface TerritoryCellDto {
   row: number;
   col: number;
   ownerId: string | null;
+  ownerUsername: string | null;
   ownerColor: string;
 }
 
