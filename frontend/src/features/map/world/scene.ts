@@ -30,8 +30,8 @@ export interface OwnerBlob {
   size: number;
   /**
    * Where the name can go, best first: the widest straight runs of the patch,
-   * nearest its middle. A few are kept so the name can shift a row when the
-   * best spot is taken (by the avatar, say) instead of disappearing.
+   * nearest its middle. Several are kept so the name can shift a row when the
+   * best spot is taken (by the avatar, say) or off screen, instead of disappearing.
    */
   runs: CellRun[];
 }
@@ -218,7 +218,7 @@ export function ownerBlobs(cells: TerritoryCellDto[], index: Map<number, Territo
 }
 
 /** How many alternative spots a name keeps (see OwnerBlob.runs). */
-const RUNS_KEPT = 4;
+const RUNS_KEPT = 12;
 
 /** The longest straight (same-row) runs in a patch; among equals, the ones nearest its middle first. */
 function bestRuns(patch: TerritoryCellDto[]): CellRun[] {

@@ -57,6 +57,7 @@ export function HelpOverlay({ onClose }: { onClose: () => void }) {
               <Row keys={['Space']}>Dive in / out</Row>
               <Row keys={['T']}>Travel to selected zone</Row>
               <Row keys={['Click cell']}>Challenge a rival</Row>
+              <Row keys={['Click name']}>Open a player’s profile</Row>
             </ul>
           </div>
           <div>

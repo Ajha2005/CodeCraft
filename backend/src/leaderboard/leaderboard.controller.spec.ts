@@ -31,8 +31,8 @@ describe('LeaderboardController names', () => {
     ]);
 
     await expect(controller.getCollegeLeaderboard()).resolves.toEqual([
-      { userId: 'u1', name: 'arjun_m', score: 90 },
-      { userId: 'u2', name: 'player_a1b2c3', score: 50 },
+      { userId: 'u1', username: 'arjun_m', name: 'arjun_m', score: 90 },
+      { userId: 'u2', username: 'player_a1b2c3', name: 'player_a1b2c3', score: 50 },
     ]);
     // the query itself cannot return an email or a real name
     expect(prisma.user.findMany).toHaveBeenCalledWith({
@@ -47,11 +47,11 @@ describe('LeaderboardController names', () => {
     prisma.user.findMany.mockResolvedValue([{ id: 'u1', username: 'arjun_m' }]);
 
     await expect(controller.getTerritoryLeaderboard('t1')).resolves.toEqual([
-      { userId: 'u1', name: 'arjun_m', score: 12 },
+      { userId: 'u1', username: 'arjun_m', name: 'arjun_m', score: 12 },
     ]);
   });
 
-  it('shows a short id for a player who no longer exists', async () => {
+  it('shows a short id, and no profile link, for a player who no longer exists', async () => {
     const { redis, prisma, controller } = setup();
     redis.getCollegeTop.mockResolvedValue([{ userId: '12345678-aaaa-bbbb-cccc-1234567890ab', score: 5 }]);
     prisma.user.findMany.mockResolvedValue([]);
@@ -59,6 +59,7 @@ describe('LeaderboardController names', () => {
     const [entry] = await controller.getCollegeLeaderboard();
 
     expect(entry.name).toBe('12345678');
+    expect(entry.username).toBeNull();
   });
 
   it('names the next player up by username in the near-miss nudge', async () => {

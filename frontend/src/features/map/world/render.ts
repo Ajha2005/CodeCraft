@@ -58,6 +58,16 @@ export interface HoverCellRef {
   challengeable: boolean;
 }
 
+/** Where a player's name was drawn last frame (world units), so clicks can find it. */
+export interface NameHit {
+  username: string;
+  zone: number;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
 export interface Frame {
   /** Animation clock, seconds. Frozen at 0 when reduced motion is on. */
   anim: number;
@@ -152,6 +162,8 @@ export class WorldRenderer {
   private readonly slabPath: Path2D;
   private readonly groundTex: HTMLCanvasElement;
   private readonly labelWidthCache = new Map<string, number>();
+  /** The player names drawn in the last frame; the canvas has no elements to click, so we keep their boxes. */
+  private nameHits: NameHit[] = [];
   private readonly lanePath: Path2D;
   private readonly lampPoints: Pt[] = [];
   /** Every zone outline merged, so the pavement is two strokes, not ninety. */
@@ -855,6 +867,14 @@ export class WorldRenderer {
     this.labelWidthCache.clear();
   }
 
+  /** The player name drawn under a world point in the last frame, if any. */
+  nameAt(wx: number, wy: number): NameHit | null {
+    for (const h of this.nameHits) {
+      if (wx >= h.x0 && wx <= h.x1 && wy >= h.y0 && wy <= h.y1) return h;
+    }
+    return null;
+  }
+
   private drawLabels(ctx: CanvasRenderingContext2D, f: Frame) {
     const zoom = f.zoom;
     ctx.textAlign = 'left';
@@ -956,8 +976,8 @@ export class WorldRenderer {
    * Each player's name, written across the widest stretch of their patch of
    * cells. Only blocks that show their cells get names. A name that cannot be
    * read at this zoom is left out (the cell tooltip still says who holds it);
-   * one that would land on another label or the avatar tries the patch's next
-   * best row first.
+   * one that would land on another label or the avatar, or fall off the screen,
+   * tries the patch's next best row first.
    */
   private drawOwnerNames(ctx: CanvasRenderingContext2D, f: Frame, placed: number[]) {
     const zoom = f.zoom;
@@ -971,6 +991,8 @@ export class WorldRenderer {
     patches.sort((a, b) => Number(b.mine) - Number(a.mine) || b.blob.size - a.blob.size);
 
     const gap = 3 / zoom;
+    const edge = 6 / zoom;
+    this.nameHits = [];
     ctx.textAlign = 'center';
     for (const { v, blob, mine } of patches) {
       const h = liftedHeight(v);
@@ -990,6 +1012,9 @@ export class WorldRenderer {
         const y0 = y - fs * 0.62 - gap;
         const y1 = y + fs * 0.62 + gap;
 
+        // a name that is cut off by the screen edge, or not on screen at all, cannot be read or clicked
+        if (x0 < this.tx0 + edge || x1 > this.tx1 - edge || y0 < this.ty0 + edge || y1 > this.ty1 - edge) continue;
+
         let clash = false;
         for (let i = 0; i < placed.length; i += 4) {
           if (x0 < placed[i + 2] && x1 > placed[i] && y0 < placed[i + 3] && y1 > placed[i + 1]) {
@@ -1006,6 +1031,10 @@ export class WorldRenderer {
         ctx.strokeText(blob.username, x, y);
         ctx.fillStyle = mine ? '#a5f3fc' : '#f4f9fc';
         ctx.fillText(blob.username, x, y);
+
+        // a click target at least ~18px tall on screen, however small the name is drawn
+        const reach = Math.max(fs * 0.62 + gap * 0.7, 9 / zoom);
+        this.nameHits.push({ username: blob.username, zone: v.zone.index, x0, y0: y - reach, x1, y1: y + reach });
         break;
       }
     }

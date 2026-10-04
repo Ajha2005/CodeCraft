@@ -4,6 +4,9 @@ import { PrismaService } from '../prisma/prisma.service';
 
 export interface LeaderboardEntryDto {
   userId: string;
+  /** What profile links point at; null when the player no longer exists. */
+  username: string | null;
+  /** The name to show: the username (kept for the login page), or a short id as a last resort. */
   name: string;
   score: number;
 }
@@ -81,6 +84,7 @@ export class LeaderboardController {
       const displayName = user?.username ?? entry.userId.slice(0, 8);
       return {
         userId: entry.userId,
+        username: user?.username ?? null,
         name: displayName,
         score: entry.score,
       };

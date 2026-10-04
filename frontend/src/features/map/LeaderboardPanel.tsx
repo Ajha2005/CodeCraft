@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { EMPTY_LEADERBOARD } from '../../lib/flavorText';
 import { colorForUser } from '../../lib/playerColor';
@@ -43,7 +44,13 @@ export function LeaderboardPanel({ entries, loading, onClose }: LeaderboardPanel
                 <span className="flex min-w-0 items-center gap-2 text-slate-200">
                   <span className="w-5 shrink-0 text-center text-xs">{MEDAL[i] ?? <span className="text-slate-500">{i + 1}</span>}</span>
                   <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
-                  <span className="truncate">{entry.name}</span>
+                  {entry.username ? (
+                    <Link to={`/profile/${entry.username}`} className="truncate transition-colors hover:text-cyan-200 hover:underline">
+                      {entry.name}
+                    </Link>
+                  ) : (
+                    <span className="truncate">{entry.name}</span>
+                  )}
                 </span>
                 <span className="shrink-0 font-mono text-xs font-bold text-emerald-400">{entry.score.toFixed(1)}</span>
               </li>

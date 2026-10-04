@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useTerritoryLeaderboard } from './hooks/useLeaderboard';
 import { useAuth } from '../../auth/AuthContext';
 import { colorForUser } from '../../lib/playerColor';
@@ -42,7 +43,13 @@ export function TerritoryLeaderboard({ territory }: TerritoryLeaderboardProps) {
             <span className="flex min-w-0 items-center gap-2 text-slate-200">
               <span className="w-5 shrink-0 text-center text-xs">{MEDAL[i] ?? `#${i + 1}`}</span>
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
-              <span className="truncate">{entry.name}</span>
+              {entry.username ? (
+                <Link to={`/profile/${entry.username}`} className="truncate transition-colors hover:text-cyan-200 hover:underline">
+                  {entry.name}
+                </Link>
+              ) : (
+                <span className="truncate">{entry.name}</span>
+              )}
               {me && <span className="shrink-0 rounded bg-cyan-400/20 px-1 text-[0.6rem] font-bold uppercase text-cyan-300">you</span>}
             </span>
             <span className="shrink-0 font-mono text-xs font-bold text-emerald-400">{entry.score.toFixed(1)}</span>

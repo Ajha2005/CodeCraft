@@ -211,6 +211,10 @@ export function MapFullScreen() {
     if (id) sfx.play('click');
   });
   const handleCellChallenge = useEffectEvent((cell: TerritoryCellDto, zone: Zone) => setChallenge({ cell, zone }));
+  const handleNameClick = useEffectEvent((username: string) => {
+    sfx.play('click');
+    navigate(`/profile/${encodeURIComponent(username)}`);
+  });
   const handleMoved = useEffectEvent((pos: { x: number; y: number }) => {
     if (userId) writeJson(posKey(userId), pos);
     if (welcome) dismissWelcome();
@@ -229,6 +233,7 @@ export function MapFullScreen() {
       onHover: (info) => handleHover(info),
       onSelect: (id) => handleSelect(id),
       onCellChallenge: (c, z) => handleCellChallenge(c, z),
+      onNameClick: (u) => handleNameClick(u),
       onPlayerMoved: (p) => handleMoved(p),
       onInteract: () => handleInteract(),
     });
@@ -367,8 +372,9 @@ export function MapFullScreen() {
 
   const waypointSummary = pinnedId ? summaries.get(pinnedId) : null;
   const challengeSummary = challenge ? summaries.get(challenge.zone.id) : null;
-  const hoverNote =
-    hover?.cell && hoverSummary
+  const hoverNote = hover?.name
+    ? `Open ${hover.name}’s profile`
+    : hover?.cell && hoverSummary
       ? hover.challengeable
         ? `${hover.cell.ownerUsername ? `Held by ${hover.cell.ownerUsername}` : 'Rival cell'} · click to challenge`
         : hover.cell.ownerId

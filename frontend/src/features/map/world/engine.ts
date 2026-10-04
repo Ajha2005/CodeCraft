@@ -26,6 +26,8 @@ export interface HoverInfo {
   zoneId: string;
   cell: TerritoryCellDto | null;
   challengeable: boolean;
+  /** The player name under the pointer (clicking it opens their profile), if any. */
+  name: string | null;
   /** Pointer position in viewport coordinates when the hover began. */
   clientX: number;
   clientY: number;
@@ -56,6 +58,8 @@ export interface EngineHandlers {
   onHover?: (info: HoverInfo | null) => void;
   onSelect?: (zoneId: string | null) => void;
   onCellChallenge?: (cell: TerritoryCellDto, zone: Zone) => void;
+  /** A player's name written on the map was clicked. */
+  onNameClick?: (username: string) => void;
   onDiscover?: (zone: Zone, discovered: number, total: number) => void;
   onTravel?: (event: 'start' | 'arrive' | 'cancel', zone: Zone | null) => void;
   onCapture?: (event: { zone: Zone; cell: TerritoryCellDto; byMe: boolean }) => void;
@@ -181,6 +185,7 @@ export class MapEngine {
   private hoverIdx = -1;
   private hoverCell: HoverCellRef | null = null;
   private hoverCellId: string | null = null;
+  private hoverName: string | null = null;
   private lastClient = { x: 0, y: 0 };
   /** Last mouse position over the canvas (CSS px), so hover can follow the camera. */
   private pointerLocal: { x: number; y: number } | null = null;
@@ -868,6 +873,13 @@ export class MapEngine {
 
   private handleClick(sx: number, sy: number) {
     const w = this.toWorld(sx, sy);
+    // A player's name sits on top of their cells: it is tested first, so
+    // clicking it opens their profile instead of challenging them.
+    const named = this.renderer?.nameAt(w.x, w.y);
+    if (named) {
+      this.handlers.onNameClick?.(named.username);
+      return;
+    }
     const view = pickZone(this.zoneViewsInOrder(), w.x, w.y);
     if (view) {
       if (view.detail) {
@@ -923,6 +935,11 @@ export class MapEngine {
     const rect = this.canvas?.getBoundingClientRect();
     this.lastClient = { x: (rect?.left ?? 0) + sx, y: (rect?.top ?? 0) + sy };
     const w = this.toWorld(sx, sy);
+    const named = this.renderer?.nameAt(w.x, w.y);
+    if (named) {
+      this.setHover(named.zone, null, named.username);
+      return;
+    }
     const view = pickZone(this.zoneViewsInOrder(), w.x, w.y);
     if (!view) {
       this.setHover(-1, null);
@@ -933,16 +950,17 @@ export class MapEngine {
     this.setHover(view.zone.index, cell);
   }
 
-  private setHover(idx: number, cell: TerritoryCellDto | null) {
-    if (idx === this.hoverIdx && (cell?.id ?? null) === this.hoverCellId) return;
+  private setHover(idx: number, cell: TerritoryCellDto | null, name: string | null = null) {
+    if (idx === this.hoverIdx && (cell?.id ?? null) === this.hoverCellId && name === this.hoverName) return;
     this.hoverIdx = idx;
     this.hoverCellId = cell?.id ?? null;
+    this.hoverName = name;
     const challengeable = !!cell && !!cell.ownerId && !!this.userId && cell.ownerId !== this.userId;
     this.hoverCell = cell && idx >= 0 ? { zone: idx, row: cell.row, col: cell.col, challengeable } : null;
     if (this.canvas && this.pointers.size === 0) this.canvas.style.cursor = idx >= 0 ? (challengeable ? 'crosshair' : 'pointer') : 'default';
     this.handlers.onHover?.(
       idx >= 0
-        ? { zoneId: this.world.campus.zones[idx].id, cell, challengeable, clientX: this.lastClient.x, clientY: this.lastClient.y }
+        ? { zoneId: this.world.campus.zones[idx].id, cell, challengeable, name, clientX: this.lastClient.x, clientY: this.lastClient.y }
         : null,
     );
     this.touch();
