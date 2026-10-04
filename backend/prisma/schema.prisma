@@ -142,7 +142,8 @@ model TerritoryCell {
 
   territory  Territory               @relation(fields: [territoryId], references: [id])
   ownerships TerritoryCellOwnership[]
-  contests   Contest[]
+  contests   Contest[]               @relation("ContestCell")
+  pledgedTo  Contest[]               @relation("ContestPledgedCell")
 
   @@unique([territoryId, row, col])
   @@index([territoryId])
@@ -180,19 +181,21 @@ model TerritoryCellOwnership {
 model Contest {
   id              String    @id @default(uuid())
   cellId          String
+  pledgedCellId   String?   // the challenger's own cell put at stake; null on duels made before pledging existed
   problemId       Int
   challengerId    String
   defenderId      String
   status          String    @default("PENDING") // PENDING | ACTIVE | COMPLETED | DECLINED | CANCELLED | EXPIRED
   durationSeconds Int       @default(600)
-  winnerId        String?   // null = defender successfully defended, or a draw
+  winnerId        String?   // null = a draw (an outright defender win names the defender)
   endReason       String?   // AC | TIMEOUT | FORFEIT | DRAW
   createdAt       DateTime  @default(now())
   respondedAt     DateTime?
   startedAt       DateTime?
   endedAt         DateTime?
 
-  cell       TerritoryCell @relation(fields: [cellId], references: [id])
+  cell        TerritoryCell  @relation("ContestCell", fields: [cellId], references: [id])
+  pledgedCell TerritoryCell? @relation("ContestPledgedCell", fields: [pledgedCellId], references: [id])
   problem    Problem       @relation(fields: [problemId], references: [id])
   challenger User          @relation("ContestChallenger", fields: [challengerId], references: [id])
   defender   User          @relation("ContestDefender", fields: [defenderId], references: [id])
@@ -202,6 +205,7 @@ model Contest {
   submissions  Submission[]
 
   @@index([cellId])
+  @@index([pledgedCellId])
   @@index([challengerId])
   @@index([defenderId])
   @@index([status])

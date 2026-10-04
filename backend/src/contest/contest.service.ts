@@ -30,6 +30,8 @@ const DIFFICULTY_BY_TIER: Record<string, string> = {
 
 const DEFAULT_DURATION_SECONDS = 600;
 const PENDING_EXPIRY_MS = 5 * 60 * 1000;
+// A duel in these states ties up its cells (see lockedCellIds).
+const OPEN_STATUSES = ['PENDING', 'ACTIVE'];
 
 interface DisplayUser {
   id: string;
@@ -51,51 +53,82 @@ export class ContestService {
   // ---------- Challenge lifecycle ----------
 
   async createChallenge(challengerId: string, dto: CreateChallengeDto) {
-    const cell = await this.prisma.territoryCell.findUnique({
-      where: { id: dto.cellId },
-      include: { ownerships: { where: { closedAt: null } } },
-    });
-    if (!cell) throw new NotFoundException('Territory cell not found');
+    const contest = await this.prisma.$transaction(async (tx) => {
+      // Both cells (the one fought over and the one staked) stay locked while
+      // they are checked, so two challenges racing for the same cell are decided
+      // one at a time. Ordered by id so two of these can never deadlock.
+      await tx.$queryRaw`SELECT id FROM territory_cells WHERE id = ${dto.cellId} OR id = ${dto.pledgedCellId} ORDER BY id FOR UPDATE`;
 
-    const currentOwnership = cell.ownerships[0];
-    if (!currentOwnership) {
-      throw new BadRequestException(
-        'This cell is unclaimed — nothing to contest. Solve a problem to claim it instead.',
-      );
-    }
-    const defenderId = currentOwnership.userId;
-    if (defenderId === challengerId) {
-      throw new BadRequestException('You already hold this cell');
-    }
-
-    const existing = await this.prisma.contest.findFirst({
-      where: { cellId: dto.cellId, status: { in: ['PENDING', 'ACTIVE'] } },
-    });
-    if (existing) {
-      throw new ConflictException(
-        'This cell already has a pending or active contest',
-      );
-    }
-
-    let problemId = dto.problemId;
-    if (problemId) {
-      const problem = await this.prisma.problem.findUnique({
-        where: { id: problemId },
+      const cell = await tx.territoryCell.findUnique({
+        where: { id: dto.cellId },
+        include: { ownerships: { where: { closedAt: null } } },
       });
-      if (!problem)
-        throw new NotFoundException(`Problem ${problemId} not found`);
-    } else {
-      problemId = await this.pickProblemForCell(dto.cellId);
-    }
+      if (!cell) throw new NotFoundException('Territory cell not found');
 
-    const contest = await this.prisma.contest.create({
-      data: {
-        cellId: dto.cellId,
-        problemId,
-        challengerId,
-        defenderId,
-        durationSeconds: dto.durationSeconds ?? DEFAULT_DURATION_SECONDS,
-      },
+      const currentOwnership = cell.ownerships[0];
+      if (!currentOwnership) {
+        throw new BadRequestException(
+          'This cell is unclaimed — nothing to contest. Solve a problem to claim it instead.',
+        );
+      }
+      const defenderId = currentOwnership.userId;
+      if (defenderId === challengerId) {
+        throw new BadRequestException('You already hold this cell');
+      }
+
+      // The stake: one of the challenger's own cells. Lose the duel and it goes to the defender.
+      const pledged = await tx.territoryCell.findUnique({
+        where: { id: dto.pledgedCellId },
+        include: { ownerships: { where: { closedAt: null } } },
+      });
+      if (!pledged || pledged.ownerships[0]?.userId !== challengerId) {
+        throw new BadRequestException('You can only pledge a cell you hold right now');
+      }
+
+      // A cell is in at most one open duel, as the target or as a stake.
+      const busy = await tx.contest.findMany({
+        where: {
+          status: { in: OPEN_STATUSES },
+          OR: [
+            { cellId: { in: [cell.id, pledged.id] } },
+            { pledgedCellId: { in: [cell.id, pledged.id] } },
+          ],
+        },
+        select: { cellId: true, pledgedCellId: true },
+      });
+      const tiedUp = (id: string) => busy.some((c) => c.cellId === id || c.pledgedCellId === id);
+      if (tiedUp(cell.id)) {
+        throw new ConflictException(
+          'This cell already has a pending or active contest',
+        );
+      }
+      if (tiedUp(pledged.id)) {
+        throw new ConflictException(
+          'The cell you pledged is already at stake in another duel',
+        );
+      }
+
+      let problemId = dto.problemId;
+      if (problemId) {
+        const problem = await tx.problem.findUnique({
+          where: { id: problemId },
+        });
+        if (!problem)
+          throw new NotFoundException(`Problem ${problemId} not found`);
+      } else {
+        problemId = await this.pickProblemForCell(dto.cellId);
+      }
+
+      return tx.contest.create({
+        data: {
+          cellId: dto.cellId,
+          pledgedCellId: dto.pledgedCellId,
+          problemId,
+          challengerId,
+          defenderId,
+          durationSeconds: dto.durationSeconds ?? DEFAULT_DURATION_SECONDS,
+        },
+      });
     });
 
     // Auto-expire if the defender never responds, so a cell doesn't stay
@@ -106,11 +139,24 @@ export class ContestService {
       { delay: PENDING_EXPIRY_MS },
     );
 
-    this.contestGateway.notifyUser(defenderId, 'challenge:received', {
+    this.contestGateway.notifyUser(contest.defenderId, 'challenge:received', {
       contestId: contest.id,
     });
 
     return this.getContest(contest.id, challengerId);
+  }
+
+  /**
+   * Cells tied up in a pending or active duel - the one fought over and the
+   * one staked. Solo play cannot capture them until the duel ends, is
+   * declined or expires.
+   */
+  async lockedCellIds(): Promise<string[]> {
+    const open = await this.prisma.contest.findMany({
+      where: { status: { in: OPEN_STATUSES } },
+      select: { cellId: true, pledgedCellId: true },
+    });
+    return open.flatMap((c) => (c.pledgedCellId ? [c.cellId, c.pledgedCellId] : [c.cellId]));
   }
 
   async listIncoming(userId: string) {
@@ -135,7 +181,7 @@ export class ContestService {
   async listActive(userId: string) {
     const contests = await this.prisma.contest.findMany({
       where: {
-        status: { in: ['PENDING', 'ACTIVE'] },
+        status: { in: OPEN_STATUSES },
         OR: [{ challengerId: userId }, { defenderId: userId }],
       },
       orderBy: { createdAt: 'desc' },
@@ -149,6 +195,7 @@ export class ContestService {
       where: { id },
       include: {
         cell: { include: { territory: true } },
+        pledgedCell: { include: { territory: true } },
         challenger: { select: { id: true, username: true } },
         defender: { select: { id: true, username: true } },
         participants: true,
@@ -172,6 +219,7 @@ export class ContestService {
         territoryName: contest.cell.territory.name,
         tier: contest.cell.territory.tier,
       },
+      pledgedCell: contest.pledgedCell ? this.cellSummary(contest.pledgedCell) : null,
       problem,
       challenger: this.displayUser(contest.challenger),
       defender: this.displayUser(contest.defender),
@@ -487,12 +535,22 @@ export class ContestService {
     });
     if (!contest) return;
 
+    // The challenger wins: the contested cell changes hands. The defender
+    // wins: the cell the challenger staked does. A draw moves nothing.
+    // Duels made before pledging existed have no stake.
     let transferred = false;
+    let pledgeTransferred = false;
     if (winnerId && winnerId === contest.challengerId) {
       transferred = await this.transferCell(
         contest.cellId,
         contest.defenderId,
         contest.challengerId,
+      );
+    } else if (winnerId && winnerId === contest.defenderId && contest.pledgedCellId) {
+      pledgeTransferred = await this.transferCell(
+        contest.pledgedCellId,
+        contest.challengerId,
+        contest.defenderId,
       );
     }
 
@@ -501,6 +559,7 @@ export class ContestService {
       winnerId,
       reason,
       transferred,
+      pledgeTransferred,
     });
   }
 
@@ -551,9 +610,27 @@ export class ContestService {
     return { id: u.id, name: u.username };
   }
 
+  private cellSummary(cell: {
+    id: string;
+    row: number;
+    col: number;
+    territoryId: string;
+    territory: { name: string; tier: string };
+  }) {
+    return {
+      id: cell.id,
+      row: cell.row,
+      col: cell.col,
+      territoryId: cell.territoryId,
+      territoryName: cell.territory.name,
+      tier: cell.territory.tier,
+    };
+  }
+
   private summaryInclude() {
     return {
       cell: { include: { territory: true } },
+      pledgedCell: { include: { territory: true } },
       problem: { select: { id: true, title: true, difficultyLevel: true } },
       challenger: { select: { id: true, username: true } },
       defender: { select: { id: true, username: true } },
@@ -576,6 +653,13 @@ export class ContestService {
       territoryId: string;
       territory: { name: string; tier: string };
     };
+    pledgedCell: {
+      id: string;
+      row: number;
+      col: number;
+      territoryId: string;
+      territory: { name: string; tier: string };
+    } | null;
     problem: { id: number; title: string; difficultyLevel: string };
     challenger: DisplayUser;
     defender: DisplayUser;
@@ -591,6 +675,7 @@ export class ContestService {
         territoryName: c.cell.territory.name,
         tier: c.cell.territory.tier,
       },
+      pledgedCell: c.pledgedCell ? this.cellSummary(c.pledgedCell) : null,
       problem: c.problem,
       challenger: this.displayUser(c.challenger),
       defender: this.displayUser(c.defender),

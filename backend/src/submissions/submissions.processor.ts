@@ -248,9 +248,12 @@ export class SubmissionsProcessor extends WorkerHost {
       return true;
     }
 
+    // Cells tied up in a pending or active duel are off limits to solo play.
+    const locked = new Set(await this.contestService.lockedCellIds());
     const contestedNeighbor = candidates.find(
       (cell) =>
         isNeighborOfOwned(cell) &&
+        !locked.has(cell.id) &&
         cell.ownerships.length > 0 &&
         cell.ownerships[0].userId !== userId,
     );
@@ -284,10 +287,12 @@ export class SubmissionsProcessor extends WorkerHost {
     }
 
     // Nothing unclaimed anywhere in this tier — contest a cell owned by someone else.
-    // Skip cells the user already owns themselves (no point re-capturing your own cell).
+    // Skip cells the user already owns themselves (no point re-capturing your own cell)
+    // and cells tied up in a pending or active duel.
     const contested = await this.prisma.territoryCell.findFirst({
       where: {
         territory: { tier },
+        id: { notIn: await this.contestService.lockedCellIds() },
         ownerships: { some: { closedAt: null, NOT: { userId } } },
       },
       include: { ownerships: { where: { closedAt: null } } },
