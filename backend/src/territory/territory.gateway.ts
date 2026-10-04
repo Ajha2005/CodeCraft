@@ -1,63 +1,68 @@
-import {
-  WebSocketGateway,
-  WebSocketServer,
-  OnGatewayConnection,
-  OnGatewayDisconnect,
-} from '@nestjs/websockets';
+import { OnGatewayInit, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
-import { Server, Socket } from 'socket.io';
+import { JwtService } from '@nestjs/jwt';
+import type { Server } from 'socket.io';
+import { requireTokenOnHandshake, SocketData } from '../auth/ws-auth';
+import { isAllowedOrigin } from '../config/env';
+import { TerritoryService } from './territory.service';
+
+/** A cell changed hands. The owner's id is needed to work out `isMe` per client, and is never sent. */
+export interface CellUpdate {
+  territoryId: string;
+  cellId: string;
+  row: number;
+  col: number;
+  ownerUserId: string | null;
+  ownerUsername: string | null;
+  ownerColor: string;
+}
 
 @WebSocketGateway({
-  cors: { origin: '*' }, // TODO: restrict to actual frontend origin before deploying
+  // Same allowlist as the REST API: only the real frontend's origin, never "*".
+  cors: { origin: (origin: string | undefined, cb: (err: Error | null, ok?: boolean) => void) => cb(null, isAllowedOrigin(origin)) },
 })
-export class TerritoryGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class TerritoryGateway implements OnGatewayInit {
   @WebSocketServer()
   server: Server;
 
   private readonly logger = new Logger(TerritoryGateway.name);
 
-  handleConnection(client: Socket) {
-    this.logger.log(`Client connected: ${client.id}`);
-  }
+  constructor(
+    private readonly jwt: JwtService,
+    private readonly territories: TerritoryService,
+  ) {}
 
-  handleDisconnect(client: Socket) {
-    this.logger.log(`Client disconnected: ${client.id}`);
-  }
-
-  /**
-   * Called whenever ownership changes. Broadcasts to every connected
-   * client — no rooms needed since the whole map is shared/global,
-   * unlike Phase 7's per-contest isolation.
-   */
-  broadcastTerritoryUpdate(payload: {
-    territoryId: string;
-    ownerId: string | null;
-    ownerColor: string;
-  }) {
-    this.server.emit('territory:updated', payload);
-    this.logger.log(`Broadcast territory:updated for ${payload.territoryId}`);
+  afterInit(server: Server) {
+    // Demo (guest) sessions may watch the map, so guests are allowed here.
+    requireTokenOnHandshake(server, this.jwt, true);
   }
 
   /**
-   * Called whenever a user's cumulative score changes (after any AC
-   * submission). Frontend uses this to know it should refetch the
-   * leaderboard, rather than pushing full leaderboard data through
-   * the socket on every single score change.
+   * Called whenever a cell changes owner. Each connected client gets its own
+   * copy with `isMe` filled in, so no client ever sees (or needs) a user id.
    */
-  broadcastLeaderboardUpdate(payload: { userId: string; newScore: number }) {
-    this.server.emit('leaderboard:updated', payload);
-    this.logger.log(`Broadcast leaderboard:updated for user ${payload.userId}`);
+  async broadcastCellUpdate(update: CellUpdate): Promise<void> {
+    const zone = await this.territories.zoneSlug(update.territoryId);
+    for (const socket of this.server.sockets.sockets.values()) {
+      const user = (socket.data as Partial<SocketData>).user;
+      socket.emit('cell:updated', {
+        cellId: update.cellId,
+        zone,
+        row: update.row,
+        col: update.col,
+        ownerUsername: update.ownerUsername,
+        ownerColor: update.ownerColor,
+        isMe: !!user && !user.isGuest && !!update.ownerUserId && user.userId === update.ownerUserId,
+      });
+    }
+    this.logger.log(`Broadcast cell:updated for ${update.cellId}`);
   }
-  broadcastCellUpdate(payload: {
-  territoryId: string;
-  cellId: string;
-  row: number;
-  col: number;
-  ownerId: string | null;
-  ownerUsername: string | null;
-  ownerColor: string;
-}) {
-  this.server.emit('cell:updated', payload);
-  this.logger.log(`Broadcast cell:updated for ${payload.cellId} (territory ${payload.territoryId})`);
-}
+
+  /**
+   * Called whenever a score changes (after any AC submission). The frontend
+   * only uses it as a hint to refetch the leaderboard, so it names nobody.
+   */
+  broadcastLeaderboardUpdate() {
+    this.server.emit('leaderboard:updated', {});
+  }
 }

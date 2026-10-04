@@ -6,6 +6,8 @@ import {
   BadRequestException,
   ForbiddenException,
   ConflictException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -13,7 +15,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ProblemsService } from '../problems/problems.service';
 import { TerritoryGateway } from '../territory/territory.gateway';
 import { ContestGateway } from './contest.gateway';
+import { AuditLogService } from '../audit/audit.service';
 import { getColorForUser } from '../common/color/color.util';
+import { submissionSelect } from '../submissions/submission.dto';
 import { CreateChallengeDto } from './dto/create-challenge.dto';
 import { SubmitContestSolutionDto } from './dto/submit-contest-solution.dto';
 
@@ -30,6 +34,8 @@ const DIFFICULTY_BY_TIER: Record<string, string> = {
 
 const DEFAULT_DURATION_SECONDS = 600;
 const PENDING_EXPIRY_MS = 5 * 60 * 1000;
+// One player cannot bury others in invitations: this many unanswered challenges at a time.
+const MAX_PENDING_CHALLENGES = 5;
 // A duel in these states ties up its cells (see lockedCellIds).
 const OPEN_STATUSES = ['PENDING', 'ACTIVE'];
 
@@ -48,6 +54,7 @@ export class ContestService {
     private readonly contestGateway: ContestGateway,
     @InjectQueue('submissions') private readonly submissionsQueue: Queue,
     @InjectQueue('contest-timeout') private readonly contestTimeoutQueue: Queue,
+    private readonly audit: AuditLogService,
   ) {}
 
   // ---------- Challenge lifecycle ----------
@@ -59,11 +66,22 @@ export class ContestService {
       // one at a time. Ordered by id so two of these can never deadlock.
       await tx.$queryRaw`SELECT id FROM territory_cells WHERE id = ${dto.cellId} OR id = ${dto.pledgedCellId} ORDER BY id FOR UPDATE`;
 
+      const waiting = await tx.contest.count({ where: { challengerId, status: 'PENDING' } });
+      if (waiting >= MAX_PENDING_CHALLENGES) {
+        throw new HttpException(
+          `You already have ${MAX_PENDING_CHALLENGES} challenges waiting for an answer. Wait for them to be answered or to expire.`,
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+
       const cell = await tx.territoryCell.findUnique({
         where: { id: dto.cellId },
         include: { ownerships: { where: { closedAt: null } } },
       });
       if (!cell) throw new NotFoundException('Territory cell not found');
+      if (cell.retiredAt) {
+        throw new BadRequestException('The map was redrawn and this cell no longer exists. Refresh the page and pick again.');
+      }
 
       const currentOwnership = cell.ownerships[0];
       if (!currentOwnership) {
@@ -81,7 +99,7 @@ export class ContestService {
         where: { id: dto.pledgedCellId },
         include: { ownerships: { where: { closedAt: null } } },
       });
-      if (!pledged || pledged.ownerships[0]?.userId !== challengerId) {
+      if (!pledged || pledged.retiredAt || pledged.ownerships[0]?.userId !== challengerId) {
         throw new BadRequestException('You can only pledge a cell you hold right now');
       }
 
@@ -141,6 +159,14 @@ export class ContestService {
 
     this.contestGateway.notifyUser(contest.defenderId, 'challenge:received', {
       contestId: contest.id,
+    });
+    await this.audit.record({
+      action: 'contest.created',
+      actorType: 'USER',
+      actorId: challengerId,
+      targetType: 'contest',
+      targetId: contest.id,
+      metadata: { cellId: contest.cellId, pledgedCellId: contest.pledgedCellId, defenderId: contest.defenderId },
     });
 
     return this.getContest(contest.id, challengerId);
@@ -278,6 +304,7 @@ export class ContestService {
     this.contestGateway.notifyUser(contest.challengerId, 'challenge:accepted', {
       contestId: id,
     });
+    await this.audit.record({ action: 'contest.accepted', actorType: 'USER', actorId: userId, targetType: 'contest', targetId: id });
     this.contestGateway.broadcastToContest(id, 'contest:started', {
       contestId: id,
       startedAt: now.toISOString(),
@@ -307,6 +334,7 @@ export class ContestService {
     this.contestGateway.notifyUser(contest.challengerId, 'challenge:declined', {
       contestId: id,
     });
+    await this.audit.record({ action: 'contest.declined', actorType: 'USER', actorId: userId, targetType: 'contest', targetId: id });
     return { id, status: 'DECLINED' };
   }
 
@@ -339,6 +367,7 @@ export class ContestService {
 
     const problem = await this.prisma.problem.findUnique({
       where: { id: contest.problemId },
+      select: { id: true },
     });
     if (!problem) throw new NotFoundException('Problem not found');
 
@@ -351,17 +380,11 @@ export class ContestService {
         verdict: 'PENDING',
         contestId,
       },
+      select: submissionSelect,
     });
 
-    await this.submissionsQueue.add('judge', {
-      submissionId: submission.id,
-      code: dto.code,
-      language: dto.language,
-      testCases: problem.testCases,
-      userId,
-      problemId: contest.problemId,
-      contestId,
-    });
+    // Only the id goes through Redis; the worker reads the code and the hidden tests from Postgres.
+    await this.submissionsQueue.add('judge', { submissionId: submission.id });
 
     return submission;
   }
@@ -561,6 +584,14 @@ export class ContestService {
       transferred,
       pledgeTransferred,
     });
+    await this.audit.record({
+      action: 'contest.resolved',
+      actorType: 'SYSTEM',
+      targetType: 'contest',
+      targetId: contestId,
+      reason,
+      metadata: { winnerId, transferred, pledgeTransferred },
+    });
   }
 
   /**
@@ -591,14 +622,22 @@ export class ContestService {
         include: { cell: true, user: { select: { username: true } } },
       });
 
-      this.territoryGateway.broadcastCellUpdate({
+      void this.territoryGateway.broadcastCellUpdate({
         territoryId: ownership.cell.territoryId,
         cellId,
         row: ownership.cell.row,
         col: ownership.cell.col,
-        ownerId: newOwnerId,
+        ownerUserId: newOwnerId,
         ownerUsername: ownership.user.username,
         ownerColor: getColorForUser(newOwnerId),
+      });
+      void this.audit.record({
+        action: 'territory.transferred',
+        actorType: 'SYSTEM',
+        targetType: 'cell',
+        targetId: cellId,
+        reason: 'Duel resolved',
+        metadata: { sourceType: 'contest', fromUserId: expectedCurrentOwnerId, toUserId: newOwnerId },
       });
 
       return true;

@@ -7,11 +7,20 @@ import { ScoringService } from '../scoring/scoring.service';
 import { LeaderboardRedisService } from '../common/redis/leaderboard-redis.service';
 import { TerritoryGateway } from '../territory/territory.gateway';
 import { ContestService } from '../contest/contest.service';
+import { AuditLogService } from '../audit/audit.service';
 import { getColorForUser } from '../common/color/color.util';
 
 const DAILY_LIMIT = 6;
 
-@Processor('submissions', { stalledInterval: 300000 })
+// How many submissions are judged at the same time. Each one is a sequence of
+// runs on the code runner, which has its own (smaller) cap, so a high number
+// here only makes more jobs wait inside the runner's queue.
+const workerConcurrency = () => {
+  const value = Number(process.env.SUBMISSION_WORKER_CONCURRENCY);
+  return Number.isInteger(value) && value >= 1 && value <= 4 ? value : 2;
+};
+
+@Processor('submissions', { stalledInterval: 300000, concurrency: workerConcurrency() })
 export class SubmissionsProcessor extends WorkerHost {
   private readonly logger = new Logger(SubmissionsProcessor.name);
 
@@ -22,26 +31,37 @@ export class SubmissionsProcessor extends WorkerHost {
     private readonly leaderboardRedis: LeaderboardRedisService,
     private readonly territoryGateway: TerritoryGateway,
     private readonly contestService: ContestService,
+    private readonly audit: AuditLogService,
   ) {
     super();
   }
 
-  async process(job: Job): Promise<any> {
-    const {
-      submissionId,
-      code,
-      testCases,
-      language,
-      userId,
-      problemId,
-      contestId,
-    } = job.data;
+  /**
+   * The job only carries a submission id. The code, language, owner and the
+   * problem's hidden test cases are read from Postgres here, so none of them
+   * ever sit in Redis (which has no encryption in transit on the free plan).
+   */
+  async process(job: Job<{ submissionId: string }>): Promise<any> {
+    const submission = await this.prisma.submission.findUnique({
+      where: { id: job.data.submissionId },
+      select: {
+        id: true,
+        userId: true,
+        problemId: true,
+        code: true,
+        language: true,
+        contestId: true,
+        problem: { select: { testCases: true } },
+      },
+    });
+    if (!submission) {
+      this.logger.warn(`Submission ${job.data.submissionId} no longer exists, skipping its job`);
+      return;
+    }
+    const { id: submissionId, userId, problemId, code, language, contestId } = submission;
+    const testCases = submission.problem.testCases as { input: Record<string, any>; expected_output: any }[];
 
-    const judgeResult = await this.judgeService.runAllTestCases(
-      code,
-      testCases,
-      language,
-    );
+    const judgeResult = await this.judgeService.runAllTestCases(code, testCases, language);
 
     // Contest submissions never touch the daily-limit/territory-tier scoring
     // path below — winning a contest transfers the contested cell directly,
@@ -168,10 +188,7 @@ export class SubmissionsProcessor extends WorkerHost {
     });
     const totalUserScore = userScoreAgg._sum.totalScore ?? 0;
     await this.leaderboardRedis.updateCollegeScore(userId, totalUserScore);
-    this.territoryGateway.broadcastLeaderboardUpdate({
-      userId,
-      newScore: totalUserScore,
-    });
+    this.territoryGateway.broadcastLeaderboardUpdate();
 
     await this.prisma.dailyProgress.upsert({
       where: { userId_date: { userId, date: today } },
@@ -189,7 +206,7 @@ export class SubmissionsProcessor extends WorkerHost {
     // If the user already holds cells in this tier, grow their territory
     // outward from those cells instead of handing them an unrelated one.
     const ownedCells = await this.prisma.territoryCellOwnership.findMany({
-      where: { userId, closedAt: null, cell: { territory: { tier } } },
+      where: { userId, closedAt: null, cell: { territory: { tier }, retiredAt: null } },
       include: { cell: true },
     });
 
@@ -225,7 +242,7 @@ export class SubmissionsProcessor extends WorkerHost {
     const territoryIds = [...new Set(ownedCells.map((c) => c.territoryId))];
 
     const candidates = await this.prisma.territoryCell.findMany({
-      where: { territoryId: { in: territoryIds } },
+      where: { territoryId: { in: territoryIds }, retiredAt: null },
       include: { ownerships: { where: { closedAt: null } } },
     });
 
@@ -263,6 +280,7 @@ export class SubmissionsProcessor extends WorkerHost {
         tier,
         contestedNeighbor,
         contestedNeighbor.ownerships[0].id,
+        contestedNeighbor.ownerships[0].userId,
       );
       return true;
     }
@@ -277,6 +295,7 @@ export class SubmissionsProcessor extends WorkerHost {
     const unclaimedCell = await this.prisma.territoryCell.findFirst({
       where: {
         territory: { tier },
+        retiredAt: null,
         ownerships: { none: { closedAt: null } },
       },
     });
@@ -292,6 +311,7 @@ export class SubmissionsProcessor extends WorkerHost {
     const contested = await this.prisma.territoryCell.findFirst({
       where: {
         territory: { tier },
+        retiredAt: null,
         id: { notIn: await this.contestService.lockedCellIds() },
         ownerships: { some: { closedAt: null, NOT: { userId } } },
       },
@@ -305,7 +325,13 @@ export class SubmissionsProcessor extends WorkerHost {
       return;
     }
 
-    await this.captureCell(userId, tier, contested, contested.ownerships[0].id);
+    await this.captureCell(
+      userId,
+      tier,
+      contested,
+      contested.ownerships[0].id,
+      contested.ownerships[0].userId,
+    );
   }
 
   private async claimCell(
@@ -328,6 +354,7 @@ export class SubmissionsProcessor extends WorkerHost {
     tier: string,
     cell: { id: string; territoryId: string; row: number; col: number },
     openOwnershipId: string,
+    previousOwnerId?: string,
   ) {
     await this.prisma.territoryCellOwnership.update({
       where: { id: openOwnershipId },
@@ -340,6 +367,15 @@ export class SubmissionsProcessor extends WorkerHost {
     this.logger.log(
       `User ${userId} captured ${tier} cell ${cell.id} (territory ${cell.territoryId})`,
     );
+    await this.audit.record({
+      action: 'territory.transferred',
+      actorType: 'USER',
+      actorId: userId,
+      targetType: 'cell',
+      targetId: cell.id,
+      reason: 'Captured by solving a problem',
+      metadata: { sourceType: 'solve', tier, fromUserId: previousOwnerId ?? null, toUserId: userId },
+    });
     this.broadcastCell(cell, userId, ownership.user.username);
   }
 
@@ -348,12 +384,13 @@ export class SubmissionsProcessor extends WorkerHost {
     userId: string,
     username: string,
   ) {
+    // The gateway tells each connected client whether the cell is theirs; the owner's id stays on the server.
     this.territoryGateway.broadcastCellUpdate({
       territoryId: cell.territoryId,
       cellId: cell.id,
       row: cell.row,
       col: cell.col,
-      ownerId: userId,
+      ownerUserId: userId,
       ownerUsername: username,
       ownerColor: getColorForUser(userId),
     });

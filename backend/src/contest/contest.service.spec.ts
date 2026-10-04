@@ -15,15 +15,18 @@ function setup() {
   const territoryGateway = { broadcastCellUpdate: jest.fn() };
   const contestGateway = { notifyUser: jest.fn(), broadcastToContest: jest.fn() };
   const timeoutQueue = { add: jest.fn().mockResolvedValue(undefined) };
+  const submissionsQueue = { add: jest.fn().mockResolvedValue(undefined) };
+  const audit = { record: jest.fn().mockResolvedValue(undefined) };
   const service = new ContestService(
     prisma as never,
     problemsService as never,
     territoryGateway as never,
     contestGateway as never,
-    null as never,
+    submissionsQueue as never,
     timeoutQueue as never,
+    audit as never,
   );
-  return { prisma, territoryGateway, contestGateway, timeoutQueue, service };
+  return { prisma, territoryGateway, contestGateway, timeoutQueue, submissionsQueue, audit, service };
 }
 
 const contestRow = {
@@ -113,7 +116,7 @@ describe('ContestService.transferCell', () => {
       cellId: 'c1',
       row: 1,
       col: 2,
-      ownerId: 'u1',
+      ownerUserId: 'u1',
       ownerUsername: 'arjun_m',
       ownerColor: getColorForUser('u1'),
     });
@@ -138,6 +141,7 @@ describe('ContestService.createChallenge (the pledged cell)', () => {
       territoryCell: { findUnique: jest.fn(({ where }: { where: { id: string } }) => Promise.resolve(cells[where.id] ?? null)) },
       contest: {
         findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(0),
         create: jest.fn(({ data }: { data: object }) => Promise.resolve({ id: 'k1', ...data })),
       },
       problem: { findUnique: jest.fn().mockResolvedValue({ id: 5 }) },
@@ -224,12 +228,102 @@ describe('ContestService.createChallenge (the pledged cell)', () => {
   });
 });
 
+describe('ContestService.createChallenge (abuse limits and the map redraw)', () => {
+  type Cell = { id: string; retiredAt: Date | null; ownerships: { userId: string }[] };
+  const cells: Record<string, Cell> = {
+    target: { id: 'target', retiredAt: null, ownerships: [{ userId: 'def' }] },
+    mine: { id: 'mine', retiredAt: null, ownerships: [{ userId: 'chal' }] },
+    oldTarget: { id: 'oldTarget', retiredAt: new Date(), ownerships: [{ userId: 'def' }] },
+    oldMine: { id: 'oldMine', retiredAt: new Date(), ownerships: [{ userId: 'chal' }] },
+  };
+
+  function limitSetup(pending = 0) {
+    const s = setup();
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      territoryCell: { findUnique: jest.fn(({ where }: { where: { id: string } }) => Promise.resolve(cells[where.id] ?? null)) },
+      contest: {
+        findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(pending),
+        create: jest.fn(({ data }: { data: object }) => Promise.resolve({ id: 'k1', ...data })),
+      },
+      problem: { findUnique: jest.fn().mockResolvedValue({ id: 5 }) },
+    };
+    s.prisma.$transaction.mockImplementation((work: (t: typeof tx) => unknown) => work(tx));
+    jest.spyOn(s.service, 'getContest').mockResolvedValue({ id: 'k1' } as never);
+    return { ...s, tx };
+  }
+
+  it('stops one player from burying others in unanswered challenges (429)', async () => {
+    const { service, tx } = limitSetup(5);
+    await expect(service.createChallenge('chal', { cellId: 'target', pledgedCellId: 'mine', problemId: 5 })).rejects.toMatchObject({ status: 429 });
+    expect(tx.contest.create).not.toHaveBeenCalled();
+    expect(tx.contest.count).toHaveBeenCalledWith({ where: { challengerId: 'chal', status: 'PENDING' } });
+  });
+
+  it('still allows a challenge while under the limit', async () => {
+    const { service, tx } = limitSetup(4);
+    await service.createChallenge('chal', { cellId: 'target', pledgedCellId: 'mine', problemId: 5 });
+    expect(tx.contest.create).toHaveBeenCalled();
+  });
+
+  it('refuses a cell that a map redraw retired, as target or as stake', async () => {
+    const { service, tx } = limitSetup();
+    await expect(service.createChallenge('chal', { cellId: 'oldTarget', pledgedCellId: 'mine', problemId: 5 })).rejects.toThrow(/redrawn/);
+    await expect(service.createChallenge('chal', { cellId: 'target', pledgedCellId: 'oldMine', problemId: 5 })).rejects.toThrow(BadRequestException);
+    expect(tx.contest.create).not.toHaveBeenCalled();
+  });
+
+  it('writes an audit entry for a new challenge', async () => {
+    const { service, audit } = limitSetup();
+    await service.createChallenge('chal', { cellId: 'target', pledgedCellId: 'mine', problemId: 5 });
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ action: 'contest.created', actorId: 'chal', targetId: 'k1' }));
+  });
+});
+
+describe('ContestService.submitSolution', () => {
+  it('queues only the submission id: no code and no hidden tests in Redis', async () => {
+    const { prisma, submissionsQueue, service } = setup();
+    const row = { id: 'k1', challengerId: 'u1', defenderId: 'u2', status: 'ACTIVE', startedAt: new Date(), durationSeconds: 600, problemId: 5 };
+    prisma.contest.findUnique.mockResolvedValue(row);
+    (prisma as Record<string, unknown>).problem = { findUnique: jest.fn().mockResolvedValue({ id: 5 }) };
+    (prisma as Record<string, unknown>).submission = { create: jest.fn().mockResolvedValue({ id: 's1', verdict: 'PENDING' }) };
+
+    await service.submitSolution('k1', 'u1', { code: 'print(1)', language: 'python' });
+
+    expect(submissionsQueue.add).toHaveBeenCalledWith('judge', { submissionId: 's1' });
+  });
+});
+
+describe('ContestService.getContest (what the room sees of the problem)', () => {
+  it('never includes the hidden test cases', async () => {
+    const { prisma, service } = setup();
+    prisma.contest.findUnique.mockResolvedValue({ ...contestRow, challengerId: 'u1', defenderId: 'u2', problemId: 1, participants: [] });
+    const contest = await service.getContest('k1', 'u1');
+    expect(JSON.stringify(contest)).not.toMatch(/testCases|expected_output/);
+  });
+
+  it('is a 403 for someone who is not one of the two players', async () => {
+    const { prisma, service } = setup();
+    prisma.contest.findUnique.mockResolvedValue({ ...contestRow, challengerId: 'u1', defenderId: 'u2', problemId: 1, participants: [] });
+    await expect(service.getContest('k1', 'u3')).rejects.toThrow('Not a participant in this contest');
+  });
+});
+
 describe('CreateChallengeDto', () => {
   const errorsFor = (value: object) => validate(plainToInstance(CreateChallengeDto, value)).then((e) => e.map((x) => x.property));
 
+  const A = '7b1f0f0e-6a0c-4f5e-9d3a-1b2c3d4e5f60';
+  const B = '8c2a1a1f-7b1d-4a6f-8e4b-2c3d4e5f6071';
+
   it('requires the cell to stake', async () => {
-    expect(await errorsFor({ cellId: 'target' })).toContain('pledgedCellId');
-    expect(await errorsFor({ cellId: 'target', pledgedCellId: 'mine' })).toEqual([]);
+    expect(await errorsFor({ cellId: A })).toContain('pledgedCellId');
+    expect(await errorsFor({ cellId: A, pledgedCellId: B })).toEqual([]);
+  });
+
+  it('only accepts cell ids that look like ids', async () => {
+    expect(await errorsFor({ cellId: 'target', pledgedCellId: B })).toContain('cellId');
+    expect(await errorsFor({ cellId: A, pledgedCellId: "x'; DROP TABLE contests;--" })).toContain('pledgedCellId');
   });
 });
 

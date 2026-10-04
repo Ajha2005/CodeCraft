@@ -1,4 +1,10 @@
 // backend/prisma/generate-grid.ts
+//
+// LEGACY grid generator: lays a fixed-size square lattice (default 80 SVG units,
+// 554 cells) over every zone and stores it as grid version 1. The live map now
+// uses the 1000-cell grid made by prisma/regrid.ts; run that instead (it also
+// works on an empty database). This script refuses to run once a version 2 grid
+// exists, because two lattices in one zone cannot be drawn together.
 import 'dotenv/config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -124,49 +130,41 @@ async function main() {
   console.log(`\nTotal valid cells across all territories: ${totalCells}`);
 
   if (DRY_RUN) {
-  console.log('\n--dry-run set, nothing written to the database.');
-  return;
-}
-
-// Look up all territory ids once instead of one findUnique per cell
-const allTerritories = await prisma.territory.findMany();
-const territoryIdByPathId = new Map(allTerritories.map((t) => [t.svgPathId, t.id]));
-
-const rows = cellsToInsert
-  .map((cell) => {
-    const territoryId = territoryIdByPathId.get(cell.territorySvgPathId);
-    if (!territoryId) return null;
-    return { territoryId, row: cell.row, col: cell.col };
-  })
-  .filter((r): r is { territoryId: string; row: number; col: number } => r !== null);
-
-// createMany in batches, skipping duplicates so this stays safely re-runnable
-const BATCH_SIZE = 1000;
-let inserted = 0;
-for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-  const batch = rows.slice(i, i + BATCH_SIZE);
-  const result = await prisma.territoryCell.createMany({
-    data: batch,
-    skipDuplicates: true,
-  });
-  inserted += result.count;
-}
-console.log(`\nSeeded ${inserted} TerritoryCell rows (${rows.length} attempted, duplicates skipped).`);
-
-  for (const cell of cellsToInsert) {
-    const territory = await prisma.territory.findUnique({
-      where: { svgPathId: cell.territorySvgPathId },
-    });
-    if (!territory) continue;
-    await prisma.territoryCell.upsert({
-      where: {
-        territoryId_row_col: { territoryId: territory.id, row: cell.row, col: cell.col },
-      },
-      update: {},
-      create: { territoryId: territory.id, row: cell.row, col: cell.col },
-    });
+    console.log('\n--dry-run set, nothing written to the database.');
+    return;
   }
-  console.log(`\nSeeded ${cellsToInsert.length} TerritoryCell rows.`);
+
+  const regridded = await prisma.territoryCell.count({ where: { gridVersion: { gte: 2 } } });
+  if (regridded > 0) {
+    console.error('\nA version 2 grid (made by prisma/regrid.ts) already exists. Not adding version 1 cells next to it.');
+    process.exitCode = 1;
+    return;
+  }
+
+  // Look up all territory ids once instead of one findUnique per cell
+  const allTerritories = await prisma.territory.findMany();
+  const territoryIdByPathId = new Map(allTerritories.map((t) => [t.svgPathId, t.id]));
+
+  const rows = cellsToInsert
+    .map((cell) => {
+      const territoryId = territoryIdByPathId.get(cell.territorySvgPathId);
+      if (!territoryId) return null;
+      return { territoryId, row: cell.row, col: cell.col };
+    })
+    .filter((r): r is { territoryId: string; row: number; col: number } => r !== null);
+
+  // createMany in batches, skipping duplicates so this stays safely re-runnable
+  const BATCH_SIZE = 1000;
+  let inserted = 0;
+  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+    const batch = rows.slice(i, i + BATCH_SIZE);
+    const result = await prisma.territoryCell.createMany({
+      data: batch,
+      skipDuplicates: true,
+    });
+    inserted += result.count;
+  }
+  console.log(`\nSeeded ${inserted} TerritoryCell rows (${rows.length} attempted, duplicates skipped).`);
 }
 
 main().finally(() => prisma.$disconnect());

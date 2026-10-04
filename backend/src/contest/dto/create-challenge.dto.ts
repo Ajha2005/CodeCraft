@@ -2,18 +2,18 @@ import {
   IsInt,
   IsOptional,
   IsPositive,
-  IsString,
+  IsUUID,
   Max,
   Min,
 } from 'class-validator';
 
 export class CreateChallengeDto {
-  @IsString()
+  @IsUUID()
   cellId!: string;
 
   // The challenger's own cell, put at stake: lose the duel and it goes to the
   // defender. Must be a cell the challenger holds right now.
-  @IsString()
+  @IsUUID()
   pledgedCellId!: string;
 
   // Left to the server (picked by the contested cell's tier) when omitted —

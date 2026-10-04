@@ -1,54 +1,92 @@
-import { Body, Controller, Post, Get, Patch, UseGuards, Req, Res } from '@nestjs/common';
-import type { Response } from 'express';
+import { Body, Controller, Get, GoneException, HttpCode, Patch, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
+import type { Request, Response } from 'express';
+import { AuthUser } from './auth-user';
 import { AuthService } from './auth.service';
-import { SignupDto } from './dto/signup.dto';
+import { CurrentUser } from './current-user.decorator';
+import { ExchangeCodeDto } from './dto/exchange-code.dto';
 import { LoginDto } from './dto/login.dto';
-import { JwtAuthGuard } from './jwt-auth.guard';
+import { UpdateSettingsDto } from './dto/update-settings.dto';
 import { GoogleAuthGuard } from './google-auth.guard';
+import type { GoogleUser } from './google.strategy';
+import { Public } from './public.decorator';
+
+const frontendBaseUrl = () => (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/+$/, '');
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private readonly authService: AuthService) {}
 
-  @Post('signup')
-  signup(@Body() dto: SignupDto) {
-    return this.authService.signup(dto);
+  /** Starts a read-only demo session. No credentials, no account, no database row. Limited per IP. */
+  @Public()
+  @Post('guest')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 20, ttl: 60 * 60 * 1000 } })
+  guest() {
+    return this.authService.issueGuestToken();
   }
 
+  /** Accounts are created by Google sign-in only. Kept so old clients get a clear answer, not a 404. */
+  @Public()
+  @Post('signup')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  signup() {
+    throw new GoneException('Sign-up is done with Google now. Use "Continue with Google" with your Thapar account.');
+  }
+
+  @Public()
   @Post('login')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
   }
 
-  @UseGuards(JwtAuthGuard)
+  /** Trades the one-time code from the Google redirect for an access token (the token never travels in a URL). */
+  @Public()
+  @Post('exchange')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  exchange(@Body() dto: ExchangeCodeDto) {
+    return this.authService.exchangeLoginCode(dto.code);
+  }
+
   @Get('me')
-  getProfile(@Req() req: any) {
-    return this.authService.getProfile(req.user.userId); // never the password hash
+  getProfile(@CurrentUser() user: AuthUser) {
+    return this.authService.getProfile(user);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Patch('settings')
-  updateSettings(@Req() req: any, @Body('flavorTextEnabled') flavorTextEnabled: boolean) {
-    return this.authService.updateSettings(req.user.userId, flavorTextEnabled);
+  updateSettings(@CurrentUser() user: AuthUser, @Body() dto: UpdateSettingsDto) {
+    return this.authService.updateSettings(user.userId, dto.flavorTextEnabled);
   }
 
+  @Public()
   @UseGuards(GoogleAuthGuard)
   @Get('google')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   googleLogin() {
     // redirects to Google — this method body never runs
   }
 
+  @Public()
   @UseGuards(GoogleAuthGuard)
   @Get('google/callback')
-  async googleCallback(@Req() req: any, @Res() res: Response) {
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  async googleCallback(@Req() req: Request & { googleUser?: GoogleUser; googleAuthFailureReason?: string }, @Res() res: Response) {
+    const frontend = frontendBaseUrl();
 
-    if (!req.user) {
+    if (!req.googleUser) {
       const reason = req.googleAuthFailureReason === 'oauth_error' ? 'google_auth_failed' : 'domain_not_allowed';
-      return res.redirect(`${frontendUrl}/login?error=${reason}`);
+      return res.redirect(`${frontend}/login?error=${reason}`);
     }
 
-    const { accessToken } = await this.authService.loginWithGoogle(req.user);
-    res.redirect(`${frontendUrl}/auth/callback?token=${accessToken}`);
+    try {
+      const userId = await this.authService.findOrCreateGoogleUser(req.googleUser, req.ip);
+      const code = await this.authService.issueLoginCode(userId);
+      return res.redirect(`${frontend}/auth/callback?code=${encodeURIComponent(code)}`);
+    } catch {
+      return res.redirect(`${frontend}/login?error=google_auth_failed`);
+    }
   }
 }

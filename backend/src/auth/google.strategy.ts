@@ -1,9 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
-import { Strategy, VerifyCallback } from 'passport-google-oauth20';
 import { ConfigService } from '@nestjs/config';
+import { Strategy, VerifyCallback } from 'passport-google-oauth20';
+import { normalizeEmail } from './email.util';
 
-const ALLOWED_DOMAIN = '@thapar.edu';
+/** What the Google guard puts on `req.googleUser` after a successful sign-in. */
+export interface GoogleUser {
+  email: string;
+  googleId: string;
+}
+
+interface GoogleProfile {
+  id: string;
+  emails?: { value?: string; verified?: boolean | string }[];
+}
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
@@ -18,31 +28,23 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     });
   }
 
-  async validate(
-    accessToken: string,
-    refreshToken: string,
-    profile: any,
-    done: VerifyCallback,
-  ): Promise<any> {
-    // Google can attach more than one email to a profile (e.g. a recovery
-    // address); check all of them case-insensitively instead of trusting
-    // emails[0] to be the institutional one.
-    const emails: { value?: string }[] = profile.emails ?? [];
+  validate(_accessToken: string, _refreshToken: string, profile: GoogleProfile, done: VerifyCallback): void {
+    // Google can attach more than one address to a profile (e.g. a recovery
+    // address). Take the first one that Google itself marks as verified and
+    // that is an acceptable @thapar.edu address in canonical form.
+    const emails = profile.emails ?? [];
     const match = emails
-      .map((e) => e.value?.trim())
-      .find((value) => value?.toLowerCase().endsWith(ALLOWED_DOMAIN));
+      .filter((entry) => entry.verified === true || entry.verified === 'true')
+      .map((entry) => normalizeEmail(entry.value))
+      .find((value): value is string => value !== null);
 
     if (!match) {
-      this.logger.warn(
-        `Rejected Google sign-in for profile ${profile.id}: no ${ALLOWED_DOMAIN} email found among [${emails.map((e) => e.value).join(', ')}]`,
-      );
+      // Addresses are personal data: log how many were offered, never which.
+      this.logger.warn(`Rejected Google sign-in for profile ${profile.id}: none of its ${emails.length} address(es) is a verified @thapar.edu account`);
       return done(null, false);
     }
 
-    done(null, {
-      email: match,
-      googleId: profile.id,
-      name: profile.displayName,
-    });
+    const user: GoogleUser = { email: match, googleId: profile.id };
+    done(null, user);
   }
 }

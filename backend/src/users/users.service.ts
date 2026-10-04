@@ -1,23 +1,25 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuthUser } from '../auth/auth-user';
 import { USERNAME_PATTERN } from '../auth/username.util';
 
-/** Everything a public profile shows. Never email, real name, password hash or settings. */
+/** Everything a public profile shows. Never an id, email, real name, password hash or settings. */
 export interface PublicProfileDto {
-  userId: string;
   username: string;
   totalScore: number;
   cellsHeld: number;
   territoriesHeld: number;
   problemsSolved: number;
   joinedAt: Date;
+  /** True when the viewer is looking at their own profile (decided here, so the client never compares ids). */
+  isMe: boolean;
 }
 
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getPublicProfile(rawUsername: string): Promise<PublicProfileDto> {
+  async getPublicProfile(rawUsername: string, viewer?: AuthUser): Promise<PublicProfileDto> {
     // Usernames are stored lowercase, so an exact lowercase match is a
     // case-insensitive lookup. Anything that could never be a username is a
     // 404 without touching the database.
@@ -41,7 +43,7 @@ export class UsersService {
         _sum: { totalScore: true },
       }),
       this.prisma.territoryCellOwnership.findMany({
-        where: { userId: user.id, closedAt: null },
+        where: { userId: user.id, closedAt: null, cell: { retiredAt: null } },
         select: { cell: { select: { territoryId: true } } },
       }),
       this.prisma.submission.findMany({
@@ -52,13 +54,13 @@ export class UsersService {
     ]);
 
     return {
-      userId: user.id,
       username: user.username,
       totalScore: score._sum.totalScore ?? 0,
       cellsHeld: heldCells.length,
       territoriesHeld: new Set(heldCells.map((c) => c.cell.territoryId)).size,
       problemsSolved: solved.length,
       joinedAt: user.createdAt,
+      isMe: !!viewer && !viewer.isGuest && viewer.userId === user.id,
     };
   }
 }

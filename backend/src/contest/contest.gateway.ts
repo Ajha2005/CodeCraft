@@ -3,14 +3,16 @@ import {
   WebSocketServer,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
   SubscribeMessage,
   ConnectedSocket,
   MessageBody,
 } from '@nestjs/websockets';
 import { Inject, Logger, forwardRef } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
-import { Server, Socket } from 'socket.io';
+import { Namespace, Server, Socket } from 'socket.io';
+import { requireTokenOnHandshake, SocketData } from '../auth/ws-auth';
+import { isAllowedOrigin } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { ContestService } from './contest.service';
 
@@ -21,7 +23,7 @@ import { ContestService } from './contest.service';
 // the gateway layer already has around horizontal scaling.
 const GRACE_PERIOD_SECONDS = 30;
 
-interface ContestSocketData {
+interface ContestSocketData extends SocketData {
   userId: string;
   contestIds: Set<string>;
 }
@@ -30,10 +32,11 @@ type ContestSocket = Socket<any, any, any, ContestSocketData>;
 
 @WebSocketGateway({
   namespace: 'contest',
-  cors: { origin: '*' }, // TODO: restrict to actual frontend origin before deploying
+  // Same allowlist as the REST API: only the real frontend's origin, never "*".
+  cors: { origin: (origin: string | undefined, cb: (err: Error | null, ok?: boolean) => void) => cb(null, isAllowedOrigin(origin)) },
 })
 export class ContestGateway
-  implements OnGatewayConnection, OnGatewayDisconnect
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
   @WebSocketServer()
   server: Server<any, any, any, ContestSocketData>;
@@ -43,37 +46,27 @@ export class ContestGateway
 
   constructor(
     private readonly jwtService: JwtService,
-    private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => ContestService))
     private readonly contestService: ContestService,
   ) {}
 
+  // The token is checked during the handshake (before the connection exists), and
+  // demo (guest) sessions are refused: duels are for real accounts only.
+  afterInit(server: Namespace) {
+    requireTokenOnHandshake(server, this.jwtService, false);
+  }
+
   async handleConnection(client: ContestSocket) {
-    const token = (client.handshake.auth?.token ??
-      client.handshake.query?.token) as string | undefined;
-    if (!token) {
+    const user = (client.data as Partial<SocketData>).user;
+    if (!user) {
       client.disconnect(true);
       return;
     }
-
-    try {
-      const payload = await this.jwtService.verifyAsync<{
-        sub: string;
-        email: string;
-      }>(token, {
-        secret: this.config.get<string>(
-          'JWT_SECRET',
-          'dev_secret_change_this_in_production',
-        ),
-      });
-      client.data.userId = payload.sub;
-      client.data.contestIds = new Set<string>();
-      await client.join(`user:${payload.sub}`);
-      this.logger.log(`Contest socket connected: user ${payload.sub}`);
-    } catch {
-      client.disconnect(true);
-    }
+    client.data.userId = user.userId;
+    client.data.contestIds = new Set<string>();
+    await client.join(`user:${user.userId}`);
+    this.logger.log(`Contest socket connected: user ${user.userId}`);
   }
 
   handleDisconnect(client: ContestSocket) {

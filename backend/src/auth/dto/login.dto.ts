@@ -1,9 +1,14 @@
-import { IsEmail, IsString } from 'class-validator';
+import { IsString, MaxLength, MinLength } from 'class-validator';
 
 export class LoginDto {
-  @IsEmail()
+  // Not checked with @IsEmail on purpose: the service normalises the address and
+  // answers every failure with the same message.
+  @IsString()
+  @MaxLength(254)
   email!: string;
 
   @IsString()
+  @MinLength(1)
+  @MaxLength(128)
   password!: string;
 }

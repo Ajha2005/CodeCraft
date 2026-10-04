@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
-import { JwtModule } from '@nestjs/jwt';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { AuthModule } from '../auth/auth.module';
 import { ContestService } from './contest.service';
 import { ContestController } from './contest.controller';
 import { ContestGateway } from './contest.gateway';
@@ -13,19 +12,7 @@ import { TerritoryModule } from '../territory/territory.module';
   imports: [
     ProblemsModule,
     TerritoryModule,
-    JwtModule.registerAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        secret: config.get<string>(
-          'JWT_SECRET',
-          'dev_secret_change_this_in_production',
-        ),
-        signOptions: {
-          expiresIn: config.get<string>('JWT_EXPIRES_IN', '1d') as any,
-        },
-      }),
-    }),
+    AuthModule, // the duel gateway verifies access tokens with the same JwtService as the REST guard
     BullModule.registerQueue(
       { name: 'submissions' },
       { name: 'contest-timeout' },

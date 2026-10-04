@@ -1,63 +1,61 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  Post,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
+import { AuthUser } from '../auth/auth-user';
+import { CurrentUser } from '../auth/current-user.decorator';
+import { NoGuests } from '../auth/public.decorator';
 import { ContestService } from './contest.service';
 import { CreateChallengeDto } from './dto/create-challenge.dto';
 import { SubmitContestSolutionDto } from './dto/submit-contest-solution.dto';
 
-@UseGuards(JwtAuthGuard)
+// Duels are between real accounts. The global AccessGuard already stops demo
+// (guest) sessions from every POST; the list endpoints answer "nothing" for them
+// (so the navbar's polling stays quiet) and a single duel is a 403.
 @Controller('contests')
 export class ContestController {
   constructor(private readonly contestService: ContestService) {}
 
   @Post('challenges')
-  createChallenge(@Req() req: any, @Body() dto: CreateChallengeDto) {
-    return this.contestService.createChallenge(req.user.userId, dto);
+  @Throttle({ default: { limit: 10, ttl: 60 * 60 * 1000 } })
+  createChallenge(@CurrentUser() user: AuthUser, @Body() dto: CreateChallengeDto) {
+    return this.contestService.createChallenge(user.userId, dto);
   }
 
   @Get('incoming')
-  listIncoming(@Req() req: any) {
-    return this.contestService.listIncoming(req.user.userId);
+  listIncoming(@CurrentUser() user: AuthUser) {
+    return user.isGuest ? [] : this.contestService.listIncoming(user.userId);
   }
 
   @Get('outgoing')
-  listOutgoing(@Req() req: any) {
-    return this.contestService.listOutgoing(req.user.userId);
+  listOutgoing(@CurrentUser() user: AuthUser) {
+    return user.isGuest ? [] : this.contestService.listOutgoing(user.userId);
   }
 
   @Get('active')
-  listActive(@Req() req: any) {
-    return this.contestService.listActive(req.user.userId);
+  listActive(@CurrentUser() user: AuthUser) {
+    return user.isGuest ? [] : this.contestService.listActive(user.userId);
   }
 
+  @NoGuests()
   @Get(':id')
-  getContest(@Req() req: any, @Param('id') id: string) {
-    return this.contestService.getContest(id, req.user.userId);
+  getContest(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.contestService.getContest(id, user.userId);
   }
 
   @Post(':id/accept')
-  accept(@Req() req: any, @Param('id') id: string) {
-    return this.contestService.accept(id, req.user.userId);
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  accept(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.contestService.accept(id, user.userId);
   }
 
   @Post(':id/decline')
-  decline(@Req() req: any, @Param('id') id: string) {
-    return this.contestService.decline(id, req.user.userId);
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  decline(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.contestService.decline(id, user.userId);
   }
 
   @Post(':id/submissions')
-  submit(
-    @Req() req: any,
-    @Param('id') id: string,
-    @Body() dto: SubmitContestSolutionDto,
-  ) {
-    return this.contestService.submitSolution(id, req.user.userId, dto);
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  submit(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: SubmitContestSolutionDto) {
+    return this.contestService.submitSolution(id, user.userId, dto);
   }
 }

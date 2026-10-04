@@ -135,18 +135,24 @@ model DailyProgress {
 }
 
 model TerritoryCell {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   territoryId String
   row         Int
   col         Int
+  // Which grid generation this cell belongs to. 1 = the original ~80-unit grid
+  // (554 cells), 2 = the 1000-cell grid made by prisma/regrid.ts. A regrid never
+  // deletes cells: the old ones get `retiredAt` and drop out of every live query.
+  gridVersion Int       @default(1)
+  retiredAt   DateTime?
 
   territory  Territory               @relation(fields: [territoryId], references: [id])
   ownerships TerritoryCellOwnership[]
   contests   Contest[]               @relation("ContestCell")
   pledgedTo  Contest[]               @relation("ContestPledgedCell")
 
-  @@unique([territoryId, row, col])
+  @@unique([territoryId, gridVersion, row, col])
   @@index([territoryId])
+  @@index([retiredAt])
   @@map("territory_cells")
 }
 
@@ -233,4 +239,24 @@ model ContestParticipant {
   @@map("contest_participants")
 }
 
+// Who did what, and why, for the actions that matter after the fact: account
+// links, territory transfers, duels, regrids. Written by AuditLogService; a
+// failed write is logged but never breaks the action it describes. Bans and
+// flag resolutions will log here too once Phase 6 exists.
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorType  String   // USER | GUEST | SYSTEM
+  actorId    String?  // user UUID, "guest:<uuid>", or null for SYSTEM
+  action     String   // e.g. auth.google_link, contest.resolved, territory.transferred
+  targetType String?
+  targetId   String?
+  reason     String?
+  metadata   Json?
+  ip         String?
+  createdAt  DateTime @default(now())
 
+  @@index([action])
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

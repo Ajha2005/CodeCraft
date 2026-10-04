@@ -1,14 +1,26 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query, UnauthorizedException } from '@nestjs/common';
+import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import { AuthUser } from '../auth/auth-user';
+import { CurrentUser } from '../auth/current-user.decorator';
+import { Public } from '../auth/public.decorator';
 import { LeaderboardRedisService } from '../common/redis/leaderboard-redis.service';
 import { PrismaService } from '../prisma/prisma.service';
 
+/** One row of a public board: a handle and a score. `isMe` is computed on the server for the caller. */
 export interface LeaderboardEntryDto {
-  userId: string;
-  /** What profile links point at; null when the player no longer exists. */
-  username: string | null;
-  /** The name to show: the username (kept for the login page), or a short id as a last resort. */
-  name: string;
+  username: string;
   score: number;
+  isMe: boolean;
+}
+
+class LimitQuery {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
 }
 
 @Controller('leaderboard')
@@ -18,38 +30,43 @@ export class LeaderboardController {
     private readonly prisma: PrismaService,
   ) {}
 
+  // Public only for the login page's "top score" teaser: without a token the
+  // board can be read one row deep, with any valid token (guests included) in full.
+  @Public()
   @Get('college')
-  async getCollegeLeaderboard(@Query('limit') limit?: string): Promise<LeaderboardEntryDto[]> {
-    const parsedLimit = limit ? parseInt(limit, 10) : 50;
-    const raw = await this.leaderboardRedis.getCollegeTop(parsedLimit);
-    return this.attachNames(raw);
+  async getCollegeLeaderboard(@Query() query: LimitQuery, @CurrentUser() user?: AuthUser): Promise<LeaderboardEntryDto[]> {
+    const limit = query.limit ?? 50;
+    if (!user && limit > 1) throw new UnauthorizedException();
+    const raw = await this.leaderboardRedis.getCollegeTop(limit);
+    return this.attachNames(raw, user);
   }
 
   @Get('territory/:id')
   async getTerritoryLeaderboard(
     @Param('id') territoryId: string,
-    @Query('limit') limit?: string,
+    @Query() query: LimitQuery,
+    @CurrentUser() user: AuthUser,
   ): Promise<LeaderboardEntryDto[]> {
-    const parsedLimit = limit ? parseInt(limit, 10) : 20;
-    const raw = await this.leaderboardRedis.getTerritoryTop(territoryId, parsedLimit);
-    return this.attachNames(raw);
+    const raw = await this.leaderboardRedis.getTerritoryTop(territoryId, query.limit ?? 20);
+    return this.attachNames(raw, user);
   }
 
-  @Get('rank/:userId')
-  async getUserRank(@Param('userId') userId: string) {
-    const rank = await this.leaderboardRedis.getCollegeRank(userId);
-    return { userId, rank };
+  @Get('me/rank')
+  async getMyRank(@CurrentUser() user: AuthUser) {
+    if (user.isGuest) return { rank: null };
+    return { rank: await this.leaderboardRedis.getCollegeRank(user.userId) };
   }
 
-  @Get('near-miss/:userId')
-  async getNearMiss(@Param('userId') userId: string) {
-    const rank = await this.leaderboardRedis.getCollegeRank(userId);
+  @Get('me/near-miss')
+  async getMyNearMiss(@CurrentUser() user: AuthUser) {
+    if (user.isGuest) return { rank: null, pointsToNext: 0, nextRankName: null };
+    const rank = await this.leaderboardRedis.getCollegeRank(user.userId);
     if (!rank || rank <= 1) {
       return { rank, pointsToNext: 0, nextRankName: null };
     }
 
     const [myScore, above] = await Promise.all([
-      this.leaderboardRedis.getCollegeScore(userId),
+      this.leaderboardRedis.getCollegeScore(user.userId),
       this.leaderboardRedis.getCollegeEntryAtRank(rank - 2),
     ]);
 
@@ -57,37 +74,30 @@ export class LeaderboardController {
       return { rank, pointsToNext: 0, nextRankName: null };
     }
 
-    const [named] = await this.attachNames([above]);
+    const [named] = await this.attachNames([above], user);
     return {
       rank,
       pointsToNext: Math.max(0, above.score - myScore),
-      nextRankName: named?.name ?? null,
+      nextRankName: named?.username ?? null,
     };
   }
 
-  private async attachNames(
-    raw: { userId: string; score: number }[],
-  ): Promise<LeaderboardEntryDto[]> {
+  /** Turns Redis rows (user id + score) into public rows. Ids never leave this method; players who no longer exist are dropped. */
+  private async attachNames(raw: { userId: string; score: number }[], viewer?: AuthUser): Promise<LeaderboardEntryDto[]> {
     if (raw.length === 0) return [];
 
-    const userIds = raw.map((r) => r.userId);
     const users = await this.prisma.user.findMany({
-      where: { id: { in: userIds } },
+      where: { id: { in: raw.map((r) => r.userId) } },
       select: { id: true, username: true },
     });
+    const usernameById = new Map(users.map((u) => [u.id, u.username]));
 
-    const userMap = new Map(users.map((u) => [u.id, u]));
-
-    return raw.map((entry) => {
-      const user = userMap.get(entry.userId);
-      // The public name of a player is their username, never their real name or email.
-      const displayName = user?.username ?? entry.userId.slice(0, 8);
-      return {
-        userId: entry.userId,
-        username: user?.username ?? null,
-        name: displayName,
-        score: entry.score,
-      };
-    });
+    const entries: LeaderboardEntryDto[] = [];
+    for (const entry of raw) {
+      const username = usernameById.get(entry.userId);
+      if (!username) continue;
+      entries.push({ username, score: entry.score, isMe: !!viewer && !viewer.isGuest && viewer.userId === entry.userId });
+    }
+    return entries;
   }
 }

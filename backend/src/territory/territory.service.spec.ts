@@ -1,65 +1,122 @@
-import type { PrismaService } from '../prisma/prisma.service';
+import { getColorForUser } from '../common/color/color.util';
 import { TerritoryService } from './territory.service';
+
+const cells = [
+  { id: 'c-a0', row: 0, col: 0, gridVersion: 2, territory: { svgPathId: 'a-hostel' } },
+  { id: 'c-a1', row: 0, col: 1, gridVersion: 2, territory: { svgPathId: 'a-hostel' } },
+  { id: 'c-l0', row: 0, col: 0, gridVersion: 2, territory: { svgPathId: 'library' } },
+];
 
 function setup() {
   const prisma = {
     territory: { findMany: jest.fn() },
-    territoryCell: { findMany: jest.fn() },
+    territoryCell: { findMany: jest.fn().mockResolvedValue(cells) },
+    territoryCellOwnership: { findMany: jest.fn().mockResolvedValue([]) },
   };
-  return { prisma, service: new TerritoryService(prisma as unknown as PrismaService) };
+  return { prisma, service: new TerritoryService(prisma as never) };
 }
 
-// The map may only ever learn the owner's username: no email, no real name.
-const usernameOnlyQuery = {
-  include: {
-    ownerships: { where: { closedAt: null }, include: { user: { select: { username: true } } } },
-  },
-};
+const viewer = (userId: string) => ({ userId, role: 'USER' as const, isGuest: false });
+const guest = { userId: 'guest:1', role: 'GUEST' as const, isGuest: true };
 
-describe('TerritoryService.findAllCells', () => {
-  it('gives each owned cell its owner username, and unclaimed cells none', async () => {
+describe('TerritoryService.findAll (zones)', () => {
+  it('lists only id, name, svg id and tier: no owner fields at all', async () => {
     const { prisma, service } = setup();
-    prisma.territoryCell.findMany.mockResolvedValue([
-      { id: 'c1', territoryId: 't1', row: 0, col: 0, ownerships: [{ userId: 'u1', user: { username: 'arjun_m' } }] },
-      { id: 'c2', territoryId: 't1', row: 0, col: 1, ownerships: [] },
-    ]);
-
-    const cells = await service.findAllCells();
-
-    expect(cells[0]).toMatchObject({ id: 'c1', ownerId: 'u1', ownerUsername: 'arjun_m' });
-    expect(cells[1]).toMatchObject({ id: 'c2', ownerId: null, ownerUsername: null });
-  });
-
-  it('asks the database for the owner username only', async () => {
-    const { prisma, service } = setup();
-    prisma.territoryCell.findMany.mockResolvedValue([]);
-
-    await service.findAllCells();
-
-    expect(prisma.territoryCell.findMany).toHaveBeenCalledWith(usernameOnlyQuery);
+    prisma.territory.findMany.mockResolvedValue([{ id: 't1', name: 'Library', svgPathId: 'library', tier: 'OUTPOST' }]);
+    await expect(service.findAll()).resolves.toEqual([{ id: 't1', name: 'Library', svgPathId: 'library', tier: 'OUTPOST' }]);
+    expect(prisma.territory.findMany).toHaveBeenCalledWith(expect.objectContaining({ select: { id: true, name: true, svgPathId: true, tier: true } }));
   });
 });
 
-describe('TerritoryService.findAll', () => {
-  it('gives an owned territory its owner username, and an unclaimed one none', async () => {
-    const { prisma, service } = setup();
-    prisma.territory.findMany.mockResolvedValue([
-      { id: 't1', name: 'M Hostel', svgPathId: 'm-hostel', tier: 'SETTLEMENT', ownerships: [{ userId: 'u1', user: { username: 'arjun_m' } }] },
-      { id: 't2', name: 'D Hostel', svgPathId: 'd-hostel', tier: 'STRONGHOLD', ownerships: [] },
-    ]);
-
-    const territories = await service.findAll();
-
-    expect(territories[0]).toMatchObject({ id: 't1', ownerId: 'u1', ownerUsername: 'arjun_m' });
-    expect(territories[1]).toMatchObject({ id: 't2', ownerId: null, ownerUsername: null });
+describe('TerritoryService.grid', () => {
+  it('describes the live cells as compact tuples grouped under zone ids', async () => {
+    const { service } = setup();
+    await expect(service.grid()).resolves.toEqual({
+      gridVersion: 2,
+      zones: ['a-hostel', 'library'],
+      cells: [
+        ['c-a0', 0, 0, 0],
+        ['c-a1', 0, 0, 1],
+        ['c-l0', 1, 0, 0],
+      ],
+    });
   });
 
-  it('asks the database for the owner username only', async () => {
+  it('only asks for cells that have not been retired by a regrid, in a fixed order', async () => {
     const { prisma, service } = setup();
-    prisma.territory.findMany.mockResolvedValue([]);
+    await service.grid();
+    expect(prisma.territoryCell.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { retiredAt: null },
+        orderBy: [{ territory: { svgPathId: 'asc' } }, { row: 'asc' }, { col: 'asc' }, { id: 'asc' }],
+      }),
+    );
+  });
 
-    await service.findAll();
+  it('reads the database once per minute, not once per request', async () => {
+    const { prisma, service } = setup();
+    await service.grid();
+    await service.grid();
+    expect(prisma.territoryCell.findMany).toHaveBeenCalledTimes(1);
+  });
 
-    expect(prisma.territory.findMany).toHaveBeenCalledWith(usernameOnlyQuery);
+  it('contains nothing about owners', async () => {
+    const { service } = setup();
+    expect(JSON.stringify(await service.grid())).not.toMatch(/owner|user|name/i);
+  });
+});
+
+describe('TerritoryService.owners', () => {
+  const open = [
+    { cellId: 'c-a0', userId: 'u1', user: { username: 'arjun_m' } },
+    { cellId: 'c-l0', userId: 'u2', user: { username: 'riya_k' } },
+    { cellId: 'c-a1', userId: 'u1', user: { username: 'arjun_m' } },
+    { cellId: 'c-retired', userId: 'u2', user: { username: 'riya_k' } }, // not in the live grid
+  ];
+
+  it('lists each owner once and points cells at them by grid position', async () => {
+    const { prisma, service } = setup();
+    prisma.territoryCellOwnership.findMany.mockResolvedValue(open);
+
+    const result = await service.owners(viewer('u1'));
+
+    expect(result.gridVersion).toBe(2);
+    expect(result.owners).toEqual([
+      { username: 'arjun_m', color: getColorForUser('u1'), isMe: true },
+      { username: 'riya_k', color: getColorForUser('u2'), isMe: false },
+    ]);
+    expect(result.held).toEqual([
+      [0, 0],
+      [2, 1],
+      [1, 0],
+    ]);
+  });
+
+  it('marks nothing as mine for a demo session or another viewer', async () => {
+    const { prisma, service } = setup();
+    prisma.territoryCellOwnership.findMany.mockResolvedValue(open);
+    expect((await service.owners(guest)).owners.every((o) => !o.isMe)).toBe(true);
+    expect((await service.owners(viewer('u9'))).owners.every((o) => !o.isMe)).toBe(true);
+  });
+
+  it('sends usernames and colours only: no user ids, emails or names', async () => {
+    const { prisma, service } = setup();
+    prisma.territoryCellOwnership.findMany.mockResolvedValue(open);
+    const text = JSON.stringify(await service.owners(viewer('u1')));
+    expect(text).not.toMatch(/u1|u2|userId|email|passwordHash/);
+    expect(prisma.territoryCellOwnership.findMany).toHaveBeenCalledWith({
+      where: { closedAt: null, cell: { retiredAt: null } },
+      select: { cellId: true, userId: true, user: { select: { username: true } } },
+    });
+  });
+});
+
+describe('TerritoryService.zoneSlug', () => {
+  it('maps a zone id to its svg id and reads the 46 zones only once', async () => {
+    const { prisma, service } = setup();
+    prisma.territory.findMany.mockResolvedValue([{ id: 't1', svgPathId: 'library' }]);
+    await expect(service.zoneSlug('t1')).resolves.toBe('library');
+    await expect(service.zoneSlug('nope')).resolves.toBeNull();
+    expect(prisma.territory.findMany).toHaveBeenCalledTimes(1);
   });
 });

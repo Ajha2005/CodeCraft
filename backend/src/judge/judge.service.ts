@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
+import { ExecutionLimiter, RunPriority } from './execution-limiter';
 
 const LANGUAGE_VERSIONS: Record<string, string> = {
   python: '3.10.0',
@@ -21,21 +22,62 @@ const PYTHON_TREE_CLASS = `class TreeNode:
         self.left = left
         self.right = right`;
 
+function numberFromEnv(name: string, fallback: number): number {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
 @Injectable()
 export class JudgeService {
-  private readonly pistonUrl = 'http://localhost:2000/api/v2/execute';
+  private readonly logger = new Logger(JudgeService.name);
 
-  constructor(private readonly httpService: HttpService) {}
+  constructor(
+    private readonly httpService: HttpService,
+    private readonly limiter: ExecutionLimiter,
+  ) {}
 
-  async runCode(code: string, language: string, version: string) {
-    const response = await firstValueFrom(
-      this.httpService.post(this.pistonUrl, {
-        language,
-        version,
-        files: [{ content: code }],
-      }),
-    );
-    return response.data;
+  // Piston lives next to the backend and is never reachable from outside (see deploy/piston).
+  private get pistonUrl(): string {
+    return `${(process.env.PISTON_URL || 'http://127.0.0.1:2000').replace(/\/+$/, '')}/api/v2/execute`;
+  }
+
+  /**
+   * Runs one program. Every request carries its own limits, which Piston
+   * enforces on top of the caps configured on the Piston container itself (a
+   * request can lower a cap, never raise it). Without them Piston's default is
+   * "unlimited memory", which one careless loop could use to take the box down.
+   * Calls wait for a slot in the ExecutionLimiter, so at most a couple of
+   * programs ever run at the same time.
+   */
+  async runCode(code: string, language: string, version: string, priority: RunPriority = 'submission') {
+    const runTimeout = numberFromEnv('JUDGE_RUN_TIMEOUT_MS', 3000);
+    const compileTimeout = numberFromEnv('JUDGE_COMPILE_TIMEOUT_MS', 10_000);
+    return this.limiter.run(priority, async () => {
+      try {
+        const response = await firstValueFrom(
+          this.httpService.post(
+            this.pistonUrl,
+            {
+              language,
+              version,
+              files: [{ content: code }],
+              run_timeout: runTimeout,
+              compile_timeout: compileTimeout,
+              run_cpu_time: numberFromEnv('JUDGE_RUN_CPU_MS', runTimeout),
+              compile_cpu_time: numberFromEnv('JUDGE_COMPILE_CPU_MS', compileTimeout),
+              run_memory_limit: numberFromEnv('JUDGE_RUN_MEMORY_BYTES', 128 * 1024 * 1024),
+              compile_memory_limit: numberFromEnv('JUDGE_COMPILE_MEMORY_BYTES', 384 * 1024 * 1024),
+            },
+            { timeout: compileTimeout + runTimeout + 5000, maxContentLength: 1_000_000, maxBodyLength: 200_000 },
+          ),
+        );
+        return response.data;
+      } catch (err) {
+        // Say what failed in the log (never the code or the response body), tell the caller only that the runner is unavailable.
+        this.logger.error(`Code runner call failed: ${err instanceof Error ? err.message : 'unknown error'}`);
+        throw new ServiceUnavailableException('The code runner is unavailable right now. Please try again shortly.');
+      }
+    });
   }
 
   // ---------- Type inference ----------
@@ -332,10 +374,11 @@ ${paramDecls}
     expectedOutput: any,
     language: string = 'python',
     paramTypes: Record<string, string> = {},
+    priority: RunPriority = 'submission',
   ) {
     const wrapper = this.buildWrapper(language, studentCode, input, paramTypes);
     const version = LANGUAGE_VERSIONS[language];
-    const result = await this.runCode(wrapper, language, version);
+    const result = await this.runCode(wrapper, language, version, priority);
 
     const compileStderr = result.compile?.stderr;
     const runStderr = result.run.stderr;
@@ -348,6 +391,8 @@ ${paramDecls}
       status = 'CE';
     } else if (signal === 'SIGKILL' || result.run.status === 'TO') {
       status = 'TLE';
+    } else if (result.run.status === 'OL' || result.run.status === 'EL') {
+      status = 'RE'; // printed more than the runner allows (stdout / stderr length exceeded)
     } else if (runStderr && runStderr.trim().length > 0) {
       status = 'RE';
     } else if (actualOutput === expected) {

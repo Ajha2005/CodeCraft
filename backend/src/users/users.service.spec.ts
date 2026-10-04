@@ -38,13 +38,13 @@ describe('UsersService.getPublicProfile', () => {
     prisma.submission.findMany.mockResolvedValue([{ problemId: 1 }, { problemId: 7 }]);
 
     await expect(service.getPublicProfile('arjun_m')).resolves.toEqual({
-      userId: 'u1',
       username: 'arjun_m',
       totalScore: 112.4,
       cellsHeld: 3,
       territoriesHeld: 2,
       problemsSolved: 2,
       joinedAt: joined,
+      isMe: false,
     });
   });
 
@@ -64,7 +64,7 @@ describe('UsersService.getPublicProfile', () => {
     await service.getPublicProfile('arjun_m');
 
     expect(prisma.territoryCellOwnership.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { userId: 'u1', closedAt: null } }),
+      expect.objectContaining({ where: { userId: 'u1', closedAt: null, cell: { retiredAt: null } } }),
     );
     expect(prisma.submission.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { userId: 'u1', verdict: 'AC' }, distinct: ['problemId'] }),
@@ -79,9 +79,20 @@ describe('UsersService.getPublicProfile', () => {
     const profile = await service.getPublicProfile('arjun_m');
 
     expect(Object.keys(profile).sort()).toEqual(
-      ['cellsHeld', 'joinedAt', 'problemsSolved', 'territoriesHeld', 'totalScore', 'userId', 'username'].sort(),
+      ['cellsHeld', 'isMe', 'joinedAt', 'problemsSolved', 'territoriesHeld', 'totalScore', 'username'].sort(),
     );
-    expect(JSON.stringify(profile)).not.toMatch(/secret|Real Name|passwordHash/);
+    expect(JSON.stringify(profile)).not.toMatch(/secret|Real Name|passwordHash|u1/);
+  });
+
+  it('tells the owner it is their own profile, and nobody else (guests included)', async () => {
+    const { prisma, service } = setup();
+    prisma.user.findUnique.mockResolvedValue(row);
+
+    const own = await service.getPublicProfile('arjun_m', { userId: 'u1', role: 'USER', isGuest: false });
+    const other = await service.getPublicProfile('arjun_m', { userId: 'u2', role: 'USER', isGuest: false });
+    const guest = await service.getPublicProfile('arjun_m', { userId: 'guest:abc', role: 'GUEST', isGuest: true });
+
+    expect([own.isMe, other.isMe, guest.isMe]).toEqual([true, false, false]);
   });
 
   it('asks the database for id, username and join date only', async () => {
