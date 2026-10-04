@@ -61,3 +61,23 @@ export async function fetchStreak(userId: string): Promise<StreakInfo> {
   return res.json();
 }
 
+/** What anyone may see about a player (GET /users/:username). */
+export interface PublicProfile {
+  userId: string;
+  username: string;
+  totalScore: number;
+  cellsHeld: number;
+  territoriesHeld: number;
+  problemsSolved: number;
+  /** ISO date. */
+  joinedAt: string;
+}
+
+/** A player's public profile, or null when nobody has that username. */
+export async function fetchPublicProfile(username: string): Promise<PublicProfile | null> {
+  const res = await fetch(`${API_BASE_URL}/users/${encodeURIComponent(username)}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Failed to fetch profile: ${res.status}`);
+  return res.json();
+}
+

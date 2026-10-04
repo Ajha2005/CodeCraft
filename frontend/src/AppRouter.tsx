@@ -8,6 +8,7 @@ import ProtectedRoute from './auth/ProtectedRoute';
 import { MapFullScreen } from './features/map/MapFullScreen';
 import ChallengesPage from './features/contest/ChallengesPage';
 import ContestRoomPage from './features/contest/ContestRoomPage';
+import ProfilePage from './features/profile/ProfilePage';
 import { Nav } from './components/Nav';
 import { LevelUpOverlay } from './components/LevelUpOverlay';
 import { PlayerStatsProvider } from './lib/PlayerStatsProvider';
@@ -41,6 +42,7 @@ export default function AppRouter() {
             <Route path="/map" element={<MapFullScreen />} />
             <Route path="/contests" element={<ChallengesPage />} />
             <Route path="/contest/:id" element={<ContestRoomPage />} />
+            <Route path="/profile/:username" element={<ProfilePage />} />
           </Route>
         </Routes>
       </BrowserRouter>
