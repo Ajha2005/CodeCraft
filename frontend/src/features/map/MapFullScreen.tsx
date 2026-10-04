@@ -27,7 +27,7 @@ import { FirstRunHint, InspectHint } from './hud/ActionHints';
 import { HelpOverlay } from './hud/HelpOverlay';
 import { Joystick } from './hud/Joystick';
 import { HoverTooltip } from './hud/HoverTooltip';
-import { ChallengeModal } from './hud/ChallengeModal';
+import { ChallengeModal, type StakeCell } from './hud/ChallengeModal';
 import { STATUS_LABEL, summarizeZone, type ZoneSummary } from './hud/zoneSummary';
 import { useEngineSelector } from './hud/useEngineStats';
 
@@ -355,11 +355,11 @@ export function MapFullScreen() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  async function confirmChallenge(durationSeconds: number) {
+  async function confirmChallenge(durationSeconds: number, pledgedCellId: string) {
     if (!challenge) return;
     setChallengeBusy(true);
     try {
-      const contest = await createChallenge(challenge.cell.id, { durationSeconds });
+      const contest = await createChallenge(challenge.cell.id, pledgedCellId, { durationSeconds });
       setChallenge(null);
       navigate(`/contest/${contest.id}`);
     } catch (err: unknown) {
@@ -370,6 +370,18 @@ export function MapFullScreen() {
     }
   }
 
+  const stakes = useMemo<StakeCell[]>(() => {
+    if (!challenge || !userId) return [];
+    const zoneOf = new Map(Object.values(territories).map((t) => [t.id, t]));
+    const mine: StakeCell[] = [];
+    for (const [territoryId, list] of Object.entries(cellsByTerritory)) {
+      const zone = zoneOf.get(territoryId);
+      for (const c of list) {
+        if (c.ownerId === userId) mine.push({ id: c.id, zoneName: zone?.name ?? 'Unknown zone', tier: zone?.tier ?? 'OUTPOST', row: c.row, col: c.col });
+      }
+    }
+    return mine;
+  }, [challenge, userId, territories, cellsByTerritory]);
   const waypointSummary = pinnedId ? summaries.get(pinnedId) : null;
   const challengeSummary = challenge ? summaries.get(challenge.zone.id) : null;
   const hoverNote = hover?.name
@@ -541,6 +553,8 @@ export function MapFullScreen() {
           zoneName={challengeSummary.name}
           tier={challengeSummary.tier}
           cellLabel={`Cell R${challenge.cell.row + 1} · C${challenge.cell.col + 1}`}
+          rival={challenge.cell.ownerUsername}
+          stakes={stakes}
           busy={challengeBusy}
           onConfirm={confirmChallenge}
           onCancel={() => setChallenge(null)}

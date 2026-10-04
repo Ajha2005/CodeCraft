@@ -1,11 +1,13 @@
 import { api } from '../../api/client';
 import type { ContestDetail, ContestSummary } from './types';
 
+/** Challenge the holder of `cellId`, putting `pledgedCellId` (one of your own cells) at stake. */
 export async function createChallenge(
   cellId: string,
+  pledgedCellId: string,
   opts?: { problemId?: number; durationSeconds?: number },
 ): Promise<ContestDetail> {
-  const res = await api.post<ContestDetail>('/contests/challenges', { cellId, ...opts });
+  const res = await api.post<ContestDetail>('/contests/challenges', { cellId, pledgedCellId, ...opts });
   return res.data;
 }
 

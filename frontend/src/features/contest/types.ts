@@ -26,6 +26,8 @@ export interface ContestSummary {
   id: string;
   status: ContestStatus;
   cell: ContestCellSummary;
+  /** The challenger's own cell, put at stake. Null on duels made before pledging existed. */
+  pledgedCell: ContestCellSummary | null;
   problem: ContestProblemSummary;
   challenger: ContestUserSummary;
   defender: ContestUserSummary;
@@ -61,6 +63,7 @@ export interface ContestDetail {
   id: string;
   status: ContestStatus;
   cell: ContestCellSummary;
+  pledgedCell: ContestCellSummary | null;
   problem: ContestProblemDetail;
   challenger: ContestUserSummary;
   defender: ContestUserSummary;
