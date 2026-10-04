@@ -16,7 +16,8 @@ import {
   listIncomingChallenges,
   listOutgoingChallenges,
 } from './api';
-import type { ContestSummary } from './types';
+import { CellChip } from './CellChip';
+import type { ContestCellSummary, ContestSummary } from './types';
 
 const POLL_MS = 5000;
 
@@ -26,22 +27,35 @@ const DIFFICULTY_TEXT: Record<string, string> = {
   Hard: 'text-rose-400',
 };
 
-/** Two fighters facing off. `you` marks which side is the current player. */
-function Versus({ left, right, you }: { left: { id: string; name: string }; right: { id: string; name: string }; you: string | undefined }) {
-  const side = (p: { id: string; name: string }, align: 'left' | 'right') => (
+/** Two fighters facing off, each with the cell they put on the line. `you` marks which side is the current player. */
+function Versus({
+  left,
+  right,
+  you,
+  leftCell,
+  rightCell,
+}: {
+  left: { id: string; name: string };
+  right: { id: string; name: string };
+  you: string | undefined;
+  leftCell: ContestCellSummary | null;
+  rightCell: ContestCellSummary | null;
+}) {
+  const side = (p: { id: string; name: string }, align: 'left' | 'right', cell: ContestCellSummary | null) => (
     <div className={`flex min-w-0 items-center gap-3 ${align === 'right' ? 'flex-row-reverse text-right' : ''}`}>
       <PlayerAvatar userId={p.id} name={p.name} size={44} />
       <div className="min-w-0">
         <p className="truncate text-sm font-semibold text-slate-50">{p.name}</p>
         {p.id === you && <p className="hud-label !text-[0.58rem] !text-cyan-300">You</p>}
+        {cell && <CellChip cell={cell} className="mt-0.5" />}
       </div>
     </div>
   );
   return (
     <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-      {side(left, 'left')}
+      {side(left, 'left', leftCell)}
       <span className="font-display flex h-9 w-9 items-center justify-center rounded-full border border-orange-400/50 bg-orange-500/10 text-sm font-bold text-orange-300">VS</span>
-      {side(right, 'right')}
+      {side(right, 'right', rightCell)}
     </div>
   );
 }
@@ -142,7 +156,7 @@ export default function ChallengesPage() {
               <div>
                 <p className="hud-label text-orange-300">{flavorTextEnabled ? 'The arena' : 'Contests'}</p>
                 <h1 className="font-display text-4xl font-bold leading-none tracking-wide text-slate-50 sm:text-5xl">Duels</h1>
-                <p className="mt-1.5 max-w-md text-sm text-slate-400">Win a live 1v1 and the cell changes hands, instantly.</p>
+                <p className="mt-1.5 max-w-md text-sm text-slate-400">Both sides put a cell on the line. Win a live 1v1 and take theirs.</p>
               </div>
             </div>
           </div>
@@ -170,7 +184,7 @@ export default function ChallengesPage() {
                       Rejoin <Icon name="arrowRight" className="h-3.5 w-3.5" />
                     </span>
                   </div>
-                  <Versus left={c.challenger} right={c.defender} you={user?.userId} />
+                  <Versus left={c.challenger} right={c.defender} you={user?.userId} leftCell={c.pledgedCell} rightCell={c.cell} />
                   <p className="mt-3 flex flex-wrap items-center gap-x-2 text-xs text-slate-400">
                     <span className="font-semibold text-slate-200">{c.cell.territoryName}</span>
                     <TierBadge tier={c.cell.tier} />
@@ -202,7 +216,7 @@ export default function ChallengesPage() {
                   <span className="absolute inset-y-0 left-0 w-1 bg-rose-400/80" />
                   <div className="flex flex-wrap items-center justify-between gap-4 pl-2">
                     <div className="min-w-0 flex-1">
-                      <Versus left={c.challenger} right={c.defender} you={user?.userId} />
+                      <Versus left={c.challenger} right={c.defender} you={user?.userId} leftCell={c.pledgedCell} rightCell={c.cell} />
                       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-400">
                         <span className="text-sm font-semibold text-cyan-300">{c.cell.territoryName}</span>
                         <TierBadge tier={c.cell.tier} />
@@ -240,7 +254,7 @@ export default function ChallengesPage() {
             <div className="grid gap-3">
               {outgoing.map((c) => (
                 <div key={c.id} className="hud-panel hud-panel-quiet p-4">
-                  <Versus left={c.challenger} right={c.defender} you={user?.userId} />
+                  <Versus left={c.challenger} right={c.defender} you={user?.userId} leftCell={c.pledgedCell} rightCell={c.cell} />
                   <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-400">
                     <span className="font-semibold text-slate-200">{c.cell.territoryName}</span>
                     <TierBadge tier={c.cell.tier} />

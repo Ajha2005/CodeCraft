@@ -3,7 +3,7 @@ import type { LaneMark } from './nav';
 import type { Fx } from './fx';
 import { DecorKit, baseRoof, tintStrength } from './decor';
 import { darken, lighten, mix, rgba } from './color';
-import { OBL_X, cellKey, liftedHeight, type ZoneView } from './scene';
+import { OBL_X, cellKey, liftedHeight, type OwnerBlob, type ZoneView } from './scene';
 import { FONT_DISPLAY, FONT_MONO, PALETTE, TIER_STYLE } from './theme';
 
 // The world renderer. One call to `draw` paints a whole frame:
@@ -26,6 +26,9 @@ const STRIPE_ZOOM = 0.95;
 const DECOR_REST = 0.5;
 /** Smallest label, in screen pixels. Anything that would be smaller is left out. */
 const LABEL_MIN_PX = 10.5;
+/** Player names written on their cells: never smaller or louder than this on screen. */
+const NAME_MIN_PX = 9.5;
+const NAME_MAX_PX = 17;
 
 export interface TrailPoint {
   x: number;
@@ -53,6 +56,16 @@ export interface HoverCellRef {
   row: number;
   col: number;
   challengeable: boolean;
+}
+
+/** Where a player's name was drawn last frame (world units), so clicks can find it. */
+export interface NameHit {
+  username: string;
+  zone: number;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
 }
 
 export interface Frame {
@@ -149,6 +162,8 @@ export class WorldRenderer {
   private readonly slabPath: Path2D;
   private readonly groundTex: HTMLCanvasElement;
   private readonly labelWidthCache = new Map<string, number>();
+  /** The player names drawn in the last frame; the canvas has no elements to click, so we keep their boxes. */
+  private nameHits: NameHit[] = [];
   private readonly lanePath: Path2D;
   private readonly lampPoints: Pt[] = [];
   /** Every zone outline merged, so the pavement is two strokes, not ninety. */
@@ -852,6 +867,14 @@ export class WorldRenderer {
     this.labelWidthCache.clear();
   }
 
+  /** The player name drawn under a world point in the last frame, if any. */
+  nameAt(wx: number, wy: number): NameHit | null {
+    for (const h of this.nameHits) {
+      if (wx >= h.x0 && wx <= h.x1 && wy >= h.y0 && wy <= h.y1) return h;
+    }
+    return null;
+  }
+
   private drawLabels(ctx: CanvasRenderingContext2D, f: Frame) {
     const zoom = f.zoom;
     ctx.textAlign = 'left';
@@ -945,6 +968,77 @@ export class WorldRenderer {
       placed.push(x0, y0, x1, y1);
       this.drawLabel(ctx, f, p);
     }
+
+    this.drawOwnerNames(ctx, f, placed);
+  }
+
+  /**
+   * Each player's name, written across the widest stretch of their patch of
+   * cells. Only blocks that show their cells get names. A name that cannot be
+   * read at this zoom is left out (the cell tooltip still says who holds it);
+   * one that would land on another label or the avatar, or fall off the screen,
+   * tries the patch's next best row first.
+   */
+  private drawOwnerNames(ctx: CanvasRenderingContext2D, f: Frame, placed: number[]) {
+    const zoom = f.zoom;
+    const patches: { v: ZoneView; blob: OwnerBlob; mine: boolean }[] = [];
+    for (const idx of f.order) {
+      const v = f.views[idx];
+      if (!v.detail || v.blobs.length === 0 || !this.visible(v.zone, 20)) continue;
+      for (const blob of v.blobs) patches.push({ v, blob, mine: blob.ownerId === f.meId });
+    }
+    // your own ground first, then the bigger holdings
+    patches.sort((a, b) => Number(b.mine) - Number(a.mine) || b.blob.size - a.blob.size);
+
+    const gap = 3 / zoom;
+    const edge = 6 / zoom;
+    this.nameHits = [];
+    ctx.textAlign = 'center';
+    for (const { v, blob, mine } of patches) {
+      const h = liftedHeight(v);
+      const b = v.zone.box;
+      ctx.font = `700 100px ${FONT_DISPLAY}`;
+      const perUnit = this.textWidth(ctx, blob.username, 100) / 100;
+
+      for (const run of blob.runs) {
+        // the biggest size at which the name still fits along this run
+        const fs = Math.min(NAME_MAX_PX / zoom, v.ch * 0.6, (run.span * v.cw * 0.86) / perUnit);
+        if (fs * zoom < NAME_MIN_PX) break; // the remaining runs are no longer
+        const x = b.x + (run.col + run.span / 2) * v.cw - OBL_X * h;
+        const y = b.y + (run.row + 0.5) * v.ch - h;
+        const half = (perUnit * fs) / 2 + gap;
+        const x0 = x - half;
+        const x1 = x + half;
+        const y0 = y - fs * 0.62 - gap;
+        const y1 = y + fs * 0.62 + gap;
+
+        // a name that is cut off by the screen edge, or not on screen at all, cannot be read or clicked
+        if (x0 < this.tx0 + edge || x1 > this.tx1 - edge || y0 < this.ty0 + edge || y1 > this.ty1 - edge) continue;
+
+        let clash = false;
+        for (let i = 0; i < placed.length; i += 4) {
+          if (x0 < placed[i + 2] && x1 > placed[i] && y0 < placed[i + 3] && y1 > placed[i + 1]) {
+            clash = true;
+            break;
+          }
+        }
+        if (clash) continue;
+        placed.push(x0, y0, x1, y1);
+
+        ctx.font = `700 ${fs}px ${FONT_DISPLAY}`;
+        ctx.lineWidth = fs * 0.26;
+        ctx.strokeStyle = 'rgba(3,8,14,0.85)';
+        ctx.strokeText(blob.username, x, y);
+        ctx.fillStyle = mine ? '#a5f3fc' : '#f4f9fc';
+        ctx.fillText(blob.username, x, y);
+
+        // a click target at least ~18px tall on screen, however small the name is drawn
+        const reach = Math.max(fs * 0.62 + gap * 0.7, 9 / zoom);
+        this.nameHits.push({ username: blob.username, zone: v.zone.index, x0, y0: y - reach, x1, y1: y + reach });
+        break;
+      }
+    }
+    ctx.textAlign = 'left';
   }
 
   private drawLabel(ctx: CanvasRenderingContext2D, f: Frame, p: LabelPlan) {

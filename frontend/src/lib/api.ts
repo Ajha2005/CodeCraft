@@ -15,6 +15,7 @@ export interface TerritoryCellDto {
   row: number;
   col: number;
   ownerId: string | null;
+  ownerUsername: string | null;
   ownerColor: string;
 }
 
@@ -26,6 +27,8 @@ export async function fetchTerritoryCells(): Promise<TerritoryCellDto[]> {
 
 export interface LeaderboardEntry {
   userId: string;
+  /** Where the profile link goes; null when the player no longer exists. */
+  username: string | null;
   name: string;
   score: number;
 }
@@ -57,6 +60,26 @@ export interface StreakInfo {
 export async function fetchStreak(userId: string): Promise<StreakInfo> {
   const res = await fetch(`${API_BASE_URL}/scoring/streak/${userId}`);
   if (!res.ok) throw new Error(`Failed to fetch streak: ${res.status}`);
+  return res.json();
+}
+
+/** What anyone may see about a player (GET /users/:username). */
+export interface PublicProfile {
+  userId: string;
+  username: string;
+  totalScore: number;
+  cellsHeld: number;
+  territoriesHeld: number;
+  problemsSolved: number;
+  /** ISO date. */
+  joinedAt: string;
+}
+
+/** A player's public profile, or null when nobody has that username. */
+export async function fetchPublicProfile(username: string): Promise<PublicProfile | null> {
+  const res = await fetch(`${API_BASE_URL}/users/${encodeURIComponent(username)}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Failed to fetch profile: ${res.status}`);
   return res.json();
 }
 

@@ -39,7 +39,7 @@ export function Nav() {
   const { stats } = usePlayerStats();
   const [soundOn, setSoundOn] = useSfxEnabled();
   const incoming = useIncomingChallenges(!!user);
-  const name = user?.name?.trim() || user?.email?.split('@')[0] || 'Commander';
+  const name = user?.username || 'Commander';
 
   return (
     <>

@@ -16,7 +16,9 @@ import { Pips } from '../../components/ui/Pips';
 import { ProgressRing } from '../../components/ui/ProgressRing';
 import { TierBadge } from '../../components/ui/TierBadge';
 import { acceptChallenge, declineChallenge, getContest, submitContestSolution } from './api';
-import type { ContestDetail } from './types';
+import { CellChip } from './CellChip';
+import { cellText } from './cellText';
+import type { ContestCellSummary, ContestDetail } from './types';
 
 const DIFFICULTY_STYLE: Record<string, { text: string; border: string; bg: string }> = {
   Easy: { text: 'text-emerald-400', border: 'border-emerald-500/40', bg: 'bg-emerald-500/10' },
@@ -51,6 +53,7 @@ function FighterCard({
   online,
   graceSeconds,
   align,
+  cell,
 }: {
   userId: string;
   name: string;
@@ -59,6 +62,8 @@ function FighterCard({
   online?: boolean;
   graceSeconds?: number | null;
   align: 'left' | 'right';
+  /** The cell this player has on the line, if any. */
+  cell?: ContestCellSummary | null;
 }) {
   const tone = verdictTone(result?.verdict);
   const right = align === 'right';
@@ -71,6 +76,7 @@ function FighterCard({
             {you ? 'You' : 'Opponent'}
           </p>
           <p className="font-display truncate text-xl font-bold leading-tight text-slate-50">{name}</p>
+          {cell && <CellChip cell={cell} />}
           {online !== undefined &&
             (online ? (
               <p className="text-[0.68rem] font-bold uppercase tracking-wide text-emerald-400">● online</p>
@@ -313,6 +319,17 @@ export default function ContestRoomPage() {
   const timerColor = timeFrac > 0.5 ? '#22d3ee' : timeFrac > 0.2 ? '#fbbf24' : '#fb7185';
   const urgent = remainingSeconds > 0 && remainingSeconds <= 30;
   const won = ended?.winnerId === user?.userId;
+  // Each side puts a cell on the line: the challenger their stake, the defender the contested cell.
+  // The loser's cell goes to the winner. Duels made before stakes existed have no stake.
+  const myCell = isChallenger ? contest.pledgedCell : contest.cell;
+  const theirCell = isChallenger ? contest.cell : contest.pledgedCell;
+  const winnerName = ended?.winnerId === contest.challenger.id ? contest.challenger.name : contest.defender.name;
+  const wonText = isChallenger
+    ? `${cellText(contest.cell)} is yours.`
+    : theirCell
+      ? `You held ${contest.cell.territoryName} and took ${cellText(theirCell)}.`
+      : `You held ${contest.cell.territoryName}.`;
+  const lostText = myCell ? `You lost this contest. ${cellText(myCell)} goes to ${winnerName}.` : 'You lost this contest. The cell stays with your rival.';
 
   return (
     <div className="hud-grid-bg min-h-[calc(100dvh-var(--nav-h))] flex-1">
@@ -348,6 +365,7 @@ export default function ContestRoomPage() {
                 <PlayerAvatar userId={contest.challenger.id} name={contest.challenger.name} size={76} />
                 <p className="font-display text-xl font-bold text-rose-300">{contest.challenger.name}</p>
                 <p className="hud-label !text-[0.58rem]">Challenger</p>
+                {contest.pledgedCell && <CellChip cell={contest.pledgedCell} />}
               </div>
               <span className="font-display flex h-14 w-14 items-center justify-center rounded-full border border-orange-400/60 bg-orange-500/10 text-xl font-bold text-orange-300 animate-glow-pulse">
                 VS
@@ -356,11 +374,19 @@ export default function ContestRoomPage() {
                 <PlayerAvatar userId={contest.defender.id} name={contest.defender.name} size={76} />
                 <p className="font-display text-xl font-bold text-cyan-300">{contest.defender.name}</p>
                 <p className="hud-label !text-[0.58rem]">Defender</p>
+                <CellChip cell={contest.cell} />
               </div>
             </div>
             <p className={`relative mt-6 inline-block rounded-md border px-3 py-1 text-sm font-semibold ${diffStyle.border} ${diffStyle.bg} ${diffStyle.text}`}>
               {contest.problem.title} · {contest.problem.difficultyLevel} · {Math.round(contest.durationSeconds / 60)} min
             </p>
+            {contest.pledgedCell && (
+              <p className="relative mt-3 text-sm text-slate-400">
+                {isDefender
+                  ? `Win and you take ${cellText(contest.pledgedCell)}. Lose and ${cellText(contest.cell)} goes to ${contest.challenger.name}.`
+                  : `Win and you take ${cellText(contest.cell)}. Lose and ${cellText(contest.pledgedCell)} goes to ${contest.defender.name}.`}
+              </p>
+            )}
             {isDefender ? (
               <div className="relative mt-7 flex justify-center gap-3">
                 <button onClick={handleAccept} disabled={actionBusy} className="btn-primary h-12 rounded-lg px-8 text-sm">
@@ -395,11 +421,9 @@ export default function ContestRoomPage() {
               <Icon name={won ? 'flag' : ended.winnerId ? 'skull' : 'swords'} filled={won} className="h-8 w-8" />
             </div>
             <p className={`font-display text-4xl font-bold uppercase tracking-[0.12em] ${won ? 'text-emerald-300' : ended.winnerId ? 'text-rose-300' : 'text-slate-200'}`}>
-              {won ? 'Territory captured!' : ended.winnerId ? 'Defeat' : 'Stalemate'}
+              {won ? (isChallenger ? 'Territory captured!' : 'Cell defended!') : ended.winnerId ? 'Defeat' : 'Stalemate'}
             </p>
-            <p className="mt-1 text-sm text-slate-300">
-              {won ? `${contest.cell.territoryName} is yours.` : ended.winnerId ? 'You lost this contest. The cell stays with your rival.' : 'Draw — no territory changed hands.'}
-            </p>
+            <p className="mt-1 text-sm text-slate-300">{won ? wonText : ended.winnerId ? lostText : 'Draw — no territory changed hands.'}</p>
             <p className="hud-label mt-2 !text-[0.64rem]">
               {ended.reason === 'AC' && 'Decided by first accepted solution'}
               {ended.reason === 'TIMEOUT' && 'Decided on test cases passed when time ran out'}
@@ -420,7 +444,7 @@ export default function ContestRoomPage() {
         {contest.status === 'ACTIVE' && !ended && (
           <>
             <div className="mb-5 grid items-stretch gap-3 md:grid-cols-[1fr_auto_1fr] animate-fade-in-up">
-              <FighterCard userId={self.id} name={self.name} you result={selfResult} align="left" />
+              <FighterCard userId={self.id} name={self.name} you result={selfResult} align="left" cell={myCell} />
 
               <div className="hud-panel flex flex-col items-center justify-center px-6 py-3" style={urgent ? { borderColor: 'rgba(251,113,133,0.7)', boxShadow: '0 0 36px -10px rgba(244,63,94,0.7)' } : undefined}>
                 <ProgressRing pct={timeFrac} size={118} stroke={7} color={timerColor} track="rgba(51,65,85,0.5)">
@@ -437,6 +461,7 @@ export default function ContestRoomPage() {
                 online={opponentConnected}
                 graceSeconds={graceSeconds}
                 align="right"
+                cell={theirCell}
               />
             </div>
 

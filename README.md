@@ -91,7 +91,8 @@ flowchart LR
 - Challenge/accept flow: `POST /challenges` → target notified live or on next load → `POST /challenges/:id/accept` opens a dedicated WebSocket room
 - Server-authoritative timers (`startedAt` + `durationSeconds` stored server-side; clients never drive their own countdown)
 - Disconnect grace period with auto-forfeit on timeout, handled by a dedicated timeout processor
-- Contests target a single map cell — winner takes exactly that cell, atomically, the same transfer path a solo AC uses
+- Contests target a single map cell, and the challenger stakes one of their own: win and you take the target cell, lose and the defender takes your stake, a draw moves nothing — each transfer is atomic, the same path a solo AC uses
+- Both cells are locked while the duel is pending or active — solo play and other duels cannot touch them — and are freed when it ends, is declined or expires
 
 **Leaderboard & Accounts**
 - College-wide leaderboard plus per-territory rankings
@@ -227,7 +228,8 @@ The map is a small game. Everything below is also listed in-app (press `?`).
 | `T` | Travel to the selected zone |
 | `E` | Inspect the zone you are standing in |
 | `Space` | Dive in/out: zoom to the cell grid of the current/selected zone |
-| Click a rival's cell (when zoomed in) | Challenge its owner to a 1v1 duel |
+| Click a rival's cell (when zoomed in) | Challenge its owner to a 1v1 duel, putting one of your own cells on the line |
+| Click a player's name (when zoomed in) | Open their profile |
 | Scroll / pinch, `+` `-` | Zoom |
 | Drag | Look around (press `C` to snap back to your commander) |
 | `O` | Whole-campus overview |
@@ -291,6 +293,7 @@ CodeCraft/
 │       ├── territory/          # Grid-cell map, ownership, territory gateway
 │       ├── contest/             # Challenge/accept, contest gateway, timeout processor
 │       ├── leaderboard/       # College-wide & territory rankings
+│       ├── users/             # Public player profiles (GET /users/:username)
 │       └── common/             # Redis client, shared color utils
 ├── frontend/                # React + TypeScript + Vite client
 │   └── src/

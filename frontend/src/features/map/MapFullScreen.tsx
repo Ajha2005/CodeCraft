@@ -27,7 +27,7 @@ import { FirstRunHint, InspectHint } from './hud/ActionHints';
 import { HelpOverlay } from './hud/HelpOverlay';
 import { Joystick } from './hud/Joystick';
 import { HoverTooltip } from './hud/HoverTooltip';
-import { ChallengeModal } from './hud/ChallengeModal';
+import { ChallengeModal, type StakeCell } from './hud/ChallengeModal';
 import { STATUS_LABEL, summarizeZone, type ZoneSummary } from './hud/zoneSummary';
 import { useEngineSelector } from './hud/useEngineStats';
 
@@ -180,7 +180,7 @@ export function MapFullScreen() {
     // else still flashes on the map, it just does not ask for your attention.
     if (!e.byMe && (summary?.mine ?? 0) === 0 && e.zone.id !== currentZoneId) return;
     const name = summary?.name ?? e.zone.id;
-    const who = e.byMe ? 'You' : (nameFor(e.cell.ownerId) ?? 'A rival');
+    const who = e.byMe ? 'You' : (e.cell.ownerUsername ?? nameFor(e.cell.ownerId) ?? 'A rival');
     sfx.play('capture');
     pushFeed({
       kind: e.byMe ? 'mine' : 'capture',
@@ -211,6 +211,10 @@ export function MapFullScreen() {
     if (id) sfx.play('click');
   });
   const handleCellChallenge = useEffectEvent((cell: TerritoryCellDto, zone: Zone) => setChallenge({ cell, zone }));
+  const handleNameClick = useEffectEvent((username: string) => {
+    sfx.play('click');
+    navigate(`/profile/${encodeURIComponent(username)}`);
+  });
   const handleMoved = useEffectEvent((pos: { x: number; y: number }) => {
     if (userId) writeJson(posKey(userId), pos);
     if (welcome) dismissWelcome();
@@ -229,6 +233,7 @@ export function MapFullScreen() {
       onHover: (info) => handleHover(info),
       onSelect: (id) => handleSelect(id),
       onCellChallenge: (c, z) => handleCellChallenge(c, z),
+      onNameClick: (u) => handleNameClick(u),
       onPlayerMoved: (p) => handleMoved(p),
       onInteract: () => handleInteract(),
     });
@@ -350,11 +355,11 @@ export function MapFullScreen() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  async function confirmChallenge(durationSeconds: number) {
+  async function confirmChallenge(durationSeconds: number, pledgedCellId: string) {
     if (!challenge) return;
     setChallengeBusy(true);
     try {
-      const contest = await createChallenge(challenge.cell.id, { durationSeconds });
+      const contest = await createChallenge(challenge.cell.id, pledgedCellId, { durationSeconds });
       setChallenge(null);
       navigate(`/contest/${contest.id}`);
     } catch (err: unknown) {
@@ -365,12 +370,25 @@ export function MapFullScreen() {
     }
   }
 
+  const stakes = useMemo<StakeCell[]>(() => {
+    if (!challenge || !userId) return [];
+    const zoneOf = new Map(Object.values(territories).map((t) => [t.id, t]));
+    const mine: StakeCell[] = [];
+    for (const [territoryId, list] of Object.entries(cellsByTerritory)) {
+      const zone = zoneOf.get(territoryId);
+      for (const c of list) {
+        if (c.ownerId === userId) mine.push({ id: c.id, zoneName: zone?.name ?? 'Unknown zone', tier: zone?.tier ?? 'OUTPOST', row: c.row, col: c.col });
+      }
+    }
+    return mine;
+  }, [challenge, userId, territories, cellsByTerritory]);
   const waypointSummary = pinnedId ? summaries.get(pinnedId) : null;
   const challengeSummary = challenge ? summaries.get(challenge.zone.id) : null;
-  const hoverNote =
-    hover?.cell && hoverSummary
+  const hoverNote = hover?.name
+    ? `Open ${hover.name}’s profile`
+    : hover?.cell && hoverSummary
       ? hover.challengeable
-        ? 'Rival cell · click to challenge'
+        ? `${hover.cell.ownerUsername ? `Held by ${hover.cell.ownerUsername}` : 'Rival cell'} · click to challenge`
         : hover.cell.ownerId
           ? 'Your cell'
           : 'Unclaimed cell'
@@ -535,6 +553,8 @@ export function MapFullScreen() {
           zoneName={challengeSummary.name}
           tier={challengeSummary.tier}
           cellLabel={`Cell R${challenge.cell.row + 1} · C${challenge.cell.col + 1}`}
+          rival={challenge.cell.ownerUsername}
+          stakes={stakes}
           busy={challengeBusy}
           onConfirm={confirmChallenge}
           onCancel={() => setChallenge(null)}

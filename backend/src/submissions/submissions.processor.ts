@@ -248,9 +248,12 @@ export class SubmissionsProcessor extends WorkerHost {
       return true;
     }
 
+    // Cells tied up in a pending or active duel are off limits to solo play.
+    const locked = new Set(await this.contestService.lockedCellIds());
     const contestedNeighbor = candidates.find(
       (cell) =>
         isNeighborOfOwned(cell) &&
+        !locked.has(cell.id) &&
         cell.ownerships.length > 0 &&
         cell.ownerships[0].userId !== userId,
     );
@@ -284,10 +287,12 @@ export class SubmissionsProcessor extends WorkerHost {
     }
 
     // Nothing unclaimed anywhere in this tier — contest a cell owned by someone else.
-    // Skip cells the user already owns themselves (no point re-capturing your own cell).
+    // Skip cells the user already owns themselves (no point re-capturing your own cell)
+    // and cells tied up in a pending or active duel.
     const contested = await this.prisma.territoryCell.findFirst({
       where: {
         territory: { tier },
+        id: { notIn: await this.contestService.lockedCellIds() },
         ownerships: { some: { closedAt: null, NOT: { userId } } },
       },
       include: { ownerships: { where: { closedAt: null } } },
@@ -308,13 +313,14 @@ export class SubmissionsProcessor extends WorkerHost {
     tier: string,
     cell: { id: string; territoryId: string; row: number; col: number },
   ) {
-    await this.prisma.territoryCellOwnership.create({
+    const ownership = await this.prisma.territoryCellOwnership.create({
       data: { cellId: cell.id, userId, sourceType: 'solve' },
+      include: { user: { select: { username: true } } },
     });
     this.logger.log(
       `Assigned unclaimed ${tier} cell ${cell.id} (territory ${cell.territoryId}) to user ${userId}`,
     );
-    this.broadcastCell(cell, userId);
+    this.broadcastCell(cell, userId, ownership.user.username);
   }
 
   private async captureCell(
@@ -327,18 +333,20 @@ export class SubmissionsProcessor extends WorkerHost {
       where: { id: openOwnershipId },
       data: { closedAt: new Date() },
     });
-    await this.prisma.territoryCellOwnership.create({
+    const ownership = await this.prisma.territoryCellOwnership.create({
       data: { cellId: cell.id, userId, sourceType: 'solve' },
+      include: { user: { select: { username: true } } },
     });
     this.logger.log(
       `User ${userId} captured ${tier} cell ${cell.id} (territory ${cell.territoryId})`,
     );
-    this.broadcastCell(cell, userId);
+    this.broadcastCell(cell, userId, ownership.user.username);
   }
 
   private broadcastCell(
     cell: { id: string; territoryId: string; row: number; col: number },
     userId: string,
+    username: string,
   ) {
     this.territoryGateway.broadcastCellUpdate({
       territoryId: cell.territoryId,
@@ -346,6 +354,7 @@ export class SubmissionsProcessor extends WorkerHost {
       row: cell.row,
       col: cell.col,
       ownerId: userId,
+      ownerUsername: username,
       ownerColor: getColorForUser(userId),
     });
   }

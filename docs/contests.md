@@ -23,6 +23,12 @@ A disconnect does not end the contest. The participant is marked offline and a s
 
 Contest correctness and difficulty reuse the Performance Score service, but ranking within a contest is primarily by `solvedAt` timestamp: the first correct AC wins. If both participants fail to reach AC, whichever passed more test cases wins. A true simultaneous tie is defined as a draw, with no territory transfer.
 
+## Stakes
+
+A challenger puts one of their own cells at stake when they send a challenge (`pledgedCellId`, required, and it must be a cell they hold at that moment). Win, and the contested cell moves to the challenger and the stake stays theirs. Lose (the defender wins, or the challenger forfeits), and the stake moves to the defender and the defender keeps the contested cell. A draw moves nothing.
+
+Both cells are locked for as long as the duel is pending or active: solo play cannot capture them, and no other duel can target or stake them. The lock is derived from the duel's status, so a decline, an expiry or a result frees both cells with no extra bookkeeping. The cells are row-locked while a challenge is validated, so two challenges racing for the same cell are decided one at a time. Duels created before stakes existed have no stake and behave as they always did.
+
 ---
 
 # Code Execution Architecture
