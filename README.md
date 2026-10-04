@@ -81,7 +81,7 @@ flowchart LR
 - A live, navigable **game world** of the campus (canvas-rendered): zones are extruded blocks whose height follows their tier, with themed terrain (forest, pond, pitch, track, parking...), streets, and a grid of ownable `TerritoryCell`s generated via point-in-polygon rasterization of campus zones
 - You control a **commander** on the map: walk with WASD/arrows, sprint, or click to auto-travel along streets (A* pathfinding); a spring-follow camera, minimap, fast-travel list, and waypoints make it feel like moving around inside the map
 - Fog of war: zones are dimmed until you walk into them (the fast-travel list counts how many you have explored), plus a "Cartographer" achievement
-- Level/XP derived from your Performance Score, today's solve pips, a streak flame, a quest-board problem list, an achievements wall, and a level-up celebration
+- Level/XP derived from your Performance Score, today's solve pips, a streak flame, a searchable quest-board problem list (status filters, a "next quest" suggestion, code drafts kept per problem), an achievements wall, and a level-up celebration
 - Optional synthesized sound effects (off by default)
 - Territory tier (Outpost → Settlement → Stronghold → Citadel) is driven by the Performance Score formula, not manual admin assignment
 - A soft daily qualifying-problem cap (6/day) so territory farming is bounded without discouraging practice
