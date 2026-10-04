@@ -14,6 +14,7 @@ import { LeaderboardModule } from './leaderboard/leaderboard.module';
 import { RedisModule } from './common/redis/redis.module';
 import { ScoringModule } from './scoring/scoring.module';
 import { ContestModule } from './contest/contest.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { ContestModule } from './contest/contest.module';
     LeaderboardModule,
     ScoringModule,
     ContestModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -291,6 +291,7 @@ CodeCraft/
 │       ├── territory/          # Grid-cell map, ownership, territory gateway
 │       ├── contest/             # Challenge/accept, contest gateway, timeout processor
 │       ├── leaderboard/       # College-wide & territory rankings
+│       ├── users/             # Public player profiles (GET /users/:username)
 │       └── common/             # Redis client, shared color utils
 ├── frontend/                # React + TypeScript + Vite client
 │   └── src/
