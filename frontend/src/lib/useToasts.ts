@@ -4,6 +4,7 @@ export interface ToastItem {
   id: number;
   text: string;
   tone: 'success' | 'warning' | 'info';
+  durationMs: number;
 }
 
 let nextId = 1;
@@ -24,7 +25,7 @@ export function useToasts() {
   const push = useCallback(
     (text: string, tone: ToastItem['tone'] = 'info', durationMs = 4000) => {
       const id = nextId++;
-      setToasts((prev) => [...prev, { id, text, tone }]);
+      setToasts((prev) => [...prev, { id, text, tone, durationMs }]);
       const timer = setTimeout(() => dismiss(id), durationMs);
       timers.current.set(id, timer);
     },

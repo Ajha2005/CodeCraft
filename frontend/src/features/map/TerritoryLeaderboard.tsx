@@ -1,5 +1,6 @@
 import { useTerritoryLeaderboard } from './hooks/useLeaderboard';
 import { useAuth } from '../../auth/AuthContext';
+import { colorForUser } from '../../lib/playerColor';
 import type { TerritoryDto } from '../../types/territory';
 
 const MEDAL = ['🥇', '🥈', '🥉'];
@@ -8,40 +9,46 @@ interface TerritoryLeaderboardProps {
   territory: TerritoryDto | null;
 }
 
+/** Top contributors in one zone. Rows are tinted with each player's map color. */
 export function TerritoryLeaderboard({ territory }: TerritoryLeaderboardProps) {
   const { entries, loading } = useTerritoryLeaderboard(territory?.id ?? null);
-  const { flavorTextEnabled } = useAuth();
+  const { user, flavorTextEnabled } = useAuth();
 
   if (!territory) return null;
 
-  return (
-    <div className="p-4 rounded-xl border border-cyan-600/30 bg-slate-900/90 backdrop-blur-xl text-white w-72 shadow-[0_0_30px_-12px_rgba(34,211,238,0.4)] animate-pop-in">
-      <h3 className="text-md font-bold text-slate-100" style={{ fontFamily: "'Rajdhani', sans-serif" }}>
-        {territory.name}
-      </h3>
-      <p className={`text-xs mb-3 font-medium ${territory.ownerId ? 'text-orange-400' : 'text-slate-500'}`}>
-        {territory.ownerId ? '⚔️ Contested' : 'Unclaimed'}
+  if (loading) {
+    return <p className="animate-pulse py-2 text-center text-sm text-slate-400">Reading the scoreboard…</p>;
+  }
+
+  if (entries.length === 0) {
+    return (
+      <p className="py-2 text-center text-sm italic text-slate-500">
+        {flavorTextEnabled ? 'No ruler yet. Could be you.' : 'No activity yet'}
       </p>
-      {loading ? (
-        <p className="text-slate-400 text-sm animate-pulse">Loading...</p>
-      ) : (
-        <ol className="space-y-1.5">
-          {entries.map((entry, i) => (
-            <li key={entry.userId} className="flex justify-between items-center text-sm">
-              <span className="flex items-center gap-1.5 text-slate-300 min-w-0">
-                <span className="w-5 text-center shrink-0">{MEDAL[i] ?? `#${i + 1}`}</span>
-                <span className="truncate">{entry.name}</span>
-              </span>
-              <span className="font-mono text-emerald-400 shrink-0 ml-2">{entry.score.toFixed(1)}</span>
-            </li>
-          ))}
-          {entries.length === 0 && (
-            <li className="text-slate-500 text-sm italic">
-              {flavorTextEnabled ? 'No ruler yet. Could be you.' : 'No activity yet'}
-            </li>
-          )}
-        </ol>
-      )}
-    </div>
+    );
+  }
+
+  return (
+    <ol className="space-y-1">
+      {entries.map((entry, i) => {
+        const me = entry.userId === user?.userId;
+        const color = colorForUser(entry.userId);
+        return (
+          <li
+            key={entry.userId}
+            className={`flex items-center justify-between gap-2 rounded-md px-2 py-1 text-sm ${me ? 'bg-cyan-400/10 ring-1 ring-cyan-400/40' : 'bg-slate-900/40'}`}
+            style={{ animation: `slide-in-right 0.35s ${i * 40}ms cubic-bezier(0.22,1,0.36,1) both` }}
+          >
+            <span className="flex min-w-0 items-center gap-2 text-slate-200">
+              <span className="w-5 shrink-0 text-center text-xs">{MEDAL[i] ?? `#${i + 1}`}</span>
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
+              <span className="truncate">{entry.name}</span>
+              {me && <span className="shrink-0 rounded bg-cyan-400/20 px-1 text-[0.6rem] font-bold uppercase text-cyan-300">you</span>}
+            </span>
+            <span className="shrink-0 font-mono text-xs font-bold text-emerald-400">{entry.score.toFixed(1)}</span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
