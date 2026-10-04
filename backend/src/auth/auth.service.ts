@@ -1,9 +1,10 @@
-import { Injectable, ConflictException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, ConflictException, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
+import { randomUsername } from './username.util';
 
 @Injectable()
 export class AuthService {
@@ -25,6 +26,7 @@ export class AuthService {
         email: dto.email,
         passwordHash,
         name: dto.name,
+        username: await this.generateUsername(),
       },
     });
     return this.signToken(user.id, user.email);
@@ -55,11 +57,26 @@ export class AuthService {
           email: googleUser.email,
           googleId: googleUser.googleId,
           name: googleUser.name,
+          username: await this.generateUsername(),
         },
       });
     }
 
     return this.signToken(user.id, user.email);
+  }
+
+  // An unused default username. The unique index is the real guard; this
+  // just avoids handing out one that is already taken.
+  private async generateUsername(): Promise<string> {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const candidate = randomUsername();
+      const taken = await this.prisma.user.findUnique({
+        where: { username: candidate },
+        select: { id: true },
+      });
+      if (!taken) return candidate;
+    }
+    throw new InternalServerErrorException('Could not generate a username, please try again');
   }
 
   async signToken(userId: string, email: string) {
