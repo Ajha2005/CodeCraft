@@ -2,6 +2,9 @@ import { Injectable, Inject } from '@nestjs/common';
 import { Redis } from 'ioredis';
 import { REDIS_CLIENT } from './redis.module';
 
+/** The sorted set holding every player's total score (member = user id). Postgres is the source of truth; this is a cache of it. */
+export const COLLEGE_LEADERBOARD_KEY = 'leaderboard:college';
+
 /**
  * Leaderboards are a textbook use case for Redis Sorted Sets (ZSET):
  * - ZADD to update a score in O(log N)
@@ -10,7 +13,7 @@ import { REDIS_CLIENT } from './redis.module';
  */
 @Injectable()
 export class LeaderboardRedisService {
-  private collegeKey = 'leaderboard:college';
+  private collegeKey = COLLEGE_LEADERBOARD_KEY;
   private territoryKey = (territoryId: string) => `leaderboard:territory:${territoryId}`;
 
   constructor(@Inject(REDIS_CLIENT) private readonly redis: Redis) {}

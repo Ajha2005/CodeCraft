@@ -24,17 +24,21 @@ export function isGuestId(id: string | null | undefined): boolean {
   return typeof id === 'string' && id.startsWith(GUEST_PREFIX);
 }
 
-export const GUEST_FORBIDDEN_MESSAGE = 'Demo mode is read-only. Sign in with a Thapar ID to do this.';
+export const GUEST_FORBIDDEN_MESSAGE =
+  'Demo mode is read-only. Sign in with a Thapar ID to do this.';
 
 /**
  * Turns verified token claims into the caller, or null when the claims make no
  * sense. A guest token must carry a guest id and a user token a user id,
  * otherwise one kind of session could pose as the other.
  */
-export function userFromPayload(payload: Partial<AccessTokenPayload> | null | undefined): AuthUser | null {
+export function userFromPayload(
+  payload: Partial<AccessTokenPayload> | null | undefined,
+): AuthUser | null {
   const sub = payload?.sub;
   const role = payload?.role;
-  if (typeof sub !== 'string' || (role !== 'USER' && role !== 'GUEST')) return null;
+  if (typeof sub !== 'string' || (role !== 'USER' && role !== 'GUEST'))
+    return null;
   const isGuest = role === 'GUEST';
   if (isGuest !== isGuestId(sub)) return null;
   return { userId: sub, role, isGuest };

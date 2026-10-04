@@ -1,4 +1,12 @@
-import { accessTokenTtl, corsAllowlist, isAllowedOrigin, jwtSecretProblem, listenHost, trustProxyHops, validateEnv } from './env';
+import {
+  accessTokenTtl,
+  corsAllowlist,
+  isAllowedOrigin,
+  jwtSecretProblem,
+  listenHost,
+  trustProxyHops,
+  validateEnv,
+} from './env';
 
 const STRONG = 'Zx9!kQ2#vL7@pR4$wN8%cT5^yB1&hG6*mD3(sF0)';
 const base = {
@@ -13,7 +21,8 @@ const base = {
 };
 
 describe('jwtSecretProblem', () => {
-  it('accepts a long, varied secret', () => expect(jwtSecretProblem(STRONG)).toBeNull());
+  it('accepts a long, varied secret', () =>
+    expect(jwtSecretProblem(STRONG)).toBeNull());
 
   it.each([
     [undefined, 'not set'],
@@ -23,7 +32,15 @@ describe('jwtSecretProblem', () => {
     ['changeme'.repeat(5), 'variety'],
     ['a'.repeat(40), 'variety'],
   ])('rejects %j', (secret, why) => {
-    expect(jwtSecretProblem(secret as string | undefined)).toEqual(expect.stringContaining(why === 'placeholder' ? 'well-known' : why === 'variety' ? 'variety' : why));
+    expect(jwtSecretProblem(secret as string | undefined)).toEqual(
+      expect.stringContaining(
+        why === 'placeholder'
+          ? 'well-known'
+          : why === 'variety'
+            ? 'variety'
+            : why,
+      ),
+    );
   });
 
   it('never repeats the secret in its message', () => {
@@ -39,7 +56,10 @@ describe('validateEnv', () => {
   it('lists every missing setting at once, without any values', () => {
     let message = '';
     try {
-      validateEnv({ NODE_ENV: 'production', JWT_SECRET: 'weak-but-secret-looking' });
+      validateEnv({
+        NODE_ENV: 'production',
+        JWT_SECRET: 'weak-but-secret-looking',
+      });
     } catch (err) {
       message = (err as Error).message;
     }
@@ -52,33 +72,63 @@ describe('validateEnv', () => {
   });
 
   it('refuses a localhost frontend in production', () => {
-    expect(() => validateEnv({ ...base, FRONTEND_URL: 'http://localhost:5173' })).toThrow(/localhost/);
-    expect(() => validateEnv({ ...base, CORS_ORIGINS: 'https://app.example.com,http://127.0.0.1:3000' })).toThrow(/localhost/);
+    expect(() =>
+      validateEnv({ ...base, FRONTEND_URL: 'http://localhost:5173' }),
+    ).toThrow(/localhost/);
+    expect(() =>
+      validateEnv({
+        ...base,
+        CORS_ORIGINS: 'https://app.example.com,http://127.0.0.1:3000',
+      }),
+    ).toThrow(/localhost/);
   });
 
   it('does not need Redis or a frontend URL outside production', () => {
     expect(() =>
-      validateEnv({ NODE_ENV: 'development', DATABASE_URL: base.DATABASE_URL, JWT_SECRET: STRONG, GOOGLE_CLIENT_ID: 'a', GOOGLE_CLIENT_SECRET: 'b', GOOGLE_CALLBACK_URL: 'http://localhost:3000/auth/google/callback' }),
+      validateEnv({
+        NODE_ENV: 'development',
+        DATABASE_URL: base.DATABASE_URL,
+        JWT_SECRET: STRONG,
+        GOOGLE_CLIENT_ID: 'a',
+        GOOGLE_CLIENT_SECRET: 'b',
+        GOOGLE_CALLBACK_URL: 'http://localhost:3000/auth/google/callback',
+      }),
     ).not.toThrow();
   });
 });
 
 describe('CORS allowlist', () => {
   it('is exactly the configured origins in production, with no localhost and no wildcard', () => {
-    const env = { ...base, CORS_ORIGINS: 'https://demo.example.com/, http://localhost:5173' };
-    expect(corsAllowlist(env)).toEqual(['https://app.example.com', 'https://demo.example.com']);
+    const env = {
+      ...base,
+      CORS_ORIGINS: 'https://demo.example.com/, http://localhost:5173',
+    };
+    expect(corsAllowlist(env)).toEqual([
+      'https://app.example.com',
+      'https://demo.example.com',
+    ]);
   });
 
   it('adds the local dev servers outside production', () => {
-    expect(corsAllowlist({ NODE_ENV: 'development', FRONTEND_URL: 'https://app.example.com' })).toEqual(
-      expect.arrayContaining(['https://app.example.com', 'http://localhost:5173']),
+    expect(
+      corsAllowlist({
+        NODE_ENV: 'development',
+        FRONTEND_URL: 'https://app.example.com',
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        'https://app.example.com',
+        'http://localhost:5173',
+      ]),
     );
   });
 
   it('allows non-browser calls (no Origin) and listed origins only', () => {
     expect(isAllowedOrigin(undefined, base)).toBe(true);
     expect(isAllowedOrigin('https://app.example.com', base)).toBe(true);
-    expect(isAllowedOrigin('https://app.example.com.evil.com', base)).toBe(false);
+    expect(isAllowedOrigin('https://app.example.com.evil.com', base)).toBe(
+      false,
+    );
     expect(isAllowedOrigin('http://app.example.com', base)).toBe(false);
     expect(isAllowedOrigin('http://localhost:5173', base)).toBe(false);
     expect(isAllowedOrigin('null', base)).toBe(false);
@@ -89,7 +139,9 @@ describe('network settings', () => {
   it('trusts one proxy hop in production and none in development', () => {
     expect(trustProxyHops({ NODE_ENV: 'production' })).toBe(1);
     expect(trustProxyHops({ NODE_ENV: 'development' })).toBe(0);
-    expect(trustProxyHops({ NODE_ENV: 'production', TRUST_PROXY_HOPS: '2' })).toBe(2);
+    expect(
+      trustProxyHops({ NODE_ENV: 'production', TRUST_PROXY_HOPS: '2' }),
+    ).toBe(2);
     expect(() => trustProxyHops({ TRUST_PROXY_HOPS: 'many' })).toThrow();
   });
 

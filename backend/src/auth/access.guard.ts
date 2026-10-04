@@ -1,4 +1,8 @@
-import { ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  ExecutionContext,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import type { Request } from 'express';
@@ -15,7 +19,9 @@ const GUEST_WRITE_ALLOWLIST: ReadonlyArray<{ method: string; path: string }> = [
 
 export function isGuestWriteAllowed(method: string, path: string): boolean {
   const clean = path.replace(/\/+$/, '') || '/';
-  return GUEST_WRITE_ALLOWLIST.some((rule) => rule.method === method.toUpperCase() && rule.path === clean);
+  return GUEST_WRITE_ALLOWLIST.some(
+    (rule) => rule.method === method.toUpperCase() && rule.path === clean,
+  );
 }
 
 /**
@@ -33,8 +39,13 @@ export class AccessGuard extends AuthGuard('jwt') {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     if (context.getType() !== 'http') return true;
 
-    const request = context.switchToHttp().getRequest<Request & { user?: AuthUser }>();
-    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [context.getHandler(), context.getClass()]);
+    const request = context
+      .switchToHttp()
+      .getRequest<Request & { user?: AuthUser }>();
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
 
     if (isPublic) {
       // Best effort: a valid token still identifies the caller, a missing or bad one just means anonymous.
@@ -54,8 +65,14 @@ export class AccessGuard extends AuthGuard('jwt') {
     return true;
   }
 
-  private enforceGuestPolicy(context: ExecutionContext, request: Request): void {
-    const noGuests = this.reflector.getAllAndOverride<boolean>(NO_GUESTS_KEY, [context.getHandler(), context.getClass()]);
+  private enforceGuestPolicy(
+    context: ExecutionContext,
+    request: Request,
+  ): void {
+    const noGuests = this.reflector.getAllAndOverride<boolean>(NO_GUESTS_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
     if (noGuests) throw new ForbiddenException(GUEST_FORBIDDEN_MESSAGE);
     if (READ_ONLY_METHODS.has(request.method.toUpperCase())) return;
     if (isGuestWriteAllowed(request.method, request.path)) return;

@@ -1,5 +1,17 @@
-import { IsIn, IsInt, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
-import { MAX_CODE_CHARS, SUPPORTED_LANGUAGES, SupportedLanguage } from '../../common/limits';
+import {
+  IsIn,
+  IsInt,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
+import {
+  MAX_CODE_CHARS,
+  SUPPORTED_LANGUAGES,
+  SupportedLanguage,
+} from '../../common/limits';
 
 /** Who is submitting is never in the body: it comes from the access token. */
 export class CreateSubmissionDto {

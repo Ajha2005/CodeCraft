@@ -22,9 +22,16 @@ export function configureApp(app: NestExpressApplication): void {
     helmet({
       contentSecurityPolicy: {
         useDefaults: false,
-        directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"], baseUri: ["'none'"], formAction: ["'none'"] },
+        directives: {
+          defaultSrc: ["'none'"],
+          frameAncestors: ["'none'"],
+          baseUri: ["'none'"],
+          formAction: ["'none'"],
+        },
       },
-      hsts: isProduction() ? { maxAge: 31_536_000, includeSubDomains: true } : false,
+      hsts: isProduction()
+        ? { maxAge: 31_536_000, includeSubDomains: true }
+        : false,
       referrerPolicy: { policy: 'no-referrer' },
     }),
   );
@@ -38,7 +45,10 @@ export function configureApp(app: NestExpressApplication): void {
   app.use(compression({ threshold: 1024 }));
 
   app.enableCors({
-    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => callback(null, isAllowedOrigin(origin)),
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => callback(null, isAllowedOrigin(origin)),
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Authorization', 'Content-Type'],
     maxAge: 600,

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { AuthUser } from '../auth/auth-user';
 import { JudgeService } from '../judge/judge.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -11,15 +15,29 @@ interface Sample {
   output: unknown;
 }
 
-const clip = (text: string | undefined | null) => (text ?? '').slice(0, MAX_TEXT);
+const clip = (text: unknown) => {
+  const asText =
+    typeof text === 'string' ? text : text == null ? '' : JSON.stringify(text);
+  return asText.slice(0, MAX_TEXT);
+};
 
 /** Reads the problem's published `examples` into a usable list, ignoring anything malformed. */
 function readSamples(examples: unknown): Sample[] {
   if (!Array.isArray(examples)) return [];
   const samples: Sample[] = [];
   for (const item of examples as { input?: unknown; output?: unknown }[]) {
-    if (item && typeof item === 'object' && item.input && typeof item.input === 'object' && !Array.isArray(item.input) && 'output' in item) {
-      samples.push({ input: item.input as Record<string, unknown>, output: item.output });
+    if (
+      item &&
+      typeof item === 'object' &&
+      item.input &&
+      typeof item.input === 'object' &&
+      !Array.isArray(item.input) &&
+      'output' in item
+    ) {
+      samples.push({
+        input: item.input as Record<string, unknown>,
+        output: item.output,
+      });
     }
   }
   return samples;
@@ -50,18 +68,35 @@ export class RunService {
     if (!problem) throw new NotFoundException('Problem not found');
 
     const samples = readSamples(problem.examples);
-    if (samples.length === 0) throw new UnprocessableEntityException('This problem has no sample cases to run yet.');
+    if (samples.length === 0)
+      throw new UnprocessableEntityException(
+        'This problem has no sample cases to run yet.',
+      );
 
     // Types are inferred from the hidden cases so a sample runs through the very same wrapper a graded run would use.
-    const hidden = Array.isArray(problem.testCases) ? (problem.testCases as { input: Record<string, unknown> }[]) : [];
-    const paramTypes = this.judge.inferParamTypes((hidden.length > 0 ? hidden : samples) as { input: Record<string, any> }[]);
+    const hidden = Array.isArray(problem.testCases)
+      ? (problem.testCases as { input: Record<string, unknown> }[])
+      : [];
+    const paramTypes = this.judge.inferParamTypes(
+      hidden.length > 0 ? hidden : samples,
+    );
     const priority = user.isGuest ? 'guest' : 'user';
 
     const results: RunCaseResult[] = [];
     for (const [index, sample] of samples.entries()) {
       const started = performance.now();
-      const outcome = await this.judge.runSingleTestCase(dto.code, sample.input as Record<string, any>, sample.output, dto.language, paramTypes, priority);
-      const failed = outcome.status === 'CE' || outcome.status === 'RE' || outcome.status === 'TLE';
+      const outcome = await this.judge.runSingleTestCase(
+        dto.code,
+        sample.input as Record<string, any>,
+        sample.output,
+        dto.language,
+        paramTypes,
+        priority,
+      );
+      const failed =
+        outcome.status === 'CE' ||
+        outcome.status === 'RE' ||
+        outcome.status === 'TLE';
       results.push({
         index,
         input: sample.input,

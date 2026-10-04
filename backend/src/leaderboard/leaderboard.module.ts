@@ -1,12 +1,11 @@
 import { Module } from '@nestjs/common';
 import { LeaderboardController } from './leaderboard.controller';
+import { LeaderboardBootstrap } from './leaderboard-bootstrap.service';
 import { LeaderboardRedisService } from '../common/redis/leaderboard-redis.service';
-import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
-  
   controllers: [LeaderboardController],
-  providers: [LeaderboardRedisService],
+  providers: [LeaderboardRedisService, LeaderboardBootstrap],
   exports: [LeaderboardRedisService],
 })
 export class LeaderboardModule {}

@@ -14,10 +14,10 @@ import type { AuthUser } from '../../auth/auth-user';
  */
 @Injectable()
 export class AppThrottlerGuard extends ThrottlerGuard {
-  protected async getTracker(req: Record<string, any>): Promise<string> {
+  protected getTracker(req: Record<string, any>): Promise<string> {
     const user = req.user as AuthUser | undefined;
-    if (user && !user.isGuest) return `u:${user.userId}`;
-    return `${user ? 'g' : 'ip'}:${req.ip}`;
+    if (user && !user.isGuest) return Promise.resolve(`u:${user.userId}`);
+    return Promise.resolve(`${user ? 'g' : 'ip'}:${String(req.ip)}`);
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {

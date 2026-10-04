@@ -2,7 +2,9 @@ import { normalizeEmail } from './email.util';
 
 describe('normalizeEmail', () => {
   it('lower-cases an ordinary Thapar address', () => {
-    expect(normalizeEmail('Arjun.Mehta@Thapar.EDU')).toBe('arjun.mehta@thapar.edu');
+    expect(normalizeEmail('Arjun.Mehta@Thapar.EDU')).toBe(
+      'arjun.mehta@thapar.edu',
+    );
     expect(normalizeEmail('  a_b+c-d@thapar.edu ')).toBe('a_b+c-d@thapar.edu');
   });
 

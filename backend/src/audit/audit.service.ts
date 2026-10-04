@@ -44,7 +44,9 @@ export class AuditLogService {
         },
       });
     } catch (err) {
-      this.logger.warn(`Could not write audit entry "${entry.action}": ${err instanceof Error ? err.message : 'unknown error'}`);
+      this.logger.warn(
+        `Could not write audit entry "${entry.action}": ${err instanceof Error ? err.message : 'unknown error'}`,
+      );
     }
   }
 }

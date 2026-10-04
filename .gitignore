@@ -5,8 +5,10 @@ generated
 # Ephemeral git worktrees created by background Claude Code agents
 .claude/worktrees
 
-# Keep environment variables out of version control
-.envjudge0/*.zip
-judge0/judge0-v1.13.1.zip.1
-judge0/*.zip
-judge0/judge0-v1.13.1.zip.1
+# Keep environment variables out of version control (only the .env.example templates are tracked)
+.env
+.env.*
+!.env.example
+
+# Judge0 was replaced by Piston and its config deleted; keep any local leftovers (large zips) out of git
+judge0/

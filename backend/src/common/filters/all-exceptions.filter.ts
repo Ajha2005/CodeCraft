@@ -1,4 +1,10 @@
-import { ArgumentsHost, Catch, ExceptionFilter, HttpException, Logger } from '@nestjs/common';
+import {
+  ArgumentsHost,
+  Catch,
+  ExceptionFilter,
+  HttpException,
+  Logger,
+} from '@nestjs/common';
 import type { Response } from 'express';
 
 interface HttpLikeError {
@@ -40,7 +46,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
   catch(exception: unknown, host: ArgumentsHost): void {
     if (host.getType() !== 'http') {
-      this.logger.error(exception instanceof Error ? exception.message : 'Non-HTTP exception');
+      this.logger.error(
+        exception instanceof Error ? exception.message : 'Non-HTTP exception',
+      );
       return;
     }
     const response = host.switchToHttp().getResponse<Response>();
@@ -50,26 +58,45 @@ export class AllExceptionsFilter implements ExceptionFilter {
       // Thrown on purpose by our own code, so its message is meant for the client.
       const status = exception.getStatus();
       const body = exception.getResponse();
-      response.status(status).json(typeof body === 'string' ? { statusCode: status, message: body } : body);
+      response
+        .status(status)
+        .json(
+          typeof body === 'string'
+            ? { statusCode: status, message: body }
+            : body,
+        );
       return;
     } else {
       const code = (exception as { code?: unknown } | null)?.code;
       const mapped = prismaStatus(code);
       if (mapped) {
-        response.status(mapped).json({ statusCode: mapped, message: GENERIC_MESSAGES[mapped] });
+        response
+          .status(mapped)
+          .json({ statusCode: mapped, message: GENERIC_MESSAGES[mapped] });
         return;
       }
       // Errors raised by the body parser or other http-errors carry their own 4xx status.
-      const status = (exception as HttpLikeError | null)?.status ?? (exception as HttpLikeError | null)?.statusCode;
+      const status =
+        (exception as HttpLikeError | null)?.status ??
+        (exception as HttpLikeError | null)?.statusCode;
       if (typeof status === 'number' && status >= 400 && status < 500) {
         const type = (exception as HttpLikeError).type;
-        const message = type === 'entity.parse.failed' ? 'Malformed JSON body' : (GENERIC_MESSAGES[status] ?? 'Bad request');
+        const message =
+          type === 'entity.parse.failed'
+            ? 'Malformed JSON body'
+            : (GENERIC_MESSAGES[status] ?? 'Bad request');
         response.status(status).json({ statusCode: status, message });
         return;
       }
     }
 
-    this.logger.error(exception instanceof Error ? (exception.stack ?? exception.message) : 'Unknown error');
-    response.status(500).json({ statusCode: 500, message: 'Internal server error' });
+    this.logger.error(
+      exception instanceof Error
+        ? (exception.stack ?? exception.message)
+        : 'Unknown error',
+    );
+    response
+      .status(500)
+      .json({ statusCode: 500, message: 'Internal server error' });
   }
 }

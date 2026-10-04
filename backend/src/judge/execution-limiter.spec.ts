@@ -6,7 +6,15 @@ function controlled() {
   let finish!: () => void;
   const done = new Promise<void>((resolve) => (finish = resolve));
   const started = jest.fn();
-  return { finish, started, work: async () => { started(); await done; return 'ok'; } };
+  return {
+    finish,
+    started,
+    work: async () => {
+      started();
+      await done;
+      return 'ok';
+    },
+  };
 }
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
@@ -66,7 +74,10 @@ describe('ExecutionLimiter', () => {
     const running = blockers.map((b) => limiter.run('user', b.work));
     await tick();
 
-    const queue = (priority: 'guest' | 'user' | 'submission') => limiter.run(priority, async () => { order.push(priority); });
+    const queue = (priority: 'guest' | 'user' | 'submission') =>
+      limiter.run(priority, async () => {
+        order.push(priority);
+      });
     const waiting = [queue('guest'), queue('user'), queue('submission')];
     blockers[0].finish();
     blockers[1].finish();
@@ -79,10 +90,17 @@ describe('ExecutionLimiter', () => {
     const blockers = [controlled(), controlled()];
     const running = blockers.map((b) => limiter.run('user', b.work));
     await tick();
-    const waiting = [limiter.run('user', async () => 1), limiter.run('user', async () => 2)];
+    const waiting = [
+      limiter.run('user', async () => 1),
+      limiter.run('user', async () => 2),
+    ];
 
-    await expect(limiter.run('user', async () => 3)).rejects.toMatchObject({ status: 503 });
-    await expect(limiter.run('guest', async () => 4)).rejects.toBeInstanceOf(HttpException);
+    await expect(limiter.run('user', async () => 3)).rejects.toMatchObject({
+      status: 503,
+    });
+    await expect(limiter.run('guest', async () => 4)).rejects.toBeInstanceOf(
+      HttpException,
+    );
 
     blockers.forEach((b) => b.finish());
     await Promise.all([...running, ...waiting]);
@@ -93,15 +111,23 @@ describe('ExecutionLimiter', () => {
     const blockers = [controlled(), controlled()];
     const running = blockers.map((b) => limiter.run('user', b.work));
     await tick();
-    const graded = Array.from({ length: 10 }, (_, i) => limiter.run('submission', async () => i));
+    const graded = Array.from({ length: 10 }, (_, i) =>
+      limiter.run('submission', async () => i),
+    );
     blockers.forEach((b) => b.finish());
-    await expect(Promise.all(graded)).resolves.toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    await expect(Promise.all(graded)).resolves.toEqual([
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+    ]);
     await Promise.all(running);
   });
 
   it('frees the slot when the job throws', async () => {
     const limiter = new ExecutionLimiter();
-    await expect(limiter.run('user', async () => { throw new Error('boom'); })).rejects.toThrow('boom');
+    await expect(
+      limiter.run('user', async () => {
+        throw new Error('boom');
+      }),
+    ).rejects.toThrow('boom');
     expect(limiter.stats().active).toBe(0);
   });
 });

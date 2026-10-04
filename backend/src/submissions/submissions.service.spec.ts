@@ -1,5 +1,8 @@
 import { HttpException, NotFoundException } from '@nestjs/common';
-import { MAX_PENDING_SUBMISSIONS, SubmissionsService } from './submissions.service';
+import {
+  MAX_PENDING_SUBMISSIONS,
+  SubmissionsService,
+} from './submissions.service';
 
 const created = {
   id: 's1',
@@ -15,7 +18,11 @@ const created = {
 
 function setup(over: { problem?: unknown; waiting?: number } = {}) {
   const prisma = {
-    problem: { findUnique: jest.fn().mockResolvedValue('problem' in over ? over.problem : { id: 7 }) },
+    problem: {
+      findUnique: jest
+        .fn()
+        .mockResolvedValue('problem' in over ? over.problem : { id: 7 }),
+    },
     submission: {
       count: jest.fn().mockResolvedValue(over.waiting ?? 0),
       create: jest.fn().mockResolvedValue(created),
@@ -24,7 +31,11 @@ function setup(over: { problem?: unknown; waiting?: number } = {}) {
     },
   };
   const queue = { add: jest.fn().mockResolvedValue(undefined) };
-  return { prisma, queue, service: new SubmissionsService(prisma as never, queue as never) };
+  return {
+    prisma,
+    queue,
+    service: new SubmissionsService(prisma as never, queue as never),
+  };
 }
 
 const dto = { problemId: 7, language: 'python' as const, code: 'print(1)' };
@@ -35,7 +46,15 @@ describe('SubmissionsService.createSubmission', () => {
     await service.createSubmission('u1', dto);
 
     expect(prisma.submission.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { userId: 'u1', problemId: 7, code: 'print(1)', language: 'python', verdict: 'PENDING' } }),
+      expect.objectContaining({
+        data: {
+          userId: 'u1',
+          problemId: 7,
+          code: 'print(1)',
+          language: 'python',
+          verdict: 'PENDING',
+        },
+      }),
     );
     expect(queue.add).toHaveBeenCalledWith('judge', { submissionId: 's1' }); // no code, no hidden tests in Redis
   });
@@ -44,20 +63,38 @@ describe('SubmissionsService.createSubmission', () => {
     const { service } = setup();
     const result = await service.createSubmission('u1', dto);
     expect(Object.keys(result).sort()).toEqual(
-      ['createdAt', 'id', 'language', 'noPointsReason', 'pointsAwarded', 'problemId', 'totalPassed', 'totalTests', 'verdict'].sort(),
+      [
+        'createdAt',
+        'id',
+        'language',
+        'noPointsReason',
+        'pointsAwarded',
+        'problemId',
+        'totalPassed',
+        'totalTests',
+        'verdict',
+      ].sort(),
     );
   });
 
   it('is a 404, not a 500, for a problem that does not exist', async () => {
     const { queue, service } = setup({ problem: null });
-    await expect(service.createSubmission('u1', dto)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.createSubmission('u1', dto)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
     expect(queue.add).not.toHaveBeenCalled();
   });
 
   it('refuses a fourth waiting submission with a 429, so one account cannot flood the judge queue', async () => {
-    const { prisma, queue, service } = setup({ waiting: MAX_PENDING_SUBMISSIONS });
-    await expect(service.createSubmission('u1', dto)).rejects.toMatchObject({ status: 429 });
-    await expect(service.createSubmission('u1', dto)).rejects.toBeInstanceOf(HttpException);
+    const { prisma, queue, service } = setup({
+      waiting: MAX_PENDING_SUBMISSIONS,
+    });
+    await expect(service.createSubmission('u1', dto)).rejects.toMatchObject({
+      status: 429,
+    });
+    await expect(service.createSubmission('u1', dto)).rejects.toBeInstanceOf(
+      HttpException,
+    );
     expect(prisma.submission.create).not.toHaveBeenCalled();
     expect(queue.add).not.toHaveBeenCalled();
   });
@@ -76,13 +113,17 @@ describe('SubmissionsService.getSubmission', () => {
     const { prisma, service } = setup();
     prisma.submission.findFirst.mockResolvedValue(created);
     await service.getSubmission('u1', 's1');
-    expect(prisma.submission.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 's1', userId: 'u1' } }));
+    expect(prisma.submission.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 's1', userId: 'u1' } }),
+    );
   });
 
   it("answers someone else's submission exactly like a missing one", async () => {
     const { prisma, service } = setup();
     prisma.submission.findFirst.mockResolvedValue(null);
-    await expect(service.getSubmission('intruder', 's1')).rejects.toThrow(new NotFoundException('Submission not found'));
+    await expect(service.getSubmission('intruder', 's1')).rejects.toThrow(
+      new NotFoundException('Submission not found'),
+    );
   });
 });
 
@@ -95,6 +136,9 @@ describe('SubmissionsService.getStatusByProblem', () => {
       { problemId: 1, verdict: 'WA' },
       { problemId: 2, verdict: 'TLE' },
     ]);
-    await expect(service.getStatusByProblem('u1')).resolves.toEqual({ 1: 'AC', 2: 'ATTEMPTED' });
+    await expect(service.getStatusByProblem('u1')).resolves.toEqual({
+      1: 'AC',
+      2: 'ATTEMPTED',
+    });
   });
 });

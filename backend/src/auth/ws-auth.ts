@@ -12,8 +12,12 @@ export interface SocketData {
  * never the query string, which ends up in proxy logs). Same signature, algorithm,
  * issuer and audience rules as the REST guard, because it is the same JwtService.
  */
-export async function authenticateSocket(jwt: JwtService, token: unknown): Promise<AuthUser> {
-  if (typeof token !== 'string' || token.length === 0 || token.length > 2048) throw new Error('unauthorized');
+export async function authenticateSocket(
+  jwt: JwtService,
+  token: unknown,
+): Promise<AuthUser> {
+  if (typeof token !== 'string' || token.length === 0 || token.length > 2048)
+    throw new Error('unauthorized');
   let payload: AccessTokenPayload;
   try {
     payload = await jwt.verifyAsync<AccessTokenPayload>(token);
@@ -30,7 +34,11 @@ export async function authenticateSocket(jwt: JwtService, token: unknown): Promi
  * valid token is refused before it is established, so it never receives a
  * single event. `allowGuests` is false for the duel namespace.
  */
-export function requireTokenOnHandshake(server: Server | Namespace, jwt: JwtService, allowGuests: boolean): void {
+export function requireTokenOnHandshake(
+  server: Server | Namespace,
+  jwt: JwtService,
+  allowGuests: boolean,
+): void {
   server.use((socket: Socket, next: (err?: Error) => void) => {
     authenticateSocket(jwt, socket.handshake.auth?.token)
       .then((user) => {
@@ -38,6 +46,10 @@ export function requireTokenOnHandshake(server: Server | Namespace, jwt: JwtServ
         (socket.data as SocketData).user = user;
         next();
       })
-      .catch((err: Error) => next(new Error(err.message === 'forbidden' ? 'forbidden' : 'unauthorized')));
+      .catch((err: Error) =>
+        next(
+          new Error(err.message === 'forbidden' ? 'forbidden' : 'unauthorized'),
+        ),
+      );
   });
 }

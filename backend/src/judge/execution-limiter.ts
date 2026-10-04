@@ -16,12 +16,23 @@ interface Waiter {
   timer?: NodeJS.Timeout;
 }
 
-function intFromEnv(name: string, fallback: number, min: number, max: number): number {
+function intFromEnv(
+  name: string,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
   const value = Number(process.env[name]);
-  return Number.isInteger(value) && value >= min && value <= max ? value : fallback;
+  return Number.isInteger(value) && value >= min && value <= max
+    ? value
+    : fallback;
 }
 
-const busy = () => new HttpException('The code runner is busy right now. Please try again in a few seconds.', HttpStatus.SERVICE_UNAVAILABLE);
+const busy = () =>
+  new HttpException(
+    'The code runner is busy right now. Please try again in a few seconds.',
+    HttpStatus.SERVICE_UNAVAILABLE,
+  );
 
 /**
  * Caps how many programs run on the (1 GB) box at once, however many requests
@@ -39,15 +50,32 @@ export class ExecutionLimiter {
   private readonly capacity = intFromEnv('PISTON_MAX_CONCURRENCY', 2, 1, 8);
   private readonly guestCapacity = 1;
   private readonly maxWaiting = intFromEnv('RUN_MAX_QUEUE', 20, 1, 500);
-  private readonly maxWaitMs = intFromEnv('RUN_MAX_WAIT_MS', 30_000, 1000, 300_000);
+  private readonly maxWaitMs = intFromEnv(
+    'RUN_MAX_WAIT_MS',
+    30_000,
+    1000,
+    300_000,
+  );
 
   private active = 0;
   private activeGuests = 0;
-  private readonly waiting: Record<RunPriority, Waiter[]> = { submission: [], user: [], guest: [] };
+  private readonly waiting: Record<RunPriority, Waiter[]> = {
+    submission: [],
+    user: [],
+    guest: [],
+  };
 
   stats() {
-    const queued = ORDER.reduce((sum, key) => sum + this.waiting[key].length, 0);
-    return { active: this.active, activeGuests: this.activeGuests, queued, capacity: this.capacity };
+    const queued = ORDER.reduce(
+      (sum, key) => sum + this.waiting[key].length,
+      0,
+    );
+    return {
+      active: this.active,
+      activeGuests: this.activeGuests,
+      queued,
+      capacity: this.capacity,
+    };
   }
 
   async run<T>(priority: RunPriority, work: () => Promise<T>): Promise<T> {
@@ -90,7 +118,10 @@ export class ExecutionLimiter {
         const index = queue.indexOf(waiter);
         if (index >= 0) queue.splice(index, 1);
       };
-      if (this.waiting.user.length + this.waiting.guest.length > this.maxWaiting) {
+      if (
+        this.waiting.user.length + this.waiting.guest.length >
+        this.maxWaiting
+      ) {
         leave();
         reject(busy());
         return;

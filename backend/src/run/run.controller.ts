@@ -8,7 +8,9 @@ import { RunService } from './run.service';
 // Demo (guest) sessions: 10 runs a minute, counted per IP because anyone can mint
 // guest tokens. Signed-in users: 30 a minute, counted per account.
 const runLimit = (context: import('@nestjs/common').ExecutionContext) =>
-  context.switchToHttp().getRequest<{ user?: AuthUser }>().user?.isGuest ? 10 : 30;
+  context.switchToHttp().getRequest<{ user?: AuthUser }>().user?.isGuest
+    ? 10
+    : 30;
 
 @Controller('run')
 export class RunController {
