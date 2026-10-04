@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { TIER_META } from '../../../lib/tiers';
 import { colorForUser } from '../../../lib/playerColor';
 import { TierBadge } from '../../../components/ui/TierBadge';
@@ -83,10 +84,20 @@ export function ZonePanel({ summary, territory, distanceMeters, here, pinned, on
           <ul className="mt-2.5 grid grid-cols-1 gap-1">
             {summary.shares.slice(0, 3).map((s) => {
               const me = s.userId === user?.userId;
+              const handle = me ? user?.username : s.username;
+              const label = me ? 'You' : (s.username ?? names.get(s.userId) ?? 'Another commander');
               return (
                 <li key={s.userId} className="flex items-center gap-2 text-xs">
                   <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: s.color || colorForUser(s.userId) }} />
-                  <span className="min-w-0 flex-1 truncate text-slate-200">{me ? 'You' : (names.get(s.userId) ?? 'Another commander')}</span>
+                  <span className="min-w-0 flex-1 truncate text-slate-200">
+                    {handle ? (
+                      <Link to={`/profile/${handle}`} className="transition-colors hover:text-cyan-200 hover:underline">
+                        {label}
+                      </Link>
+                    ) : (
+                      label
+                    )}
+                  </span>
                   <span className="font-mono font-bold tabular-nums text-slate-400">
                     {s.cellCount} · {Math.round((s.cellCount / Math.max(1, summary.total)) * 100)}%
                   </span>

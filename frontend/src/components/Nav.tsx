@@ -47,7 +47,7 @@ export function Nav() {
         className="sticky top-0 z-40 flex shrink-0 items-center justify-between gap-3 border-b border-slate-800/80 bg-slate-950/85 px-3 backdrop-blur-xl sm:gap-6 sm:px-6 md:px-8"
         style={{ height: 'var(--nav-h)' }}
       >
-        <div className="flex min-w-0 items-center gap-6 md:gap-10">
+        <div className="flex min-w-0 items-center gap-6 min-[1320px]:gap-10">
           <Link to="/" className="font-display flex shrink-0 select-none items-center gap-2 text-xl font-bold tracking-wide">
             <span className="relative flex h-7 w-7 items-center justify-center">
               <span className="hex absolute inset-0 bg-gradient-to-b from-cyan-300 to-teal-500 opacity-90" />
@@ -70,15 +70,17 @@ export function Nav() {
                 <Link
                   key={link.to}
                   to={link.to}
+                  title={link.label}
                   onClick={() => sfx.play('click')}
-                  className={`group relative flex items-center gap-2 rounded-lg px-3.5 py-2 text-[0.8rem] font-bold uppercase tracking-[0.14em] transition-all ${
+                  className={`group relative flex items-center gap-2 rounded-lg px-2.5 py-2 text-[0.8rem] font-bold uppercase tracking-[0.14em] transition-all min-[1320px]:px-3.5 ${
                     active ? 'bg-cyan-400/10 text-cyan-300' : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-100'
                   }`}
                 >
                   <Icon name={link.icon} className={`h-4 w-4 transition-transform group-hover:scale-110 ${active ? 'drop-shadow-[0_0_6px_rgba(34,211,238,0.8)]' : ''}`} />
-                  {link.label}
+                  {/* Labels only where the bar has room for them next to the profile chip; icons alone before that. */}
+                  <span className="sr-only min-[1320px]:not-sr-only">{link.label}</span>
                   {badge && (
-                    <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[0.62rem] font-bold text-white shadow-[0_0_10px_rgba(244,63,94,0.8)] animate-glow-pulse">
+                    <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[0.62rem] font-bold text-white shadow-[0_0_10px_rgba(244,63,94,0.8)] animate-glow-pulse min-[1320px]:static">
                       {incoming}
                     </span>
                   )}
