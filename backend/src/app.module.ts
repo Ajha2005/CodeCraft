@@ -3,7 +3,6 @@ import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { ThrottlerModule } from '@nestjs/throttler';
-import Redis from 'ioredis';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { AccessGuard } from './auth/access.guard';
@@ -13,6 +12,7 @@ import { JudgeModule } from './judge/judge.module';
 import { SubmissionsModule } from './submissions/submissions.module';
 import { LeaderboardModule } from './leaderboard/leaderboard.module';
 import { RedisModule } from './common/redis/redis.module';
+import { bullConnectionFromUrl } from './common/redis/redis-options';
 import { ScoringModule } from './scoring/scoring.module';
 import { ContestModule } from './contest/contest.module';
 import { UsersModule } from './users/users.module';
@@ -27,9 +27,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
     ConfigModule.forRoot({ isGlobal: true }),
     BullModule.forRootAsync({
       useFactory: () => ({
-        connection: process.env.REDIS_URL
-          ? new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null })
-          : { host: 'localhost', port: 6379 },
+        connection: bullConnectionFromUrl(process.env.REDIS_URL),
         // Finished jobs are not kept: Redis Cloud's free plan has 30 MB and no
         // persistence, and a job record should not outlive its usefulness.
         defaultJobOptions: { removeOnComplete: true, removeOnFail: { age: 3600, count: 100 }, attempts: 1 },
