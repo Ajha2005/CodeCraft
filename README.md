@@ -109,8 +109,8 @@ flowchart LR
 | Real-time | Socket.IO via NestJS Gateways | Dedicated `territory` and `contest` namespaces/rooms for isolated, push-based updates |
 | Cache / Queue | Redis + BullMQ (`ioredis`) | Submission queueing, daily-limit counters, leaderboard caching |
 | Code Execution | [Piston](https://github.com/engineer-man/piston) (self-hosted, Dockerized) | Lightweight, sandboxed, network-isolated multi-language execution — swapped in after Judge0 proved unstable in dev |
-| Auth | JWT + Passport (local + Google OAuth20) | Stateless sessions, domain-restricted signup (`@thapar.edu`) enforced on both auth paths |
-| Deployment | Vercel (frontend) · AWS EC2 + Docker + Nginx + pm2 (backend/Piston) · Supabase (Postgres) · Redis Cloud | See [`DEPLOYMENT.md`](./DEPLOYMENT.md) |
+| Auth | Google OAuth (`@thapar.edu` only) + JWT, plus a read-only guest token for the demo | Stateless sessions; accounts are created by Google sign-in only, tokens never travel in URLs; see [`docs/security.md`](./docs/security.md) |
+| Deployment | Vercel (frontend) · AWS EC2 + Docker + Nginx + pm2 (backend/Piston) · Supabase (Postgres) · Redis Cloud | See [`DEPLOYMENT.md`](./DEPLOYMENT.md) and [`deploy/`](./deploy) |
 | Docs | MkDocs Material, auto-deployed to GitHub Pages | See [Documentation Site](#documentation-site) |
 
 ## Architecture
@@ -303,9 +303,9 @@ CodeCraft/
 │       ├── components/          # Nav, toasts, shared game UI kit (ui/)
 │       ├── pages/                # Scoring dashboard (commander profile)
 │       └── lib/                  # API client, Monaco setup, sockets, toasts
-├── judge0/                  # Legacy Judge0 config (superseded by Piston, kept for reference)
+├── deploy/                  # Production files: Piston container, Nginx, pm2, sandbox escape tests, RUNBOOK.md
 ├── docs/                    # Full system design docs (MkDocs source)
-├── DEPLOYMENT.md            # Production topology + runbook
+├── DEPLOYMENT.md            # Production topology (the step-by-step order is deploy/RUNBOOK.md)
 └── mkdocs.yml
 ```
 
@@ -330,8 +330,10 @@ cd ../frontend && npm install
 
 ### 2. Start Piston (code execution)
 
+For local development a plain container is enough. **Production uses [`deploy/piston/run-piston.sh`](./deploy/piston/run-piston.sh)** instead (loopback-only port, memory/process/CPU caps, no network inside the sandbox).
+
 ```bash
-docker run -d --name piston-api --restart always -p 2000:2000 \
+docker run -d --name piston-api --restart always -p 127.0.0.1:2000:2000 \
   --privileged -v piston-packages:/piston/packages \
   ghcr.io/engineer-man/piston
 
@@ -347,18 +349,17 @@ curl -X POST http://localhost:2000/api/v2/packages \
 
 ### 3. Configure environment variables
 
-`backend/.env`:
+Copy [`backend/.env.example`](./backend/.env.example) to `backend/.env` and fill it in. The server refuses to start, and says which setting is wrong, if a required one is missing or weak.
 
 | Variable | Notes |
 |---|---|
 | `DATABASE_URL` | Postgres connection string (session pooler if using Supabase — not the transaction pooler) |
-| `REDIS_URL` | `redis://default:PASSWORD@host:port` |
-| `JWT_SECRET` | `openssl rand -base64 32` |
-| `JWT_EXPIRES_IN` | e.g. `1d` |
+| `REDIS_URL` | `redis://default:PASSWORD@host:port` (`rediss://` if your provider offers TLS) |
+| `JWT_SECRET` | At least 32 characters, not a placeholder: `openssl rand -base64 48`. There is no default. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | From Google Cloud Console → Credentials |
-| `GOOGLE_CALLBACK_URL` | `http://localhost:3000/auth/google/callback` locally |
-| `FRONTEND_URL` | `http://localhost:5173` locally |
-| `PORT` | Optional, defaults to `3000` |
+| `GOOGLE_CALLBACK_URL` | `http://localhost:3000/auth/google/callback` locally; also an authorised redirect URI in Google |
+| `FRONTEND_URL` | `http://localhost:5173` locally. The only browser origin the API accepts (plus `CORS_ORIGINS`). |
+| `HOST` / `PORT` | Default `127.0.0.1` / `3000`. The API only listens on loopback unless you change `HOST`. |
 
 `frontend/.env` (see [`frontend/.env.example`](./frontend/.env.example)):
 
@@ -371,8 +372,8 @@ curl -X POST http://localhost:2000/api/v2/packages \
 ```bash
 cd backend
 npx prisma migrate deploy
-npm run seed              # seeds the 100-problem dataset
-npx tsx prisma/generate-grid.ts   # rasterizes the campus map into TerritoryCells
+npm run seed              # seeds the 100-problem dataset and the 46 zones
+npm run regrid -- --apply # lays the 1000-cell map over the zones (a plain `npm run regrid` is a dry run)
 ```
 
 ### 5. Run the app
@@ -396,17 +397,23 @@ Frontend: `http://localhost:5173` · Backend: `http://localhost:3000`
 | Script | Purpose |
 |---|---|
 | `npm run start:dev` | Start the API in watch mode |
-| `npm run seed` | Seed the problem dataset |
-| `npm run reset-grid` | Regenerate territory cells from the campus map SVG |
+| `npm run build` then `npm run start:prod` | Compile and run `dist/src/main` (what production does, via pm2) |
+| `npm run seed` | Seed the problem dataset and zones |
+| `npm run regrid` | Move the map to the 1000-cell grid, keeping everyone's territory. Dry run unless `-- --apply` |
+| `npm run reset-grid` / `wipe-territories` | Delete the cells / zones. Dry run unless `-- --apply` |
+| `npm run users:report` | Read-only counts of accounts without Google sign-in (see the runbook) |
+| `npm run leaderboard:rebuild` | Refill the Redis leaderboard from Postgres |
 | `npm run lint` / `format` | ESLint / Prettier |
-| `npm test` / `test:e2e` / `test:cov` | Unit / e2e / coverage |
+| `npm test` | Unit tests |
+| `npm run test:e2e` | End-to-end tests against a throwaway local Postgres + Redis ([`backend/test/README.md`](./backend/test/README.md)) |
 
 **Frontend** (`frontend/package.json`)
 
 | Script | Purpose |
 |---|---|
 | `npm run dev` | Vite dev server |
-| `npm run build` | Type-check + production build |
+| `npm run build` | Type-check + production build (first checks `vercel.json`'s CSP allows the API in `VITE_API_BASE`) |
+| `npm test` | Unit tests (vitest) |
 | `npm run lint` | ESLint |
 | `npm run preview` | Preview the production build |
 
@@ -420,7 +427,11 @@ Frontend: `http://localhost:5173` · Backend: `http://localhost:3000`
 | PostgreSQL | Supabase |
 | Redis | Redis Cloud |
 
-Full runbook (server recreation, Nginx config, SSL, known gotchas) lives in [`DEPLOYMENT.md`](./DEPLOYMENT.md).
+The topology is in [`DEPLOYMENT.md`](./DEPLOYMENT.md); the exact order of a release (database backup, migration, map regrid, restart, post-deploy checks) is [`deploy/RUNBOOK.md`](./deploy/RUNBOOK.md), and the Nginx, pm2 and Piston files it uses are in [`deploy/`](./deploy).
+
+### Demo mode
+
+The login page has a **Try the demo** button for visitors without a Thapar ID: a read-only session (no account, 2-hour token) that can browse problems, run code on a problem's examples, and watch the live map and leaderboard, but cannot submit, capture territory, duel or change anything. What it can and cannot do, and the full security review, are in [`docs/security.md`](./docs/security.md).
 
 ## Documentation Site
 

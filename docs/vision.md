@@ -30,6 +30,7 @@ Target users are enrolled Thapar students only. Authentication is restricted to 
 | Actor | Role |
 |---|---|
 | Student | Primary user — solves problems, earns territory, participates in contests |
+| Guest (demo visitor) | Anyone without a Thapar account who starts the one-click demo. Read-only: can browse problems, the leaderboard and the live map, and run code on a problem's published examples. Cannot submit, earn score, capture territory, duel, or change any data |
 | Admin / Faculty Reviewer | Reviews cheating flags, manages bans, monitors platform health |
 | System (Judge Service) | Automated actor that executes code and returns verdicts |
 | System (Anti-Cheating Engine) | Automated actor that scores behavioral signals and raises flags |
@@ -43,3 +44,4 @@ Target users are enrolled Thapar students only. Authentication is restricted to 
 - **UC-5:** Student A challenges Student B for a contested territory; Student B accepts; both enter a live 1v1 contest room.
 - **UC-6:** Anti-cheating engine flags a submission for an abnormal typing burst; on the 3rd flag, the user is auto-banned for 1 week and territory progress is reset, pending admin review.
 - **UC-7:** Admin reviews a flagged submission's stored evidence and overturns or upholds the flag.
+- **UC-8:** A recruiter or visitor without a Thapar account clicks "Try the demo", looks around the problems, the leaderboard and the live map, and runs their code on a problem's examples; the demo never saves, scores or captures anything, and tells them to sign in with a Thapar ID for that.

@@ -15,6 +15,7 @@
 | FR-9 | The platform maintains a college-wide leaderboard and territory-level rankings. |
 | FR-10 | The platform detects and flags suspicious submission behavior (paste attempts, abnormal typing bursts, instant full-solution submissions) and enforces a 3-flag ban policy. |
 | FR-11 | Admins can review flags, submissions, and bans through an audit-logged review queue. |
+| FR-12 | **Read-only demo access.** A visitor without a Thapar account can start a demo session with one click (no sign-up, no account, nothing stored; a 2-hour guest token). A demo session can browse problems, read the leaderboard and the live map, and run code against a problem's published examples (never its hidden tests). It cannot submit, earn score, capture territory, duel, or change any data, is rate-limited per IP, and every page says it is read-only. |
 
 ## Non-Functional Requirements
 
@@ -28,3 +29,5 @@
 | Maintainability | Modular NestJS architecture (controllers/services/modules) with clear separation between scoring, judge, contest, and anti-cheating services. |
 | Fairness | Anti-cheating flags must be evidence-backed and admin-reviewable, not silent auto-bans, to bound false-positive harm. |
 | Auditability | All bans, flag resolutions, and territory transfers from contests are logged with actor, timestamp, and reason. |
+| Privacy | Public pages and API responses identify players by username only, never by email, real name, or internal id; whether a map cell or leaderboard row is "yours" is decided by the server. |
+| Abuse resistance | Every endpoint needs a valid token except the few the login page uses; every endpoint is rate limited; code execution is capped by a concurrency limiter so a flood of demo runs cannot starve graded submissions. |
