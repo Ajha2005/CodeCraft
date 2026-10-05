@@ -4,14 +4,20 @@ import { Type } from 'class-transformer';
 import { AuthUser } from '../auth/auth-user';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { Public } from '../auth/public.decorator';
+import { getColorForUser } from '../common/color/color.util';
 import { LeaderboardRedisService } from '../common/redis/leaderboard-redis.service';
 import { PrismaService } from '../prisma/prisma.service';
 
-/** One row of a public board: a handle and a score. `isMe` is computed on the server for the caller. */
+/**
+ * One row of a public board: a handle and a score. `isMe` is computed on the
+ * server for the caller, and `color` is the player's map color (derived from
+ * their id on the server, so the client never needs the id to draw them).
+ */
 export interface LeaderboardEntryDto {
   username: string;
   score: number;
   isMe: boolean;
+  color: string;
 }
 
 class LimitQuery {
@@ -96,7 +102,12 @@ export class LeaderboardController {
     for (const entry of raw) {
       const username = usernameById.get(entry.userId);
       if (!username) continue;
-      entries.push({ username, score: entry.score, isMe: !!viewer && !viewer.isGuest && viewer.userId === entry.userId });
+      entries.push({
+        username,
+        score: entry.score,
+        isMe: !!viewer && !viewer.isGuest && viewer.userId === entry.userId,
+        color: getColorForUser(entry.userId),
+      });
     }
     return entries;
   }

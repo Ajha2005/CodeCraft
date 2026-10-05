@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../auth/useAuth';
 import { fetchDailyProgress, fetchUserRank, fetchUserScores } from '../api/client';
 import { fetchStreak } from './api';
 import { levelFromScore } from './progression';
@@ -45,16 +45,22 @@ function storeLevel(userId: string, level: number) {
 export function PlayerStatsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const userId = user?.userId ?? null;
+  // A demo guest has no score, rank or streak: they see the empty state without a request.
+  const isGuest = !!user?.isGuest;
   const [stats, setStats] = useState<PlayerStats>(EMPTY);
   const [levelUp, setLevelUp] = useState<LevelUpEvent | null>(null);
 
   const refresh = useCallback(async () => {
     if (!userId) return;
+    if (isGuest) {
+      setStats({ ...EMPTY, loaded: true });
+      return;
+    }
     const [scores, rank, streak, daily] = await Promise.allSettled([
-      fetchUserScores(userId),
-      fetchUserRank(userId),
-      fetchStreak(userId),
-      fetchDailyProgress(userId),
+      fetchUserScores(),
+      fetchUserRank(),
+      fetchStreak(),
+      fetchDailyProgress(),
     ]);
 
     const scoreData = scores.status === 'fulfilled' ? scores.value : null;
@@ -77,7 +83,7 @@ export function PlayerStatsProvider({ children }: { children: ReactNode }) {
       if (previous !== null && level.level > previous) setLevelUp({ from: previous, to: level.level });
       storeLevel(userId, level.level);
     }
-  }, [userId]);
+  }, [userId, isGuest]);
 
   useEffect(() => {
     // Deferred (same approach as ChallengesPage) so the effect body itself

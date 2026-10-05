@@ -1,7 +1,6 @@
 // Thin wrappers around the problems / submissions endpoints, so the page
 // components deal in typed values rather than raw fetch calls.
-
-export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3000';
+import { request } from '../../lib/http';
 
 export interface ProblemSummary {
   id: number;
@@ -14,11 +13,11 @@ export interface ProblemExample {
   output: unknown;
 }
 
+/** A problem as the server publishes it: the statement, the worked examples and starter code. The graded (hidden) test cases never leave the server. */
 export interface ProblemDetail extends ProblemSummary {
   description: string;
   examples: ProblemExample[];
   constraints: string[];
-  testCases: { input: unknown; expected_output: unknown }[];
   boilerplate: Record<string, string>;
 }
 
@@ -39,22 +38,40 @@ export interface ScoreResult {
   totalScore: number;
 }
 
+/** What "Run" reports for one of the problem's own examples. */
+export interface RunCaseResult {
+  index: number;
+  input: unknown;
+  expectedOutput: string;
+  actualOutput: string;
+  /** AC | WA | TLE | RE | CE */
+  status: string;
+  passed: boolean;
+  runtimeMs: number;
+  /** Compiler or runtime error text. */
+  error?: string;
+}
+
+export interface RunResult {
+  problemId: number;
+  language: string;
+  passed: number;
+  total: number;
+  /** AC when every example passed, otherwise the first failing example's status. */
+  verdict: string;
+  results: RunCaseResult[];
+}
+
 export type ProblemStatus = 'AC' | 'ATTEMPTED';
 
 /** The backend caps a page at 100; the whole catalogue is small, so we read it all. */
 const PAGE_SIZE = 100;
 
-async function getJson<T>(url: string, token?: string | null): Promise<T> {
-  const res = await fetch(url, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
-  if (!res.ok) throw new Error(`Request failed: ${res.status}`);
-  return (await res.json()) as T;
-}
-
 export async function fetchAllProblems(): Promise<ProblemSummary[]> {
   const all: ProblemSummary[] = [];
   let total = Infinity;
   while (all.length < total) {
-    const page = await getJson<{ items: ProblemSummary[]; total: number }>(`${API_BASE}/problems?limit=${PAGE_SIZE}&offset=${all.length}`);
+    const page = await request<{ items: ProblemSummary[]; total: number }>(`/problems?limit=${PAGE_SIZE}&offset=${all.length}`);
     all.push(...page.items);
     total = page.total;
     if (page.items.length === 0) break;
@@ -63,28 +80,28 @@ export async function fetchAllProblems(): Promise<ProblemSummary[]> {
 }
 
 export function fetchProblem(id: number): Promise<ProblemDetail> {
-  return getJson<ProblemDetail>(`${API_BASE}/problems/${id}`);
+  return request<ProblemDetail>(`/problems/${id}`);
 }
 
-export async function fetchStatuses(userId: string, token: string | null): Promise<Record<number, ProblemStatus>> {
-  const res = await fetch(`${API_BASE}/submissions/status/${userId}`, { headers: { Authorization: `Bearer ${token}` } });
-  return res.ok ? ((await res.json()) as Record<number, ProblemStatus>) : {};
+/** The signed-in player's best verdict per problem. */
+export function fetchStatuses(): Promise<Record<number, ProblemStatus>> {
+  return request<Record<number, ProblemStatus>>('/submissions/me/status').catch(() => ({}));
 }
 
-export async function postSubmission(token: string | null, body: { userId: string; problemId: number; language: string; code: string }): Promise<SubmissionResult> {
-  const res = await fetch(`${API_BASE}/submissions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`Request failed: ${res.status}`);
-  return (await res.json()) as SubmissionResult;
+/** Who is submitting comes from the access token; the body never names a user. */
+export function postSubmission(body: { problemId: number; language: string; code: string }): Promise<SubmissionResult> {
+  return request<SubmissionResult>('/submissions', { method: 'POST', body });
 }
 
-export function fetchSubmission(token: string | null, id: string): Promise<SubmissionResult> {
-  return getJson<SubmissionResult>(`${API_BASE}/submissions/${id}`, token);
+/** Runs the code on the problem's own examples. Nothing is saved, scored or captured. */
+export function runExamples(body: { problemId: number; language: string; code: string }): Promise<RunResult> {
+  return request<RunResult>('/run', { method: 'POST', body });
 }
 
-export function fetchScore(token: string | null, submissionId: string): Promise<ScoreResult> {
-  return getJson<ScoreResult>(`${API_BASE}/scoring/submission/${submissionId}`, token);
+export function fetchSubmission(id: string): Promise<SubmissionResult> {
+  return request<SubmissionResult>(`/submissions/${id}`);
+}
+
+export function fetchScore(submissionId: string): Promise<ScoreResult> {
+  return request<ScoreResult>(`/scoring/submission/${submissionId}`);
 }

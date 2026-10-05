@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useTerritories } from './hooks/useTerritories';
-import { useTerritoryCells } from './hooks/useTerritoryCells';
+import { useCampusData } from './hooks/useCampusData';
 import { useCollegeLeaderboard } from './hooks/useLeaderboard';
-import { useAuth } from '../../auth/AuthContext';
+import { GUEST_LOCK_TOOLTIP, useAuth } from '../../auth/useAuth';
 import { usePlayerStats } from '../../lib/playerStatsContext';
 import { useToasts } from '../../lib/useToasts';
 import { getApiErrorMessage } from '../../lib/apiError';
@@ -62,19 +61,18 @@ function isTypingTarget(t: EventTarget | null) {
 }
 
 export function MapFullScreen() {
-  const { territories, loading: territoriesLoading, error: territoriesError, retry: retryTerritories } = useTerritories();
-  const { cellsByTerritory, loading: cellsLoading, error: cellsError, retry: retryCells } = useTerritoryCells();
-  // Names for the live feed come from one snapshot; it only goes live (and
-  // refetches on score changes) while the ranks panel is actually open.
+  const { territories, cellsByTerritory, loading, error: loadError, retry } = useCampusData();
+  // The ranks panel only goes live (and refetches on score changes) while it is actually open.
   const [showBoard, setShowBoard] = useState(false);
   const { entries: boardEntries, loading: boardLoading } = useCollegeLeaderboard(50, showBoard);
-  const { user, flavorTextEnabled } = useAuth();
+  const { user, isGuest, flavorTextEnabled } = useAuth();
   const { refresh: refreshStats } = usePlayerStats();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { toasts, push, dismiss } = useToasts();
 
-  const userId = user?.userId ?? null;
+  // Where this browser remembers the player's position and explored zones. Demo visitors share one slot.
+  const userId = isGuest ? 'guest' : (user?.userId ?? null);
   const world = getWorld();
   const [engine] = useState(() => new MapEngine(world));
   const traveling = useEngineSelector(engine, (s) => s.traveling);
@@ -105,26 +103,23 @@ export function MapFullScreen() {
     }
   });
 
-  const ready = !territoriesLoading && !cellsLoading && !territoriesError && !cellsError;
-  const loadError = territoriesError ?? cellsError;
+  const ready = !loading && !loadError;
 
   // ---- derived per-zone summaries (names, tiers, ownership) --------------
   const summaries = useMemo(() => {
     const map = new Map<string, ZoneSummary>();
     for (const z of world.campus.zones) {
       const t = territories[z.id];
-      map.set(z.id, summarizeZone(z.id, t, t ? (cellsByTerritory[t.id] ?? []) : [], userId));
+      map.set(z.id, summarizeZone(z.id, t, t ? (cellsByTerritory[t.id] ?? []) : []));
     }
     return map;
-  }, [world, territories, cellsByTerritory, userId]);
+  }, [world, territories, cellsByTerritory]);
 
   const summaryList = useMemo(() => [...summaries.values()], [summaries]);
 
   const selected = selectedId ? (summaries.get(selectedId) ?? null) : null;
   const current = currentZoneId ? (summaries.get(currentZoneId) ?? null) : null;
   const hoverSummary = hover ? (summaries.get(hover.zoneId) ?? null) : null;
-
-  const nameFor = useCallback((ownerId: string | null) => boardEntries.find((e) => e.userId === ownerId)?.name ?? null, [boardEntries]);
 
   const pushFeed = useCallback((item: Omit<FeedItem, 'id'>) => {
     const id = nextId.current++;
@@ -180,7 +175,7 @@ export function MapFullScreen() {
     // else still flashes on the map, it just does not ask for your attention.
     if (!e.byMe && (summary?.mine ?? 0) === 0 && e.zone.id !== currentZoneId) return;
     const name = summary?.name ?? e.zone.id;
-    const who = e.byMe ? 'You' : (e.cell.ownerUsername ?? nameFor(e.cell.ownerId) ?? 'A rival');
+    const who = e.byMe ? 'You' : (e.cell.ownerUsername ?? 'A rival');
     sfx.play('capture');
     pushFeed({
       kind: e.byMe ? 'mine' : 'capture',
@@ -210,7 +205,15 @@ export function MapFullScreen() {
     setSelectedId(id);
     if (id) sfx.play('click');
   });
-  const handleCellChallenge = useEffectEvent((cell: TerritoryCellDto, zone: Zone) => setChallenge({ cell, zone }));
+  const handleCellChallenge = useEffectEvent((cell: TerritoryCellDto, zone: Zone) => {
+    if (isGuest) {
+      // Dueling changes the map, which a demo visit cannot do.
+      sfx.play('error');
+      push(GUEST_LOCK_TOOLTIP, 'warning');
+      return;
+    }
+    setChallenge({ cell, zone });
+  });
   const handleNameClick = useEffectEvent((username: string) => {
     sfx.play('click');
     navigate(`/profile/${encodeURIComponent(username)}`);
@@ -371,24 +374,24 @@ export function MapFullScreen() {
   }
 
   const stakes = useMemo<StakeCell[]>(() => {
-    if (!challenge || !userId) return [];
+    if (!challenge || isGuest) return [];
     const zoneOf = new Map(Object.values(territories).map((t) => [t.id, t]));
     const mine: StakeCell[] = [];
     for (const [territoryId, list] of Object.entries(cellsByTerritory)) {
       const zone = zoneOf.get(territoryId);
       for (const c of list) {
-        if (c.ownerId === userId) mine.push({ id: c.id, zoneName: zone?.name ?? 'Unknown zone', tier: zone?.tier ?? 'OUTPOST', row: c.row, col: c.col });
+        if (c.isMe) mine.push({ id: c.id, zoneName: zone?.name ?? 'Unknown zone', tier: zone?.tier ?? 'OUTPOST', row: c.row, col: c.col });
       }
     }
     return mine;
-  }, [challenge, userId, territories, cellsByTerritory]);
+  }, [challenge, isGuest, territories, cellsByTerritory]);
   const waypointSummary = pinnedId ? summaries.get(pinnedId) : null;
   const challengeSummary = challenge ? summaries.get(challenge.zone.id) : null;
   const hoverNote = hover?.name
     ? `Open ${hover.name}’s profile`
     : hover?.cell && hoverSummary
       ? hover.challengeable
-        ? `${hover.cell.ownerUsername ? `Held by ${hover.cell.ownerUsername}` : 'Rival cell'} · click to challenge`
+        ? `${hover.cell.ownerUsername ? `Held by ${hover.cell.ownerUsername}` : 'Rival cell'}${isGuest ? '' : ' · click to challenge'}`
         : hover.cell.ownerId
           ? 'Your cell'
           : 'Unclaimed cell'
@@ -571,10 +574,7 @@ export function MapFullScreen() {
               <button
                 type="button"
                 className="btn-primary h-10 rounded-lg px-6 text-sm"
-                onClick={() => {
-                  retryTerritories();
-                  retryCells();
-                }}
+                onClick={retry}
               >
                 Try again
               </button>

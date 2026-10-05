@@ -179,7 +179,6 @@ export class MapEngine {
   private velSamples: { t: number; dx: number; dy: number }[] = [];
 
   // world state
-  private userId: string | null = null;
   private meColor = '#22d3ee';
   private currentIdx = -1;
   private hoverIdx = -1;
@@ -264,7 +263,6 @@ export class MapEngine {
       destination: null,
       waypoint: null,
       fx: this.fx,
-      meId: null,
       meColor: this.meColor,
       reduced: false,
       lowFx: false,
@@ -385,11 +383,9 @@ export class MapEngine {
 
   /** Who is playing; call before the first setData. */
   setUser(opts: { userId: string | null; startPos?: Pt | null; explored?: string[] | null; skipIntro?: boolean }) {
-    this.userId = opts.userId;
     this.skipIntro = !!opts.skipIntro;
     this.meColor = colorForUser(opts.userId);
     this.playerRender.color = this.meColor;
-    this.frame.meId = opts.userId;
     this.frame.meColor = this.meColor;
 
     if (opts.startPos) {
@@ -414,7 +410,7 @@ export class MapEngine {
 
   setData(territories: Record<string, TerritoryDto>, cellsByTerritory: Record<string, TerritoryCellDto[]>) {
     const first = !this.hasData;
-    const change = applySceneData(this.world.campus, this.views, territories, cellsByTerritory, this.userId, this.anim, first);
+    const change = applySceneData(this.world.campus, this.views, territories, cellsByTerritory, this.anim, first);
     for (const v of this.views) v.label = v.territory?.name ?? v.zone.id;
 
     // Zones you hold cells in are never "unexplored".
@@ -884,7 +880,7 @@ export class MapEngine {
     if (view) {
       if (view.detail) {
         const cell = pickCell(view, w.x, w.y);
-        if (cell && cell.ownerId && this.userId && cell.ownerId !== this.userId) {
+        if (cell && cell.ownerId && !cell.isMe) {
           this.handlers.onCellChallenge?.(cell, view.zone);
           return;
         }
@@ -955,7 +951,7 @@ export class MapEngine {
     this.hoverIdx = idx;
     this.hoverCellId = cell?.id ?? null;
     this.hoverName = name;
-    const challengeable = !!cell && !!cell.ownerId && !!this.userId && cell.ownerId !== this.userId;
+    const challengeable = !!cell && !!cell.ownerId && !cell.isMe;
     this.hoverCell = cell && idx >= 0 ? { zone: idx, row: cell.row, col: cell.col, challengeable } : null;
     if (this.canvas && this.pointers.size === 0) this.canvas.style.cursor = idx >= 0 ? (challengeable ? 'crosshair' : 'pointer') : 'default';
     this.handlers.onHover?.(

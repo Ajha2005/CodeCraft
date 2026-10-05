@@ -27,6 +27,8 @@ export interface CellRun {
 export interface OwnerBlob {
   ownerId: string;
   username: string;
+  /** Held by the signed-in player (decided by the server). */
+  isMe: boolean;
   size: number;
   /**
    * Where the name can go, best first: the widest straight runs of the patch,
@@ -61,6 +63,8 @@ export interface ZoneView {
   contested: boolean;
   mineCount: number;
   topOwnerId: string | null;
+  /** Whether the zone's biggest holder is the signed-in player. */
+  topOwnerIsMe: boolean;
   topColor: string | null;
   /** Height of the block above the ground, world units. Negative = sunken. */
   height: number;
@@ -98,6 +102,7 @@ export function createZoneView(zone: Zone): ZoneView {
     contested: false,
     mineCount: 0,
     topOwnerId: null,
+    topOwnerIsMe: false,
     topColor: null,
     height,
     hover: 0,
@@ -124,7 +129,6 @@ export function applySceneData(
   views: ZoneView[],
   territories: Record<string, TerritoryDto>,
   cellsByTerritory: Record<string, TerritoryCellDto[]>,
-  userId: string | null,
   now: number,
   isFirstLoad: boolean,
 ): SceneChange {
@@ -141,7 +145,7 @@ export function applySceneData(
         const prev = view.cellIndex.get(cellKey(cell.row, cell.col));
         if (prev && prev.ownerId !== cell.ownerId && cell.ownerId) {
           view.flashCells.set(cell.id, { row: cell.row, col: cell.col, start: now });
-          change.captured.push({ view, cell, byMe: !!userId && cell.ownerId === userId });
+          change.captured.push({ view, cell, byMe: cell.isMe });
         }
       }
     }
@@ -156,7 +160,7 @@ export function applySceneData(
       view.cellIndex.set(cellKey(c.row, c.col), c);
       if (c.row > maxRow) maxRow = c.row;
       if (c.col > maxCol) maxCol = c.col;
-      if (userId && c.ownerId === userId) mine++;
+      if (c.isMe) mine++;
     }
     view.cw = cells.length ? zone.box.w / (maxCol + 1) : 0;
     view.ch = cells.length ? zone.box.h / (maxRow + 1) : 0;
@@ -173,6 +177,7 @@ export function applySceneData(
     let top: OwnerShare | null = null;
     for (const s of view.shares) if (!top || s.cellCount > top.cellCount) top = s;
     view.topOwnerId = top?.userId ?? null;
+    view.topOwnerIsMe = top?.isMe ?? false;
     view.topColor = top?.color ?? null;
   }
 
@@ -212,7 +217,7 @@ export function ownerBlobs(cells: TerritoryCellDto[], index: Map<number, Territo
     }
 
     const username = patch.find((c) => c.ownerUsername)?.ownerUsername;
-    if (username) blobs.push({ ownerId: start.ownerId, username, size: patch.length, runs: bestRuns(patch) });
+    if (username) blobs.push({ ownerId: start.ownerId, username, isMe: start.isMe, size: patch.length, runs: bestRuns(patch) });
   }
   return blobs;
 }

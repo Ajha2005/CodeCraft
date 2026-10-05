@@ -12,7 +12,7 @@ import {
   type NearMiss,
 } from '../api/client';
 import { fetchStreak, type StreakInfo } from '../lib/api';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../auth/useAuth';
 import { ToastStack } from '../components/ToastStack';
 import { useToasts } from '../lib/useToasts';
 import { rankTitle, rankUpToast, nearMissNudge } from '../lib/flavorText';
@@ -84,12 +84,12 @@ export default function ScoringDashboard() {
   useEffect(() => {
     if (!user) return;
     Promise.all([
-      fetchUserScores(user.userId),
-      fetchUserTerritories(user.userId),
-      fetchDailyProgress(user.userId),
-      fetchUserRank(user.userId),
-      fetchNearMiss(user.userId),
-      fetchStreak(user.userId).catch(() => null),
+      fetchUserScores(),
+      fetchUserTerritories(),
+      fetchDailyProgress(),
+      fetchUserRank(),
+      fetchNearMiss(),
+      fetchStreak().catch(() => null),
     ])
       .then(([scores, terr, prog, rankInfo, miss, streakInfo]) => {
         setScoreData(scores);
@@ -187,7 +187,7 @@ export default function ScoringDashboard() {
     );
   }
 
-  const name = user?.name?.trim() || user?.email?.split('@')[0] || 'Commander';
+  const name = user?.isGuest ? 'Commander' : user?.username || 'Commander';
 
   return (
     <div className="hud-grid-bg min-h-[calc(100dvh-var(--nav-h))] flex-1">

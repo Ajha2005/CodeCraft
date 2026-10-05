@@ -1,4 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
+import { getColorForUser } from '../common/color/color.util';
 import type { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from './users.service';
 
@@ -44,6 +45,7 @@ describe('UsersService.getPublicProfile', () => {
       territoriesHeld: 2,
       problemsSolved: 2,
       joinedAt: joined,
+      color: getColorForUser('u1'),
       isMe: false,
     });
   });
@@ -79,7 +81,7 @@ describe('UsersService.getPublicProfile', () => {
     const profile = await service.getPublicProfile('arjun_m');
 
     expect(Object.keys(profile).sort()).toEqual(
-      ['cellsHeld', 'isMe', 'joinedAt', 'problemsSolved', 'territoriesHeld', 'totalScore', 'username'].sort(),
+      ['cellsHeld', 'color', 'isMe', 'joinedAt', 'problemsSolved', 'territoriesHeld', 'totalScore', 'username'].sort(),
     );
     expect(JSON.stringify(profile)).not.toMatch(/secret|Real Name|passwordHash|u1/);
   });

@@ -1,9 +1,12 @@
 export interface OwnerShare {
+  /** An opaque per-owner key (the owner's username), not a database id. */
   userId: string;
   color: string;
   cellCount: number;
   /** Public handle, when the server sent one with the cells. */
   username?: string | null;
+  /** Whether this owner is the signed-in player (decided by the server). */
+  isMe: boolean;
 }
 
 export interface StripeSegment extends OwnerShare {
@@ -36,10 +39,11 @@ interface CellOwnershipInput {
   ownerId?: string | null;
   ownerUsername?: string | null;
   ownerColor?: string;
+  isMe?: boolean;
 }
 
 export function aggregateOwnership(cells: CellOwnershipInput[]): OwnerShare[] {
-  const counts = new Map<string, { color: string; username: string | null; cellCount: number }>();
+  const counts = new Map<string, { color: string; username: string | null; cellCount: number; isMe: boolean }>();
   for (const cell of cells) {
     if (!cell.ownerId) continue; // unclaimed cells don't count toward ownership
     const existing = counts.get(cell.ownerId);
@@ -47,7 +51,7 @@ export function aggregateOwnership(cells: CellOwnershipInput[]): OwnerShare[] {
       existing.cellCount += 1;
       if (!existing.username) existing.username = cell.ownerUsername ?? null;
     } else {
-      counts.set(cell.ownerId, { color: cell.ownerColor ?? '#999999', username: cell.ownerUsername ?? null, cellCount: 1 });
+      counts.set(cell.ownerId, { color: cell.ownerColor ?? '#999999', username: cell.ownerUsername ?? null, cellCount: 1, isMe: !!cell.isMe });
     }
   }
   return Array.from(counts.entries()).map(([userId, v]) => ({
@@ -55,5 +59,6 @@ export function aggregateOwnership(cells: CellOwnershipInput[]): OwnerShare[] {
     color: v.color,
     username: v.username,
     cellCount: v.cellCount,
+    isMe: v.isMe,
   }));
 }

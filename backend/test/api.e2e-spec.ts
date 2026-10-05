@@ -17,6 +17,7 @@ import { io, Socket } from 'socket.io-client';
 import request from 'supertest';
 import { PrismaClient } from '../generated/prisma/client';
 import { JudgeService } from '../src/judge/judge.service';
+import { getColorForUser } from '../src/common/color/color.util';
 import { regrid } from '../src/territory/grid/regrid';
 import { parseZones } from '../src/territory/grid/svg-geometry';
 import {
@@ -956,8 +957,8 @@ maybe('the API against a scratch database', () => {
     it('give the leaderboard as username, score and isMe, from the refilled Redis board', async () => {
       const res = await get('/leaderboard/college?limit=50', bobToken);
       expect(res.body).toEqual([
-        { username: 'alice', score: 12.5, isMe: false },
-        { username: 'bob', score: 7.5, isMe: true },
+        { username: 'alice', score: 12.5, isMe: false, color: getColorForUser(alice.id) },
+        { username: 'bob', score: 7.5, isMe: true, color: getColorForUser(bob.id) },
       ]);
       expect((await get('/leaderboard/me/rank', bobToken)).body).toEqual({
         rank: 2,
@@ -971,6 +972,7 @@ maybe('the API against a scratch database', () => {
       const res = await get('/users/alice', bobToken);
       expect(Object.keys(res.body).sort()).toEqual([
         'cellsHeld',
+        'color',
         'isMe',
         'joinedAt',
         'problemsSolved',

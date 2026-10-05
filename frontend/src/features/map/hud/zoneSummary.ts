@@ -26,15 +26,14 @@ export function summarizeZone(
   svgPathId: string,
   territory: TerritoryDto | undefined,
   cells: TerritoryCellDto[],
-  userId: string | null,
 ): ZoneSummary {
   const shares = aggregateOwnership(cells).sort((a, b) => b.cellCount - a.cellCount);
   const owned = shares.reduce((s, x) => s + x.cellCount, 0);
-  const mine = userId ? (shares.find((s) => s.userId === userId)?.cellCount ?? 0) : 0;
+  const mine = shares.find((s) => s.isMe)?.cellCount ?? 0;
 
   let status: ZoneStatus = 'unclaimed';
   if (shares.length > 1) status = 'contested';
-  else if (shares.length === 1) status = shares[0].userId === userId ? 'yours' : 'rival';
+  else if (shares.length === 1) status = shares[0].isMe ? 'yours' : 'rival';
 
   return {
     id: svgPathId,

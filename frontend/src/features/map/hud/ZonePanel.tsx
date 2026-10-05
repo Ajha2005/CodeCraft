@@ -1,14 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { TIER_META } from '../../../lib/tiers';
-import { colorForUser } from '../../../lib/playerColor';
 import { TierBadge } from '../../../components/ui/TierBadge';
 import { Icon } from '../../../components/ui/Icon';
-import { useAuth } from '../../../auth/AuthContext';
+import { useAuth } from '../../../auth/useAuth';
 import { EMPTY_ZONE_TAP } from '../../../lib/flavorText';
 import type { TerritoryDto } from '../../../types/territory';
 import { TerritoryLeaderboard } from '../TerritoryLeaderboard';
-import { useTerritoryLeaderboard } from '../hooks/useLeaderboard';
 import { STATUS_COLOR, STATUS_LABEL, type ZoneSummary } from './zoneSummary';
 
 export interface ZonePanelProps {
@@ -25,13 +23,11 @@ export interface ZonePanelProps {
 
 /** Inspect a zone: who holds it, how much, and what you can do about it. */
 export function ZonePanel({ summary, territory, distanceMeters, here, pinned, onTravel, onDive, onPin, onClose }: ZonePanelProps) {
-  const { user, flavorTextEnabled } = useAuth();
+  const { user, isGuest, flavorTextEnabled } = useAuth();
   const [showBoard, setShowBoard] = useState(false);
-  const { entries } = useTerritoryLeaderboard(summary.territoryId);
   const meta = TIER_META[summary.tier];
-  const names = new Map(entries.map((e) => [e.userId, e.name]));
   const pct = Math.round(summary.fraction * 100);
-  const rivals = summary.shares.filter((s) => s.userId !== user?.userId);
+  const rivals = summary.shares.filter((s) => !s.isMe);
 
   return (
     <div
@@ -83,12 +79,12 @@ export function ZonePanel({ summary, territory, distanceMeters, here, pinned, on
         {summary.shares.length > 0 ? (
           <ul className="mt-2.5 grid grid-cols-1 gap-1">
             {summary.shares.slice(0, 3).map((s) => {
-              const me = s.userId === user?.userId;
+              const me = s.isMe;
               const handle = me ? user?.username : s.username;
-              const label = me ? 'You' : (s.username ?? names.get(s.userId) ?? 'Another commander');
+              const label = me ? 'You' : (s.username ?? 'Another commander');
               return (
                 <li key={s.userId} className="flex items-center gap-2 text-xs">
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: s.color || colorForUser(s.userId) }} />
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: s.color }} />
                   <span className="min-w-0 flex-1 truncate text-slate-200">
                     {handle ? (
                       <Link to={`/profile/${handle}`} className="transition-colors hover:text-cyan-200 hover:underline">
@@ -114,7 +110,7 @@ export function ZonePanel({ summary, territory, distanceMeters, here, pinned, on
       {rivals.length > 0 && (
         <p className="mt-2.5 flex items-center gap-2 text-xs leading-snug text-slate-400">
           <Icon name="swords" className="h-3.5 w-3.5 shrink-0 text-orange-300/90" />
-          <span>Dive in, then click a rival’s cell to duel for it.</span>
+          <span>{isGuest ? 'Dueling for a rival’s cell needs a Thapar ID.' : 'Dive in, then click a rival’s cell to duel for it.'}</span>
         </p>
       )}
 

@@ -1,4 +1,5 @@
 import { UnauthorizedException } from '@nestjs/common';
+import { getColorForUser } from '../common/color/color.util';
 import type { AuthUser } from '../auth/auth-user';
 import type { LeaderboardRedisService } from '../common/redis/leaderboard-redis.service';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -35,8 +36,8 @@ describe('LeaderboardController rows', () => {
     const rows = await controller.getCollegeLeaderboard({}, me);
 
     expect(rows).toEqual([
-      { username: 'arjun_m', score: 90, isMe: true },
-      { username: 'player_a1b2c3', score: 50, isMe: false },
+      { username: 'arjun_m', score: 90, isMe: true, color: getColorForUser('u1') },
+      { username: 'player_a1b2c3', score: 50, isMe: false, color: getColorForUser('u2') },
     ]);
     expect(JSON.stringify(rows)).not.toMatch(/u1|u2|userId|email/);
     // the query itself cannot return an email or a real name
@@ -47,14 +48,14 @@ describe('LeaderboardController rows', () => {
     const { redis, prisma, controller } = setup();
     redis.getCollegeTop.mockResolvedValue([{ userId: 'u1', score: 90 }]);
     prisma.user.findMany.mockResolvedValue([{ id: 'u1', username: 'arjun_m' }]);
-    await expect(controller.getCollegeLeaderboard({}, guest)).resolves.toEqual([{ username: 'arjun_m', score: 90, isMe: false }]);
+    await expect(controller.getCollegeLeaderboard({}, guest)).resolves.toEqual([{ username: 'arjun_m', score: 90, isMe: false, color: getColorForUser('u1') }]);
   });
 
   it('uses usernames on a zone leaderboard too', async () => {
     const { redis, prisma, controller } = setup();
     redis.getTerritoryTop.mockResolvedValue([{ userId: 'u1', score: 12 }]);
     prisma.user.findMany.mockResolvedValue([{ id: 'u1', username: 'arjun_m' }]);
-    await expect(controller.getTerritoryLeaderboard('t1', {}, me)).resolves.toEqual([{ username: 'arjun_m', score: 12, isMe: true }]);
+    await expect(controller.getTerritoryLeaderboard('t1', {}, me)).resolves.toEqual([{ username: 'arjun_m', score: 12, isMe: true, color: getColorForUser('u1') }]);
   });
 
   it('drops a player who no longer exists instead of showing a piece of their id', async () => {
@@ -78,7 +79,7 @@ describe('LeaderboardController access', () => {
     redis.getCollegeTop.mockResolvedValue([{ userId: 'u1', score: 90 }]);
     prisma.user.findMany.mockResolvedValue([{ id: 'u1', username: 'arjun_m' }]);
 
-    await expect(controller.getCollegeLeaderboard({ limit: 1 })).resolves.toEqual([{ username: 'arjun_m', score: 90, isMe: false }]);
+    await expect(controller.getCollegeLeaderboard({ limit: 1 })).resolves.toEqual([{ username: 'arjun_m', score: 90, isMe: false, color: getColorForUser('u1') }]);
     expect(redis.getCollegeTop).toHaveBeenCalledWith(1);
     await expect(controller.getCollegeLeaderboard({ limit: 50 })).rejects.toBeInstanceOf(UnauthorizedException);
     await expect(controller.getCollegeLeaderboard({})).rejects.toBeInstanceOf(UnauthorizedException); // the default page is 50

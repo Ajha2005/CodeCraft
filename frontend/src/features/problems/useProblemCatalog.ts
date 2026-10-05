@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '../../auth/AuthContext';
+import { useAuth } from '../../auth/useAuth';
 import { fetchAllProblems, fetchStatuses, type ProblemStatus, type ProblemSummary } from './api';
 
 /**
@@ -9,7 +9,8 @@ import { fetchAllProblems, fetchStatuses, type ProblemStatus, type ProblemSummar
  */
 export function useProblemCatalog() {
   const { user, token } = useAuth();
-  const userId = user?.userId ?? null;
+  // A demo session has no progress to fetch.
+  const signedIn = !!user && !user.isGuest;
   const [problems, setProblems] = useState<ProblemSummary[]>([]);
   const [status, setStatus] = useState<Record<number, ProblemStatus>>({});
   const [loading, setLoading] = useState(true);
@@ -34,9 +35,9 @@ export function useProblemCatalog() {
   }, [attempt]);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!signedIn) return;
     let ignore = false;
-    fetchStatuses(userId, token)
+    fetchStatuses()
       .then((s) => {
         if (!ignore) setStatus(s);
       })
@@ -44,7 +45,7 @@ export function useProblemCatalog() {
     return () => {
       ignore = true;
     };
-  }, [userId, token]);
+  }, [signedIn, token]);
 
   const retry = useCallback(() => {
     setLoading(true);

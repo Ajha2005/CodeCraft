@@ -1,7 +1,10 @@
 import { colorForUser, initialsOf } from '../../lib/playerColor';
 
 interface PlayerAvatarProps {
+  /** Colors the badge by id (only where the page already has the player's id). Ignored when `color` is given. */
   userId?: string | null;
+  /** The player's map color as the server sent it, for pages that have no id. */
+  color?: string;
   name?: string | null;
   size?: number;
   ring?: boolean;
@@ -9,8 +12,8 @@ interface PlayerAvatarProps {
 }
 
 /** Round initials badge, colored exactly like the player's territory on the map. */
-export function PlayerAvatar({ userId, name, size = 36, ring = true, className }: PlayerAvatarProps) {
-  const color = colorForUser(userId);
+export function PlayerAvatar({ userId, color: given, name, size = 36, ring = true, className }: PlayerAvatarProps) {
+  const color = given ?? colorForUser(userId);
   return (
     <div
       className={`relative shrink-0 rounded-full flex items-center justify-center font-display font-bold text-slate-950 select-none ${className ?? ''}`}

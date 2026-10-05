@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { LOGIN_GREETINGS, pickDaily } from '../lib/flavorText'
+import { API_BASE, request } from '../lib/http'
 import { FlavorToggle } from '../components/FlavorToggle'
-import { useAuth } from './AuthContext'
-
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3000'
+import { takeSessionEndedNote } from './session'
+import { useAuth } from './useAuth'
 
 interface TopCommander {
-  userId: string
-  name: string
+  username: string
   score: number
 }
 
@@ -31,8 +30,13 @@ function makeCaptureGrid(cols: number, rows: number): CaptureCell[] {
 
 function LoginPage() {
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const error = searchParams.get('error')
-  const { flavorTextEnabled } = useAuth()
+  const { flavorTextEnabled, startDemo } = useAuth()
+  // Read once: tells a visitor whose session ran out why they are back here.
+  const [sessionEnded] = useState(takeSessionEndedNote)
+  const [demoStarting, setDemoStarting] = useState(false)
+  const [demoError, setDemoError] = useState('')
   const greeting = useMemo(
     () => (flavorTextEnabled ? pickDaily(LOGIN_GREETINGS) : 'Sign in to pick up where you left off.'),
     [flavorTextEnabled],
@@ -44,19 +48,17 @@ function LoginPage() {
 
   const captureGrid = useMemo(() => makeCaptureGrid(14, 8), [])
 
+  // These three are the only calls the server answers without a sign-in.
   useEffect(() => {
-    fetch(`${API_BASE}/leaderboard/college?limit=1`)
-      .then((res) => (res.ok ? res.json() : []))
+    request<TopCommander[]>('/leaderboard/college?limit=1', { auth: false })
       .then((data) => setTopCommander(data[0] ?? null))
       .catch(() => {})
 
-    fetch(`${API_BASE}/problems?limit=1`)
-      .then((res) => (res.ok ? res.json() : null))
+    request<{ total?: number }>('/problems?limit=1', { auth: false })
       .then((data) => setProblemCount(data?.total ?? null))
       .catch(() => {})
 
-    fetch(`${API_BASE}/territories`)
-      .then((res) => (res.ok ? res.json() : []))
+    request<unknown[]>('/territories', { auth: false })
       .then((data) => setZoneCount(Array.isArray(data) ? data.length : null))
       .catch(() => {})
   }, [])
@@ -65,10 +67,22 @@ function LoginPage() {
     window.location.href = `${API_BASE}/auth/google`
   }
 
+  function handleDemo() {
+    if (demoStarting) return
+    setDemoStarting(true)
+    setDemoError('')
+    startDemo()
+      .then(() => navigate('/', { replace: true }))
+      .catch((err: unknown) => {
+        setDemoError(err instanceof Error ? err.message : 'The demo could not be started right now.')
+        setDemoStarting(false)
+      })
+  }
+
   const statItems = [
     problemCount !== null ? `${problemCount} problems live` : null,
     zoneCount !== null ? `${zoneCount} zones on the map` : null,
-    topCommander ? `🏆 ${topCommander.name} leads the campaign` : null,
+    topCommander ? `🏆 ${topCommander.username} leads the campaign` : null,
   ].filter((item): item is string => Boolean(item))
 
   return (
@@ -147,8 +161,14 @@ function LoginPage() {
 
           {error === 'google_auth_failed' && (
             <p className="text-sm text-red-400 mb-10 bg-red-950/40 border border-red-800/50 rounded-lg py-2 px-4 inline-block">
-              Google sign-in is temporarily unavailable due to a server configuration issue — this isn't
-              about your account. Please try again shortly or contact the site admin.
+              Google sign-in didn't finish. Please try again — if it keeps happening, check that your browser
+              accepts cookies for this site, or contact the site admin.
+            </p>
+          )}
+
+          {sessionEnded && !error && (
+            <p className="text-sm text-amber-300 mb-10 bg-amber-950/30 border border-amber-800/40 rounded-lg py-2 px-4 inline-block">
+              Your session ended. Sign in again to carry on.
             </p>
           )}
 
@@ -176,7 +196,22 @@ function LoginPage() {
             </svg>
             Sign in with Google
           </button>
-          <p className="text-xs text-slate-500 mb-4">New commander? Signing in enlists you automatically.</p>
+          <p className="text-xs text-slate-500 mb-5">New commander? Signing in enlists you automatically.</p>
+
+          <div className="mx-auto mb-6 max-w-sm border-t border-slate-800/80 pt-5">
+            <button
+              type="button"
+              onClick={handleDemo}
+              disabled={demoStarting}
+              className="rounded-full border border-cyan-400/40 px-6 py-2.5 text-sm font-semibold text-cyan-200 transition-all hover:border-cyan-300 hover:bg-cyan-400/10 disabled:opacity-60 disabled:hover:bg-transparent"
+            >
+              {demoStarting ? 'Starting the demo…' : 'Try the demo'}
+            </button>
+            <p className="mt-2 text-xs leading-relaxed text-slate-500">
+              No Thapar ID? Look around read-only: browse the problems, run code on the sample cases and explore the live map.
+            </p>
+            {demoError && <p className="mt-2 text-xs text-red-400">{demoError}</p>}
+          </div>
 
           {statItems.length > 0 && (
             <div className="flex flex-wrap items-center justify-center gap-2">

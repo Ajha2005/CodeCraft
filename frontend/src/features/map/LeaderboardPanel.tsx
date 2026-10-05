@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
-import { useAuth } from '../../auth/AuthContext';
+import { useAuth } from '../../auth/useAuth';
 import { EMPTY_LEADERBOARD } from '../../lib/flavorText';
-import { colorForUser } from '../../lib/playerColor';
 import type { LeaderboardEntry } from '../../lib/api';
 import { Icon } from '../../components/ui/Icon';
 
@@ -14,7 +13,7 @@ interface LeaderboardPanelProps {
 }
 
 export function LeaderboardPanel({ entries, loading, onClose }: LeaderboardPanelProps) {
-  const { user, flavorTextEnabled } = useAuth();
+  const { flavorTextEnabled } = useAuth();
 
   return (
     <div className="hud-panel hud-panel-quiet w-[18rem] max-w-[calc(100vw-1.5rem)] p-3 animate-slide-in-right">
@@ -31,11 +30,11 @@ export function LeaderboardPanel({ entries, loading, onClose }: LeaderboardPanel
       ) : (
         <ol className="max-h-[min(22rem,calc(100dvh-var(--nav-h)-var(--tabbar-h)-13rem))] space-y-1 overflow-y-auto pr-0.5">
           {entries.map((entry, i) => {
-            const me = entry.userId === user?.userId;
-            const color = colorForUser(entry.userId);
+            const me = entry.isMe;
+            const color = entry.color;
             return (
               <li
-                key={entry.userId}
+                key={entry.username}
                 className={`flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm ${
                   me ? 'bg-cyan-400/10 ring-1 ring-cyan-400/40' : i < 3 ? 'bg-slate-800/50' : ''
                 }`}
@@ -44,13 +43,9 @@ export function LeaderboardPanel({ entries, loading, onClose }: LeaderboardPanel
                 <span className="flex min-w-0 items-center gap-2 text-slate-200">
                   <span className="w-5 shrink-0 text-center text-xs">{MEDAL[i] ?? <span className="text-slate-500">{i + 1}</span>}</span>
                   <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
-                  {entry.username ? (
-                    <Link to={`/profile/${entry.username}`} className="truncate transition-colors hover:text-cyan-200 hover:underline">
-                      {entry.name}
-                    </Link>
-                  ) : (
-                    <span className="truncate">{entry.name}</span>
-                  )}
+                  <Link to={`/profile/${entry.username}`} className="truncate transition-colors hover:text-cyan-200 hover:underline">
+                    {entry.username}
+                  </Link>
                 </span>
                 <span className="shrink-0 font-mono text-xs font-bold text-emerald-400">{entry.score.toFixed(1)}</span>
               </li>

@@ -55,7 +55,6 @@ export interface ContestProblemDetail {
   difficultyLevel: string;
   examples: { input: unknown; output: unknown }[];
   constraints: string[];
-  testCases: { input: unknown; expected_output: unknown }[];
   boilerplate: Record<string, string>;
 }
 

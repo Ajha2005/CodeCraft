@@ -1,8 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { useAuth } from '../../auth/AuthContext';
+import { useAuth } from '../../auth/useAuth';
 import { fetchPublicProfile, type PublicProfile } from '../../lib/api';
-import { colorForUser } from '../../lib/playerColor';
 import { levelFromScore } from '../../lib/progression';
 import { AnimatedNumber } from '../../components/ui/AnimatedNumber';
 import { Icon, type IconName } from '../../components/ui/Icon';
@@ -68,9 +67,9 @@ function nameSize(username: string): string {
   return 'text-4xl sm:text-5xl';
 }
 
-function ProfileView({ profile, isMe, flavor }: { profile: PublicProfile; isMe: boolean; flavor: boolean }) {
+function ProfileView({ profile, flavor }: { profile: PublicProfile; flavor: boolean }) {
+  const { isMe, color } = profile;
   const level = levelFromScore(profile.totalScore);
-  const color = colorForUser(profile.userId);
   const joined = new Date(profile.joinedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 
   return (
@@ -78,7 +77,7 @@ function ProfileView({ profile, isMe, flavor }: { profile: PublicProfile; isMe: 
       <header className="hud-panel relative mb-4 overflow-hidden p-5 md:p-7 animate-fade-in-up">
         <div className="pointer-events-none absolute -left-24 -top-24 h-64 w-64 rounded-full blur-3xl" style={{ background: `${color}22` }} />
         <div className="relative grid items-center gap-5 text-center sm:grid-cols-[auto_1fr_auto] sm:text-left">
-          <PlayerAvatar userId={profile.userId} name={profile.username} size={88} className="mx-auto sm:mx-0" />
+          <PlayerAvatar color={color} name={profile.username} size={88} className="mx-auto sm:mx-0" />
           <div className="min-w-0">
             <p className="hud-label text-cyan-300">{flavor ? 'Commander profile' : 'Player profile'}</p>
             <h1 className="font-display mt-1 flex min-w-0 items-center justify-center gap-3 sm:justify-start">
@@ -129,7 +128,7 @@ function ProfileView({ profile, isMe, flavor }: { profile: PublicProfile; isMe: 
 
 export default function ProfilePage() {
   const { username = '' } = useParams();
-  const { user, flavorTextEnabled } = useAuth();
+  const { flavorTextEnabled } = useAuth();
   const [attempt, setAttempt] = useState(0);
   const [lookup, setLookup] = useState<Lookup | null>(null);
 
@@ -192,7 +191,7 @@ export default function ProfilePage() {
 
   return (
     <Shell>
-      <ProfileView profile={current.profile} isMe={!!user && user.userId === current.profile.userId} flavor={flavorTextEnabled} />
+      <ProfileView profile={current.profile} flavor={flavorTextEnabled} />
     </Shell>
   );
 }

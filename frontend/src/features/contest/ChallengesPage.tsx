@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../auth/AuthContext';
+import { useAuth } from '../../auth/useAuth';
 import { ToastStack } from '../../components/ToastStack';
 import { useToasts } from '../../lib/useToasts';
 import { getApiErrorMessage } from '../../lib/apiError';

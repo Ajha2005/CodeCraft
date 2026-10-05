@@ -1,26 +1,12 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { ApiError, request } from '../lib/http'
+import { resetSocket } from '../lib/socket'
+import { AuthContext, type User } from './useAuth'
+import { clearToken, onSessionExpired, readToken, storeToken, tokenExpiresAt } from './session'
 
-interface User {
-  userId: string
-  email: string
-  username: string
-  name: string | null
-}
-
-interface AuthContextType {
-  token: string | null
-  user: User | null
-  loading: boolean
-  login: (token: string) => void
-  logout: () => void
-  flavorTextEnabled: boolean
-  setFlavorTextEnabled: (enabled: boolean) => void
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
-
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3000'
 const FLAVOR_STORAGE_KEY = 'flavorTextEnabled'
+
+type MeResponse = User & { flavorTextEnabled: boolean }
 
 function readStoredFlavorPreference(): boolean {
   try {
@@ -32,87 +18,104 @@ function readStoredFlavorPreference(): boolean {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem('accessToken'))
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [token, setToken] = useState<string | null>(readToken)
+  // Who the token belongs to, tagged with the token it was fetched for, so a stale answer can never be taken for the current one.
+  const [session, setSession] = useState<{ token: string; user: User } | null>(null)
+  const [failedToken, setFailedToken] = useState<string | null>(null)
   const [flavorTextEnabled, setFlavorTextEnabledState] = useState(readStoredFlavorPreference)
 
-  useEffect(() => {
-    if (!token) {
-      setUser(null)
-      setLoading(false)
-      return
-    }
+  const user = token && session?.token === token ? session.user : null
+  const loading = !!token && !user && failedToken !== token
 
-    fetch(`${API_BASE}/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error('Invalid or expired token')
-        return res.json()
-      })
-      .then((data: User & { flavorTextEnabled: boolean }) => {
-        setUser(data)
-        setFlavorTextEnabledState(data.flavorTextEnabled)
+  const endSession = useCallback(() => {
+    clearToken()
+    setToken(null)
+    setSession(null)
+    resetSocket()
+  }, [])
+
+  // Who is behind the token?
+  useEffect(() => {
+    if (!token) return
+    let cancelled = false
+    request<MeResponse>('/auth/me')
+      .then((data) => {
+        if (cancelled) return
+        const { flavorTextEnabled: flavor, ...me } = data
+        setSession({ token, user: me })
+        setFlavorTextEnabledState(flavor)
         try {
-          localStorage.setItem(FLAVOR_STORAGE_KEY, String(data.flavorTextEnabled))
+          localStorage.setItem(FLAVOR_STORAGE_KEY, String(flavor))
         } catch {
           // best-effort — a per-viewer convenience, not critical state
         }
       })
-      .catch(() => {
-        localStorage.removeItem('accessToken')
-        setToken(null)
-        setUser(null)
+      .catch((err: unknown) => {
+        if (cancelled) return
+        // A 401 has already signed the app out (see request); anything else leaves the visitor on the login page.
+        if (!(err instanceof ApiError) || err.status !== 401) {
+          clearToken()
+          setToken(null)
+        }
+        setFailedToken(token)
       })
-      .finally(() => setLoading(false))
+    return () => {
+      cancelled = true
+    }
   }, [token])
 
-  function login(newToken: string) {
-    localStorage.setItem('accessToken', newToken)
+  // The server ends a session by answering 401; the token also says when it runs out, so go quietly a moment before.
+  useEffect(() => onSessionExpired(endSession), [endSession])
+  useEffect(() => {
+    const expiresAt = tokenExpiresAt(token)
+    if (!expiresAt) return
+    const wait = expiresAt - Date.now() - 5_000
+    const timer = window.setTimeout(endSession, Math.min(Math.max(wait, 0), 2 ** 31 - 1))
+    return () => window.clearTimeout(timer)
+  }, [token, endSession])
+
+  const login = useCallback((newToken: string) => {
+    storeToken(newToken)
     setToken(newToken)
-  }
+    resetSocket()
+  }, [])
 
-  function logout() {
-    localStorage.removeItem('accessToken')
-    setToken(null)
-    setUser(null)
-  }
-
-  function setFlavorTextEnabled(enabled: boolean) {
-    setFlavorTextEnabledState(enabled)
+  const startDemo = useCallback(async () => {
     try {
-      localStorage.setItem(FLAVOR_STORAGE_KEY, String(enabled))
-    } catch {
-      // ignore — see above
+      const data = await request<{ accessToken: string }>('/auth/guest', { method: 'POST', body: {}, auth: false })
+      login(data.accessToken)
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 429) {
+        throw new Error('Too many demo sessions have been started from your network. Please try again in a little while.', { cause: err })
+      }
+      throw new Error('The demo could not be started right now. Please try again in a moment.', { cause: err })
     }
-    if (!token) return
-    fetch(`${API_BASE}/auth/settings`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ flavorTextEnabled: enabled }),
-    }).catch(() => {
-      // UI already updated optimistically; a failed sync just means the
-      // preference falls back to session-only until the next successful save
-    })
-  }
+  }, [login])
 
-  return (
-    <AuthContext.Provider
-      value={{ token, user, loading, login, logout, flavorTextEnabled, setFlavorTextEnabled }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const logout = endSession
+
+  const setFlavorTextEnabled = useCallback(
+    (enabled: boolean) => {
+      setFlavorTextEnabledState(enabled)
+      try {
+        localStorage.setItem(FLAVOR_STORAGE_KEY, String(enabled))
+      } catch {
+        // ignore — see above
+      }
+      // A demo session has no account to save the setting on; it stays in this browser.
+      if (!token || user?.isGuest) return
+      request('/auth/settings', { method: 'PATCH', body: { flavorTextEnabled: enabled } }).catch(() => {
+        // UI already updated optimistically; a failed sync just means the
+        // preference falls back to session-only until the next successful save
+      })
+    },
+    [token, user?.isGuest],
   )
-}
 
-export function useAuth() {
-  const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider')
-  }
-  return context
+  const value = useMemo(
+    () => ({ token, user, loading, isGuest: !!user?.isGuest, login, startDemo, logout, flavorTextEnabled, setFlavorTextEnabled }),
+    [token, user, loading, login, startDemo, logout, flavorTextEnabled, setFlavorTextEnabled],
+  )
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

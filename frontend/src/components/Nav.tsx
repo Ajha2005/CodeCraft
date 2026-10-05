@@ -1,10 +1,11 @@
 import { Link, useLocation } from 'react-router-dom';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../auth/useAuth';
 import { usePlayerStats } from '../lib/playerStatsContext';
 import { useIncomingChallenges } from '../lib/useIncomingChallenges';
 import { useSfxEnabled } from '../lib/useSfx';
 import { sfx } from '../lib/sfx';
 import { rankTitle } from '../lib/flavorText';
+import { DemoBanner } from './DemoBanner';
 import { Icon, type IconName } from './ui/Icon';
 import { LevelBadge } from './ui/LevelBadge';
 import { XPBar } from './ui/XPBar';
@@ -35,107 +36,111 @@ function IconToggle({ on, onClick, label, icon }: { on: boolean; onClick: () => 
 
 export function Nav() {
   const { pathname } = useLocation();
-  const { user, logout, flavorTextEnabled, setFlavorTextEnabled } = useAuth();
+  const { user, isGuest, logout, flavorTextEnabled, setFlavorTextEnabled } = useAuth();
   const { stats } = usePlayerStats();
   const [soundOn, setSoundOn] = useSfxEnabled();
-  const incoming = useIncomingChallenges(!!user);
-  const name = user?.username || 'Commander';
+  // A demo visitor has no duels to be told about.
+  const incoming = useIncomingChallenges(!!user && !isGuest);
+  const name = isGuest ? 'Demo visitor' : user?.username || 'Commander';
 
   return (
     <>
-      <nav
-        className="sticky top-0 z-40 flex shrink-0 items-center justify-between gap-3 border-b border-slate-800/80 bg-slate-950/85 px-3 backdrop-blur-xl sm:gap-6 sm:px-6 md:px-8"
-        style={{ height: 'var(--nav-h)' }}
-      >
-        <div className="flex min-w-0 items-center gap-6 min-[1320px]:gap-10">
-          <Link to="/" className="font-display flex shrink-0 select-none items-center gap-2 text-xl font-bold tracking-wide">
-            <span className="relative flex h-7 w-7 items-center justify-center">
-              <span className="hex absolute inset-0 bg-gradient-to-b from-cyan-300 to-teal-500 opacity-90" />
-              <span className="hex absolute inset-[2px] bg-slate-950" />
-              <Icon name="flag" filled className="relative h-3 w-3 text-cyan-300" />
-            </span>
-            <span>
-              <span className="text-slate-100">Code</span>
-              <span className="bg-gradient-to-r from-cyan-400 via-teal-300 to-cyan-300 bg-clip-text text-transparent drop-shadow-[0_0_10px_rgba(34,211,238,0.45)]">
-                Craft
+      <div className="sticky top-0 z-40 shrink-0">
+        {isGuest && <DemoBanner />}
+        <nav
+          className="relative flex items-center justify-between gap-3 border-b border-slate-800/80 bg-slate-950/85 px-3 backdrop-blur-xl sm:gap-6 sm:px-6 md:px-8"
+          style={{ height: 'var(--nav-core-h)' }}
+        >
+          <div className="flex min-w-0 items-center gap-6 min-[1320px]:gap-10">
+            <Link to="/" className="font-display flex shrink-0 select-none items-center gap-2 text-xl font-bold tracking-wide">
+              <span className="relative flex h-7 w-7 items-center justify-center">
+                <span className="hex absolute inset-0 bg-gradient-to-b from-cyan-300 to-teal-500 opacity-90" />
+                <span className="hex absolute inset-[2px] bg-slate-950" />
+                <Icon name="flag" filled className="relative h-3 w-3 text-cyan-300" />
               </span>
-            </span>
-          </Link>
-
-          <div className="hidden items-center gap-1 sm:flex">
-            {NAV_LINKS.map((link) => {
-              const active = link.match(pathname);
-              const badge = link.to === '/contests' && incoming > 0;
-              return (
-                <Link
-                  key={link.to}
-                  to={link.to}
-                  title={link.label}
-                  onClick={() => sfx.play('click')}
-                  className={`group relative flex items-center gap-2 rounded-lg px-2.5 py-2 text-[0.8rem] font-bold uppercase tracking-[0.14em] transition-all min-[1320px]:px-3.5 ${
-                    active ? 'bg-cyan-400/10 text-cyan-300' : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-100'
-                  }`}
-                >
-                  <Icon name={link.icon} className={`h-4 w-4 transition-transform group-hover:scale-110 ${active ? 'drop-shadow-[0_0_6px_rgba(34,211,238,0.8)]' : ''}`} />
-                  {/* Labels only where the bar has room for them next to the profile chip; icons alone before that. */}
-                  <span className="sr-only min-[1320px]:not-sr-only">{link.label}</span>
-                  {badge && (
-                    <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[0.62rem] font-bold text-white shadow-[0_0_10px_rgba(244,63,94,0.8)] animate-glow-pulse min-[1320px]:static">
-                      {incoming}
-                    </span>
-                  )}
-                  <span
-                    className={`absolute inset-x-3 -bottom-[11px] h-[2px] rounded-full bg-gradient-to-r from-transparent via-cyan-300 to-transparent transition-all ${
-                      active ? 'opacity-100 shadow-[0_0_10px_rgba(34,211,238,0.9)]' : 'scale-x-0 opacity-0 group-hover:scale-x-100 group-hover:opacity-60'
-                    }`}
-                  />
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Link
-            to="/scoring"
-            className="group hidden items-center gap-2.5 rounded-xl border border-slate-700/70 bg-slate-900/60 py-1 pl-1.5 pr-3 transition-colors hover:border-cyan-400/50 md:flex"
-            title="Your campaign report"
-          >
-            <LevelBadge level={stats.level.level} size={34} />
-            <span className="min-w-0 leading-tight">
-              <span className="block max-w-[8.5rem] truncate text-[0.82rem] font-semibold text-slate-100">{name}</span>
-              <span className="mt-0.5 flex items-center gap-1.5">
-                <XPBar pct={stats.level.pct} className="!h-1 w-16" />
-                <span className="font-display text-[0.62rem] font-bold uppercase tracking-wide text-amber-300/90">
-                  {stats.rank ? (flavorTextEnabled ? rankTitle(stats.rank) : `Rank #${stats.rank}`) : `LV ${stats.level.level}`}
+              <span>
+                <span className="text-slate-100">Code</span>
+                <span className="bg-gradient-to-r from-cyan-400 via-teal-300 to-cyan-300 bg-clip-text text-transparent drop-shadow-[0_0_10px_rgba(34,211,238,0.45)]">
+                  Craft
                 </span>
               </span>
-            </span>
-          </Link>
-          <Link to="/scoring" className="md:hidden" aria-label="Your campaign report">
-            <LevelBadge level={stats.level.level} size={36} />
-          </Link>
+            </Link>
 
-          <IconToggle on={soundOn} onClick={() => setSoundOn(!soundOn)} label={soundOn ? 'Sound on' : 'Sound off'} icon={soundOn ? 'volume' : 'mute'} />
-          <IconToggle
-            on={flavorTextEnabled}
-            onClick={() => setFlavorTextEnabled(!flavorTextEnabled)}
-            label={flavorTextEnabled ? 'Flavor text on' : 'Flavor text off'}
-            icon="sparkles"
-          />
-          <button
-            type="button"
-            onClick={logout}
-            aria-label="Log out"
-            title="Log out"
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700/80 text-slate-400 transition-all hover:scale-105 hover:border-rose-400/60 hover:text-rose-300 active:scale-95"
-          >
-            <Icon name="logout" className="h-[17px] w-[17px]" />
-          </button>
-        </div>
+            <div className="hidden items-center gap-1 sm:flex">
+              {NAV_LINKS.map((link) => {
+                const active = link.match(pathname);
+                const badge = link.to === '/contests' && incoming > 0;
+                return (
+                  <Link
+                    key={link.to}
+                    to={link.to}
+                    title={link.label}
+                    onClick={() => sfx.play('click')}
+                    className={`group relative flex items-center gap-2 rounded-lg px-2.5 py-2 text-[0.8rem] font-bold uppercase tracking-[0.14em] transition-all min-[1320px]:px-3.5 ${
+                      active ? 'bg-cyan-400/10 text-cyan-300' : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-100'
+                    }`}
+                  >
+                    <Icon name={link.icon} className={`h-4 w-4 transition-transform group-hover:scale-110 ${active ? 'drop-shadow-[0_0_6px_rgba(34,211,238,0.8)]' : ''}`} />
+                    {/* Labels only where the bar has room for them next to the profile chip; icons alone before that. */}
+                    <span className="sr-only min-[1320px]:not-sr-only">{link.label}</span>
+                    {badge && (
+                      <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[0.62rem] font-bold text-white shadow-[0_0_10px_rgba(244,63,94,0.8)] animate-glow-pulse min-[1320px]:static">
+                        {incoming}
+                      </span>
+                    )}
+                    <span
+                      className={`absolute inset-x-3 -bottom-[11px] h-[2px] rounded-full bg-gradient-to-r from-transparent via-cyan-300 to-transparent transition-all ${
+                        active ? 'opacity-100 shadow-[0_0_10px_rgba(34,211,238,0.9)]' : 'scale-x-0 opacity-0 group-hover:scale-x-100 group-hover:opacity-60'
+                      }`}
+                    />
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
 
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent" />
-      </nav>
+          <div className="flex items-center gap-2">
+            <Link
+              to="/scoring"
+              className="group hidden items-center gap-2.5 rounded-xl border border-slate-700/70 bg-slate-900/60 py-1 pl-1.5 pr-3 transition-colors hover:border-cyan-400/50 md:flex"
+              title="Your campaign report"
+            >
+              <LevelBadge level={stats.level.level} size={34} />
+              <span className="min-w-0 leading-tight">
+                <span className="block max-w-[8.5rem] truncate text-[0.82rem] font-semibold text-slate-100">{name}</span>
+                <span className="mt-0.5 flex items-center gap-1.5">
+                  <XPBar pct={stats.level.pct} className="!h-1 w-16" />
+                  <span className="font-display text-[0.62rem] font-bold uppercase tracking-wide text-amber-300/90">
+                    {isGuest ? 'Read-only' : stats.rank ? (flavorTextEnabled ? rankTitle(stats.rank) : `Rank #${stats.rank}`) : `LV ${stats.level.level}`}
+                  </span>
+                </span>
+              </span>
+            </Link>
+            <Link to="/scoring" className="md:hidden" aria-label="Your campaign report">
+              <LevelBadge level={stats.level.level} size={36} />
+            </Link>
+
+            <IconToggle on={soundOn} onClick={() => setSoundOn(!soundOn)} label={soundOn ? 'Sound on' : 'Sound off'} icon={soundOn ? 'volume' : 'mute'} />
+            <IconToggle
+              on={flavorTextEnabled}
+              onClick={() => setFlavorTextEnabled(!flavorTextEnabled)}
+              label={flavorTextEnabled ? 'Flavor text on' : 'Flavor text off'}
+              icon="sparkles"
+            />
+            <button
+              type="button"
+              onClick={logout}
+              aria-label={isGuest ? 'Leave the demo' : 'Log out'}
+              title={isGuest ? 'Leave the demo and sign in' : 'Log out'}
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700/80 text-slate-400 transition-all hover:scale-105 hover:border-rose-400/60 hover:text-rose-300 active:scale-95"
+            >
+              <Icon name="logout" className="h-[17px] w-[17px]" />
+            </button>
+          </div>
+
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent" />
+        </nav>
+      </div>
 
       {/* phone tab bar */}
       <nav

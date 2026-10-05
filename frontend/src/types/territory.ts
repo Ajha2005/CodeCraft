@@ -1,12 +1,10 @@
 // Mirrors the TerritoryDto shape returned by the backend's
-// GET /territories endpoint (see backend/src/territory/territory.service.ts)
+// GET /territories endpoint (see backend/src/territory/territory.service.ts):
+// the zone list only. Who owns what comes from /territories/owners.
 export interface TerritoryDto {
   id: string;
   name: string;
   svgPathId: string;
-  ownerColor: string;
-  ownerId: string | null;
-  ownerUsername: string | null;
   tier: string;
 }
 export interface SubmissionResult {

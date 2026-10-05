@@ -238,16 +238,24 @@ code {
   --cc-violet: #e879f9;
   --cc-ink: #04080d;
   --cc-panel: rgba(8, 15, 26, 0.82);
-  --nav-h: 4rem;
+  /* --nav-h is everything fixed above the page (the nav bar plus, in a demo, the banner), which is what pages subtract from the viewport. */
+  --nav-core-h: 4rem;
+  --banner-h: 0px;
+  --nav-h: calc(var(--nav-core-h) + var(--banner-h));
   --tabbar-h: 0px;
   --font-display: 'Rajdhani', 'Segoe UI', system-ui, sans-serif;
 }
 
 @media (max-width: 639px) {
   :root {
-    --nav-h: 3.5rem;
+    --nav-core-h: 3.5rem;
     --tabbar-h: 3.75rem;
   }
+}
+
+/* Set by the demo banner while a guest is browsing. */
+:root[data-demo='true'] {
+  --banner-h: 2.25rem;
 }
 
 @layer components {

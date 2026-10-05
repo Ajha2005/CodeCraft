@@ -5,6 +5,7 @@ import LoginPage from './auth/LoginPage';
 import AuthCallback from './auth/AuthCallback';
 import { AuthProvider } from './auth/AuthContext';
 import ProtectedRoute from './auth/ProtectedRoute';
+import { GuestGate } from './auth/GuestGate';
 import { MapFullScreen } from './features/map/MapFullScreen';
 import ChallengesPage from './features/contest/ChallengesPage';
 import ContestRoomPage from './features/contest/ContestRoomPage';
@@ -38,10 +39,31 @@ export default function AppRouter() {
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route element={<ProtectedLayout />}>
             <Route path="/" element={<ProblemsPage />} />
-            <Route path="/scoring" element={<ScoringDashboard />} />
+            <Route
+              path="/scoring"
+              element={
+                <GuestGate icon="chart" title="Your campaign report" body="Score, level, streak and the territory you hold are tracked per player. Sign in to start your own campaign.">
+                  <ScoringDashboard />
+                </GuestGate>
+              }
+            />
             <Route path="/map" element={<MapFullScreen />} />
-            <Route path="/contests" element={<ChallengesPage />} />
-            <Route path="/contest/:id" element={<ContestRoomPage />} />
+            <Route
+              path="/contests"
+              element={
+                <GuestGate icon="swords" title="Duels" body="Challenge another player for a cell of campus in a live 1v1, with a cell of your own on the line.">
+                  <ChallengesPage />
+                </GuestGate>
+              }
+            />
+            <Route
+              path="/contest/:id"
+              element={
+                <GuestGate icon="swords" title="Duels" body="A duel is a live 1v1 between two players.">
+                  <ContestRoomPage />
+                </GuestGate>
+              }
+            />
             <Route path="/profile/:username" element={<ProfilePage />} />
           </Route>
         </Routes>

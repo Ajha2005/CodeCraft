@@ -4,7 +4,7 @@ import Editor from '@monaco-editor/react';
 import type { Socket } from 'socket.io-client';
 import confetti from 'canvas-confetti';
 import axios from 'axios';
-import { useAuth } from '../../auth/AuthContext';
+import { useAuth } from '../../auth/useAuth';
 import { ToastStack } from '../../components/ToastStack';
 import { useToasts } from '../../lib/useToasts';
 import { createContestSocket } from '../../lib/socket';

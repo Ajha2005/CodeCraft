@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/auth-user';
 import { USERNAME_PATTERN } from '../auth/username.util';
+import { getColorForUser } from '../common/color/color.util';
 
 /** Everything a public profile shows. Never an id, email, real name, password hash or settings. */
 export interface PublicProfileDto {
@@ -11,6 +12,8 @@ export interface PublicProfileDto {
   territoriesHeld: number;
   problemsSolved: number;
   joinedAt: Date;
+  /** The player's map color, so the page can draw them without an id. */
+  color: string;
   /** True when the viewer is looking at their own profile (decided here, so the client never compares ids). */
   isMe: boolean;
 }
@@ -60,6 +63,7 @@ export class UsersService {
       territoriesHeld: new Set(heldCells.map((c) => c.cell.territoryId)).size,
       problemsSolved: solved.length,
       joinedAt: user.createdAt,
+      color: getColorForUser(user.id),
       isMe: !!viewer && !viewer.isGuest && viewer.userId === user.id,
     };
   }

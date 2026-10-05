@@ -94,7 +94,6 @@ export interface Frame {
   destination: Pt | null;
   waypoint: Pt | null;
   fx: Fx;
-  meId: string | null;
   meColor: string;
   reduced: boolean;
   /** Adaptive quality: true drops purely decorative effects on slow devices. */
@@ -475,7 +474,7 @@ export class WorldRenderer {
     const ox = -OBL_X * h;
     const oy = -h;
     const tier = TIER_STYLE[z.tier];
-    const mine = !!f.meId && v.topOwnerId === f.meId;
+    const mine = v.topOwnerIsMe;
     const detail = v.detail;
     // How much attention this block has earned (hover / selection). Everything
     // else stays quiet, so the map reads as a calm backdrop, not a pattern.
@@ -985,7 +984,7 @@ export class WorldRenderer {
     for (const idx of f.order) {
       const v = f.views[idx];
       if (!v.detail || v.blobs.length === 0 || !this.visible(v.zone, 20)) continue;
-      for (const blob of v.blobs) patches.push({ v, blob, mine: blob.ownerId === f.meId });
+      for (const blob of v.blobs) patches.push({ v, blob, mine: blob.isMe });
     }
     // your own ground first, then the bigger holdings
     patches.sort((a, b) => Number(b.mine) - Number(a.mine) || b.blob.size - a.blob.size);

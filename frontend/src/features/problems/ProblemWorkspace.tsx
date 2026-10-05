@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import confetti from 'canvas-confetti';
-import { useAuth } from '../../auth/AuthContext';
+import { GUEST_LOCK_TOOLTIP, useAuth } from '../../auth/useAuth';
+import { ApiError } from '../../lib/http';
 import { usePlayerStats } from '../../lib/playerStatsContext';
 import { useMediaQuery } from '../../lib/useMediaQuery';
 import { sfx } from '../../lib/sfx';
@@ -12,12 +13,13 @@ import { Icon } from '../../components/ui/Icon';
 import { LevelBadge } from '../../components/ui/LevelBadge';
 import { Pips } from '../../components/ui/Pips';
 import { XPBar } from '../../components/ui/XPBar';
-import { fetchProblem, fetchScore, fetchSubmission, postSubmission, type ProblemDetail, type ScoreResult, type SubmissionResult } from './api';
+import { fetchProblem, fetchScore, fetchSubmission, postSubmission, runExamples, type ProblemDetail, type RunResult, type ScoreResult, type SubmissionResult } from './api';
 import { DifficultyBadge } from './DifficultyBadge';
 import { difficultyMeta, padId } from './difficulty';
 import { loadDraft, loadLanguage, saveDraft, saveLanguage, type Language } from './drafts';
 import { pickNextAfter } from './nextQuest';
 import { ExampleBlock, InlineText } from './RichText';
+import { RunPanel } from './RunPanel';
 import type { ProblemCatalog } from './useProblemCatalog';
 
 const POLL_MS = 2000;
@@ -65,8 +67,7 @@ export function ProblemWorkspace(props: WorkspaceProps) {
         if (!ignore) setState({ problem, error: '' });
       })
       .catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : '';
-        if (!ignore) setState({ problem: null, error: msg.includes('404') ? 'That problem doesn’t exist.' : 'Couldn’t load this problem.' });
+        if (!ignore) setState({ problem: null, error: err instanceof ApiError && err.status === 404 ? 'That problem doesn’t exist.' : 'Couldn’t load this problem.' });
       });
     return () => {
       ignore = true;
@@ -112,11 +113,22 @@ export function ProblemWorkspace(props: WorkspaceProps) {
   );
 }
 
+/** What to tell the player when "Run" could not produce a result. */
+function runErrorText(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 429) return 'You’re running code too fast. Wait a few seconds and try again.';
+    if (err.status === 503) return 'The code runner is busy right now. Try again in a moment.';
+    if (err.status === 400) return err.message;
+  }
+  return 'Could not run your code. Try again in a moment.';
+}
+
 function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: WorkspaceProps & { problem: ProblemDetail }) {
-  const { user, token, flavorTextEnabled } = useAuth();
+  const { user, isGuest, flavorTextEnabled } = useAuth();
   const { stats, refresh: refreshStats } = usePlayerStats();
   const fineKeyboard = useMediaQuery('(pointer: fine)');
-  const userId = user?.userId ?? 'anon';
+  // Demo visitors share one draft slot instead of leaving a new one behind per session.
+  const userId = isGuest ? 'guest' : (user?.userId ?? 'anon');
   const meta = difficultyMeta(problem.difficultyLevel);
 
   const [language, setLanguage] = useState<Language>(loadLanguage);
@@ -130,6 +142,9 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
   const [score, setScore] = useState<ScoreResult | null>(null);
   const [submitError, setSubmitError] = useState('');
   const [runningLine, setRunningLine] = useState('');
+  const [running, setRunning] = useState(false);
+  const [runResult, setRunResult] = useState<RunResult | null>(null);
+  const [runError, setRunError] = useState('');
 
   const code = codes[language];
   const starter = starterFor(problem, language);
@@ -140,9 +155,11 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
   const next = result?.verdict === 'AC' ? pickNextAfter(catalog.problems, catalog.status, problem.id) : null;
 
   const busyRef = useRef(false);
+  const runningRef = useRef(false);
   const mountedRef = useRef(true);
   const lineTimer = useRef<number | undefined>(undefined);
-  const submitRef = useRef<() => void>(() => {});
+  /** What Ctrl/Cmd+Enter does: submit for a player, run the examples for a demo visitor (who cannot submit). */
+  const primaryRef = useRef<() => void>(() => {});
   const editorRef = useRef<CodeEditor | null>(null);
   const editorPanelRef = useRef<HTMLDivElement>(null);
   const resultRef = useRef<HTMLDivElement>(null);
@@ -158,16 +175,16 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
     };
   }, []);
 
-  // Always point the shortcut at the latest submit handler.
+  // Always point the shortcut at the latest handler.
   useEffect(() => {
-    submitRef.current = handleSubmit;
+    primaryRef.current = isGuest ? handleRun : handleSubmit;
   });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
-        submitRef.current();
+        primaryRef.current();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -221,7 +238,7 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
         sfx.play('win');
         confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
       }
-      fetchScore(token, data.id)
+      fetchScore(data.id)
         .then((s) => {
           if (mountedRef.current) setScore(s);
         })
@@ -263,7 +280,7 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
       inFlight = true;
       polls += 1;
       try {
-        const data = await fetchSubmission(token, submissionId);
+        const data = await fetchSubmission(submissionId);
         failures = 0;
         if (mountedRef.current) setResult(data);
         if (data.verdict !== 'PENDING') {
@@ -281,8 +298,34 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
     }
   }
 
+  function handleRun() {
+    if (runningRef.current) return;
+    runningRef.current = true;
+    sfx.play('click');
+    setRunning(true);
+    setRunError('');
+
+    // Read the editor itself: React state can trail the last keystroke by a frame.
+    const source = editorRef.current?.getValue() ?? code;
+    runExamples({ problemId: problem.id, language, code: source })
+      .then((data) => {
+        if (!mountedRef.current) return;
+        setRunResult(data);
+        sfx.play(data.verdict === 'AC' ? 'win' : 'error');
+      })
+      .catch((err: unknown) => {
+        if (!mountedRef.current) return;
+        setRunResult(null);
+        setRunError(runErrorText(err));
+      })
+      .finally(() => {
+        runningRef.current = false;
+        if (mountedRef.current) setRunning(false);
+      });
+  }
+
   function handleSubmit() {
-    if (!user || busyRef.current) return;
+    if (!user || isGuest || busyRef.current) return;
     busyRef.current = true;
     sfx.play('click');
     setSubmitting(true);
@@ -292,14 +335,14 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
 
     // Read the editor itself: React state can trail the last keystroke by a frame.
     const source = editorRef.current?.getValue() ?? code;
-    postSubmission(token, { userId: user.userId, problemId: problem.id, language, code: source })
+    postSubmission({ problemId: problem.id, language, code: source })
       .then((data) => {
         if (mountedRef.current) setResult(data);
         pollSubmission(data.id);
       })
       .catch((err: unknown) => {
         busyRef.current = false;
-        if (mountedRef.current) setSubmitError(err instanceof Error ? err.message : 'Could not submit');
+        if (mountedRef.current) setSubmitError(err instanceof ApiError && err.status === 429 ? 'You’re submitting too fast. Wait a moment and try again.' : err instanceof Error ? err.message : 'Could not submit');
       })
       .finally(() => {
         if (mountedRef.current) setSubmitting(false);
@@ -411,7 +454,7 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
                 // a model kept from an earlier visit may predate a cleared draft
                 if (editor.getValue() !== code) editor.setValue(code);
                 // Monaco would otherwise use Ctrl/Cmd+Enter to insert a line.
-                editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => submitRef.current());
+                editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => primaryRef.current());
               }}
               theme="vs-dark"
               options={{ fontSize: 14, minimap: { enabled: false }, scrollBeyondLastLine: false, padding: { top: 12 }, automaticLayout: true }}
@@ -419,17 +462,23 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <button type="button" onClick={handleSubmit} disabled={submitting || judging} className="btn-primary h-11 gap-2 rounded-lg px-6 text-sm">
-              {submitting || judging ? (
+            <button
+              type="button"
+              onClick={handleRun}
+              disabled={running}
+              title="Run your code on this problem's examples. Nothing is saved or scored."
+              className={`h-11 gap-2 rounded-lg px-5 text-sm ${isGuest ? 'btn-primary' : 'btn-ghost font-semibold'}`}
+            >
+              {running ? (
                 <>
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-900/30 border-t-slate-900" />
-                  {judging ? 'Judging…' : 'Deploying…'}
+                  <span className={`h-4 w-4 animate-spin rounded-full border-2 ${isGuest ? 'border-slate-900/30 border-t-slate-900' : 'border-slate-400/30 border-t-slate-200'}`} />
+                  Running…
                 </>
               ) : (
                 <>
-                  <Icon name="rocket" className="h-4 w-4" />
-                  {flavorTextEnabled ? 'Deploy solution' : 'Submit'}
-                  {fineKeyboard && (
+                  <Icon name="play" className="h-4 w-4" />
+                  Run examples
+                  {isGuest && fineKeyboard && (
                     <span className="ml-1 flex gap-1" aria-hidden="true">
                       <span className="keycap">{MOD_KEY}</span>
                       <span className="keycap">↵</span>
@@ -438,10 +487,49 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
                 </>
               )}
             </button>
+            {!isGuest && (
+              <button type="button" onClick={handleSubmit} disabled={submitting || judging} className="btn-primary h-11 gap-2 rounded-lg px-6 text-sm">
+                {submitting || judging ? (
+                  <>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-900/30 border-t-slate-900" />
+                    {judging ? 'Judging…' : 'Deploying…'}
+                  </>
+                ) : (
+                  <>
+                    <Icon name="rocket" className="h-4 w-4" />
+                    {flavorTextEnabled ? 'Deploy solution' : 'Submit'}
+                    {fineKeyboard && (
+                      <span className="ml-1 flex gap-1" aria-hidden="true">
+                        <span className="keycap">{MOD_KEY}</span>
+                        <span className="keycap">↵</span>
+                      </span>
+                    )}
+                  </>
+                )}
+              </button>
+            )}
+            {isGuest && (
+              <span
+                className="inline-flex h-11 cursor-not-allowed items-center gap-2 rounded-lg border border-slate-700/80 px-4 text-sm font-semibold text-slate-500"
+                title={GUEST_LOCK_TOOLTIP}
+                aria-disabled="true"
+              >
+                <Icon name="lock" className="h-4 w-4" />
+                {flavorTextEnabled ? 'Deploy solution' : 'Submit'}
+              </span>
+            )}
             {judging && flavorTextEnabled && <p className="text-sm text-amber-300/90 animate-pulse">{runningLine}</p>}
             {submitError && <p className="text-sm text-rose-400">{submitError}</p>}
+            {runError && <p className="text-sm text-rose-400">{runError}</p>}
           </div>
+          {isGuest && (
+            <p className="mt-3 text-xs leading-relaxed text-slate-500">
+              Demo mode: your code runs on this problem’s examples only. Submitting for score and territory needs a Thapar ID.
+            </p>
+          )}
         </div>
+
+        {runResult && <RunPanel result={runResult} flavor={flavorTextEnabled} />}
 
         {result && verdict && (
           <div ref={resultRef} className={`hud-panel scroll-mt-24 overflow-hidden bg-gradient-to-br p-4 animate-pop-in md:p-5 ${verdict.bg}`} style={{ borderColor: `${verdict.color}66` }}>
