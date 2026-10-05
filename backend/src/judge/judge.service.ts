@@ -381,13 +381,16 @@ ${paramDecls}
     const result = await this.runCode(wrapper, language, version, priority);
 
     const compileStderr = result.compile?.stderr;
+    // A compile step that exits 0 can still print warnings (g++ does for a missing return, for one):
+    // that program built, so it is judged. Only a failed or killed compile is a compile error.
+    const compileFailed = !!result.compile && (result.compile.code !== 0 || !!result.compile.signal);
     const runStderr = result.run.stderr;
     const signal = result.run.signal;
     const actualOutput = result.run.stdout?.trim();
     const expected = JSON.stringify(expectedOutput);
 
     let status: 'AC' | 'WA' | 'TLE' | 'RE' | 'CE';
-    if (compileStderr && compileStderr.trim().length > 0) {
+    if (compileFailed) {
       status = 'CE';
     } else if (signal === 'SIGKILL' || result.run.status === 'TO') {
       status = 'TLE';
