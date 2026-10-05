@@ -17,11 +17,14 @@ const frontendBaseUrl = () => (process.env.FRONTEND_URL || 'http://localhost:517
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  /** Starts a read-only demo session. No credentials, no account, no database row. Limited per IP. */
+  /**
+   * Starts a read-only demo session. No credentials, no account, no database row. Limited per IP, but
+   * generously: a classroom or a demo day shares one campus address, and a session lasts two hours.
+   */
   @Public()
   @Post('guest')
   @HttpCode(200)
-  @Throttle({ default: { limit: 20, ttl: 60 * 60 * 1000 } })
+  @Throttle({ default: { limit: 100, ttl: 60 * 60 * 1000 } })
   guest() {
     return this.authService.issueGuestToken();
   }
@@ -46,7 +49,7 @@ export class AuthController {
   @Public()
   @Post('exchange')
   @HttpCode(200)
-  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Throttle({ default: { limit: 120, ttl: 60_000 } })
   exchange(@Body() dto: ExchangeCodeDto) {
     return this.authService.exchangeLoginCode(dto.code);
   }
@@ -64,7 +67,7 @@ export class AuthController {
   @Public()
   @UseGuards(GoogleAuthGuard)
   @Get('google')
-  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @Throttle({ default: { limit: 120, ttl: 60_000 } })
   googleLogin() {
     // redirects to Google — this method body never runs
   }
@@ -72,7 +75,7 @@ export class AuthController {
   @Public()
   @UseGuards(GoogleAuthGuard)
   @Get('google/callback')
-  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @Throttle({ default: { limit: 120, ttl: 60_000 } })
   async googleCallback(@Req() req: Request & { googleUser?: GoogleUser; googleAuthFailureReason?: string }, @Res() res: Response) {
     const frontend = frontendBaseUrl();
 

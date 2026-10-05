@@ -1549,10 +1549,10 @@ maybe('the API against a scratch database', () => {
 
     it('limits demo sessions started from one address', async () => {
       const statuses: number[] = [];
-      for (let i = 0; i < 23; i++)
+      for (let i = 0; i < 103; i++)
         statuses.push((await post('/auth/guest', {})).status);
-      expect(statuses.filter((s) => s === 200)).toHaveLength(20);
-      expect(statuses.slice(20)).toEqual([429, 429, 429]);
+      expect(statuses.filter((s) => s === 200)).toHaveLength(100);
+      expect(statuses.slice(100)).toEqual([429, 429, 429]);
     });
 
     it('limits sign-in attempts and code redemption', async () => {
@@ -1569,7 +1569,7 @@ maybe('the API against a scratch database', () => {
       expect(login.slice(0, 10)).toEqual(Array(10).fill(403));
       expect(login.slice(10)).toEqual([429, 429]);
       const exchange = [];
-      for (let i = 0; i < 22; i++)
+      for (let i = 0; i < 122; i++)
         exchange.push(
           (
             await post('/auth/exchange', {
@@ -1577,8 +1577,8 @@ maybe('the API against a scratch database', () => {
             })
           ).status,
         );
-      expect(exchange.filter((s) => s === 401)).toHaveLength(20);
-      expect(exchange.slice(20)).toEqual([429, 429]);
+      expect(exchange.filter((s) => s === 401)).toHaveLength(120);
+      expect(exchange.slice(120)).toEqual([429, 429]);
     });
 
     it('counts signed-in users one by one, not by shared address', async () => {
