@@ -35,7 +35,8 @@ const OPEN_STATUSES = ['PENDING', 'ACTIVE'];
 
 interface DisplayUser {
   id: string;
-  username: string;
+  name: string | null;
+  email: string;
 }
 
 @Injectable()
@@ -196,8 +197,8 @@ export class ContestService {
       include: {
         cell: { include: { territory: true } },
         pledgedCell: { include: { territory: true } },
-        challenger: { select: { id: true, username: true } },
-        defender: { select: { id: true, username: true } },
+        challenger: { select: { id: true, name: true, email: true } },
+        defender: { select: { id: true, name: true, email: true } },
         participants: true,
       },
     });
@@ -588,7 +589,7 @@ export class ContestService {
       });
       const ownership = await tx.territoryCellOwnership.create({
         data: { cellId, userId: newOwnerId, sourceType: 'contest' },
-        include: { cell: true, user: { select: { username: true } } },
+        include: { cell: true },
       });
 
       this.territoryGateway.broadcastCellUpdate({
@@ -597,7 +598,6 @@ export class ContestService {
         row: ownership.cell.row,
         col: ownership.cell.col,
         ownerId: newOwnerId,
-        ownerUsername: ownership.user.username,
         ownerColor: getColorForUser(newOwnerId),
       });
 
@@ -605,9 +605,8 @@ export class ContestService {
     });
   }
 
-  // The public name of a player is their username, never their real name or email.
   private displayUser(u: DisplayUser) {
-    return { id: u.id, name: u.username };
+    return { id: u.id, name: u.name?.trim() || u.email.split('@')[0] };
   }
 
   private cellSummary(cell: {
@@ -632,8 +631,8 @@ export class ContestService {
       cell: { include: { territory: true } },
       pledgedCell: { include: { territory: true } },
       problem: { select: { id: true, title: true, difficultyLevel: true } },
-      challenger: { select: { id: true, username: true } },
-      defender: { select: { id: true, username: true } },
+      challenger: { select: { id: true, name: true, email: true } },
+      defender: { select: { id: true, name: true, email: true } },
     } as const;
   }
 

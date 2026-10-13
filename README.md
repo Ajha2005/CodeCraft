@@ -229,7 +229,6 @@ The map is a small game. Everything below is also listed in-app (press `?`).
 | `E` | Inspect the zone you are standing in |
 | `Space` | Dive in/out: zoom to the cell grid of the current/selected zone |
 | Click a rival's cell (when zoomed in) | Challenge its owner to a 1v1 duel, putting one of your own cells on the line |
-| Click a player's name (when zoomed in) | Open their profile |
 | Scroll / pinch, `+` `-` | Zoom |
 | Drag | Look around (press `C` to snap back to your commander) |
 | `O` | Whole-campus overview |
@@ -293,7 +292,6 @@ CodeCraft/
 │       ├── territory/          # Grid-cell map, ownership, territory gateway
 │       ├── contest/             # Challenge/accept, contest gateway, timeout processor
 │       ├── leaderboard/       # College-wide & territory rankings
-│       ├── users/             # Public player profiles (GET /users/:username)
 │       └── common/             # Redis client, shared color utils
 ├── frontend/                # React + TypeScript + Vite client
 │   └── src/

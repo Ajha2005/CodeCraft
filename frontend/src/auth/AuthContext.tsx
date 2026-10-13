@@ -3,7 +3,6 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 interface User {
   userId: string
   email: string
-  username: string
   name: string | null
 }
 

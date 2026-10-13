@@ -6,7 +6,6 @@ export interface TerritoryDto {
   svgPathId: string;
   ownerColor: string;
   ownerId: string | null;
-  ownerUsername: string | null;
   tier: string;
 }
 export interface SubmissionResult {

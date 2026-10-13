@@ -180,7 +180,7 @@ export function MapFullScreen() {
     // else still flashes on the map, it just does not ask for your attention.
     if (!e.byMe && (summary?.mine ?? 0) === 0 && e.zone.id !== currentZoneId) return;
     const name = summary?.name ?? e.zone.id;
-    const who = e.byMe ? 'You' : (e.cell.ownerUsername ?? nameFor(e.cell.ownerId) ?? 'A rival');
+    const who = e.byMe ? 'You' : (nameFor(e.cell.ownerId) ?? 'A rival');
     sfx.play('capture');
     pushFeed({
       kind: e.byMe ? 'mine' : 'capture',
@@ -211,10 +211,6 @@ export function MapFullScreen() {
     if (id) sfx.play('click');
   });
   const handleCellChallenge = useEffectEvent((cell: TerritoryCellDto, zone: Zone) => setChallenge({ cell, zone }));
-  const handleNameClick = useEffectEvent((username: string) => {
-    sfx.play('click');
-    navigate(`/profile/${encodeURIComponent(username)}`);
-  });
   const handleMoved = useEffectEvent((pos: { x: number; y: number }) => {
     if (userId) writeJson(posKey(userId), pos);
     if (welcome) dismissWelcome();
@@ -233,7 +229,6 @@ export function MapFullScreen() {
       onHover: (info) => handleHover(info),
       onSelect: (id) => handleSelect(id),
       onCellChallenge: (c, z) => handleCellChallenge(c, z),
-      onNameClick: (u) => handleNameClick(u),
       onPlayerMoved: (p) => handleMoved(p),
       onInteract: () => handleInteract(),
     });
@@ -384,11 +379,10 @@ export function MapFullScreen() {
   }, [challenge, userId, territories, cellsByTerritory]);
   const waypointSummary = pinnedId ? summaries.get(pinnedId) : null;
   const challengeSummary = challenge ? summaries.get(challenge.zone.id) : null;
-  const hoverNote = hover?.name
-    ? `Open ${hover.name}’s profile`
-    : hover?.cell && hoverSummary
+  const hoverNote =
+    hover?.cell && hoverSummary
       ? hover.challengeable
-        ? `${hover.cell.ownerUsername ? `Held by ${hover.cell.ownerUsername}` : 'Rival cell'} · click to challenge`
+        ? 'Rival cell · click to challenge'
         : hover.cell.ownerId
           ? 'Your cell'
           : 'Unclaimed cell'
@@ -553,7 +547,7 @@ export function MapFullScreen() {
           zoneName={challengeSummary.name}
           tier={challengeSummary.tier}
           cellLabel={`Cell R${challenge.cell.row + 1} · C${challenge.cell.col + 1}`}
-          rival={challenge.cell.ownerUsername}
+          rival={nameFor(challenge.cell.ownerId)}
           stakes={stakes}
           busy={challengeBusy}
           onConfirm={confirmChallenge}

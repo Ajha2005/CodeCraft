@@ -1,15 +1,9 @@
-import { Injectable, ConflictException, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, ConflictException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
-import { randomUsername } from './username.util';
-
-// Prisma reports a violated unique index as error code P2002.
-function isUniqueViolation(err: unknown): boolean {
-  return typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 'P2002';
-}
 
 @Injectable()
 export class AuthService {
@@ -19,40 +13,21 @@ export class AuthService {
   ) {}
 
   async signup(dto: SignupDto) {
-    const username = dto.username.toLowerCase();
-
-    const [emailTaken, usernameTaken] = await Promise.all([
-      this.prisma.user.findUnique({ where: { email: dto.email }, select: { id: true } }),
-      this.prisma.user.findUnique({ where: { username }, select: { id: true } }),
-    ]);
-    if (emailTaken) {
+    const existing = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+    if (existing) {
       throw new ConflictException('Email already registered');
     }
-    if (usernameTaken) {
-      throw new ConflictException('Username already taken');
-    }
-
     const passwordHash = await bcrypt.hash(dto.password, 10);
-    try {
-      const user = await this.prisma.user.create({
-        data: {
-          email: dto.email,
-          passwordHash,
-          name: dto.name,
-          username,
-        },
-      });
-      return this.signToken(user.id, user.email, user.username);
-    } catch (err) {
-      if (!isUniqueViolation(err)) throw err;
-      // Two signups can pass the checks above at the same moment; the unique
-      // indexes decide, and we just have to say which one lost.
-      const emailNowTaken = await this.prisma.user.findUnique({
-        where: { email: dto.email },
-        select: { id: true },
-      });
-      throw new ConflictException(emailNowTaken ? 'Email already registered' : 'Username already taken');
-    }
+    const user = await this.prisma.user.create({
+      data: {
+        email: dto.email,
+        passwordHash,
+        name: dto.name,
+      },
+    });
+    return this.signToken(user.id, user.email);
   }
 
   async login(dto: LoginDto) {
@@ -66,7 +41,7 @@ export class AuthService {
     if (!passwordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
-    return this.signToken(user.id, user.email, user.username);
+    return this.signToken(user.id, user.email);
   }
 
   async loginWithGoogle(googleUser: { email: string; googleId: string; name: string }) {
@@ -80,38 +55,23 @@ export class AuthService {
           email: googleUser.email,
           googleId: googleUser.googleId,
           name: googleUser.name,
-          username: await this.generateUsername(),
         },
       });
     }
 
-    return this.signToken(user.id, user.email, user.username);
+    return this.signToken(user.id, user.email);
   }
 
-  // An unused default username. The unique index is the real guard; this
-  // just avoids handing out one that is already taken.
-  private async generateUsername(): Promise<string> {
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const candidate = randomUsername();
-      const taken = await this.prisma.user.findUnique({
-        where: { username: candidate },
-        select: { id: true },
-      });
-      if (!taken) return candidate;
-    }
-    throw new InternalServerErrorException('Could not generate a username, please try again');
-  }
-
-  async signToken(userId: string, email: string, username: string) {
-    const payload = { sub: userId, email, username };
+  async signToken(userId: string, email: string) {
+    const payload = { sub: userId, email };
     const accessToken = await this.jwtService.signAsync(payload);
-    return { accessToken, username };
+    return { accessToken };
   }
 
   async getProfile(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, username: true, name: true, flavorTextEnabled: true },
+      select: { id: true, email: true, name: true, flavorTextEnabled: true },
     });
     if (!user) {
       throw new UnauthorizedException('User not found');
@@ -119,7 +79,6 @@ export class AuthService {
     return {
       userId: user.id,
       email: user.email,
-      username: user.username,
       name: user.name,
       flavorTextEnabled: user.flavorTextEnabled,
     };

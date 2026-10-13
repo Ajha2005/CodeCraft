@@ -5,7 +5,7 @@ function setup() {
   const prisma = {
     territoryCellOwnership: {
       findMany: jest.fn().mockResolvedValue([]),
-      create: jest.fn().mockResolvedValue({ user: { username: 'arjun_m' } }),
+      create: jest.fn().mockResolvedValue({}),
       update: jest.fn(),
     },
     territoryCell: { findFirst: jest.fn(), findMany: jest.fn() },
@@ -26,7 +26,7 @@ function setup() {
 }
 
 describe('SubmissionsProcessor territory broadcasts', () => {
-  it("tells the map the claimer's username when a free cell is claimed", async () => {
+  it('tells the map when a free cell is claimed', async () => {
     const { prisma, territoryGateway, assignTerritory } = setup();
     prisma.territoryCell.findFirst.mockResolvedValue({ id: 'c1', territoryId: 't1', row: 0, col: 1 });
 
@@ -34,7 +34,6 @@ describe('SubmissionsProcessor territory broadcasts', () => {
 
     expect(prisma.territoryCellOwnership.create).toHaveBeenCalledWith({
       data: { cellId: 'c1', userId: 'u1', sourceType: 'solve' },
-      include: { user: { select: { username: true } } },
     });
     expect(territoryGateway.broadcastCellUpdate).toHaveBeenCalledWith({
       territoryId: 't1',
@@ -42,12 +41,11 @@ describe('SubmissionsProcessor territory broadcasts', () => {
       row: 0,
       col: 1,
       ownerId: 'u1',
-      ownerUsername: 'arjun_m',
       ownerColor: getColorForUser('u1'),
     });
   });
 
-  it("tells the map the capturer's username when a rival's cell is captured", async () => {
+  it("tells the map when a rival's cell is captured", async () => {
     const { prisma, territoryGateway, assignTerritory } = setup();
     prisma.territoryCell.findFirst
       .mockResolvedValueOnce(null) // nothing unclaimed left in the tier
@@ -65,7 +63,6 @@ describe('SubmissionsProcessor territory broadcasts', () => {
       row: 3,
       col: 4,
       ownerId: 'u1',
-      ownerUsername: 'arjun_m',
       ownerColor: getColorForUser('u1'),
     });
   });

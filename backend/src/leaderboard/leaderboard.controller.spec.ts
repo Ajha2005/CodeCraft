@@ -19,39 +19,38 @@ function setup() {
 }
 
 describe('LeaderboardController names', () => {
-  it('shows the username as the name, never the real name or the email', async () => {
+  it('shows each player under the name they signed in with, else the start of their email', async () => {
     const { redis, prisma, controller } = setup();
     redis.getCollegeTop.mockResolvedValue([
       { userId: 'u1', score: 90 },
       { userId: 'u2', score: 50 },
     ]);
     prisma.user.findMany.mockResolvedValue([
-      { id: 'u1', username: 'arjun_m' },
-      { id: 'u2', username: 'player_a1b2c3' },
+      { id: 'u1', name: ' Arjun Mehta ', email: 'arjun@thapar.edu' },
+      { id: 'u2', name: null, email: 'riya.sharma@thapar.edu' },
     ]);
 
     await expect(controller.getCollegeLeaderboard()).resolves.toEqual([
-      { userId: 'u1', username: 'arjun_m', name: 'arjun_m', score: 90 },
-      { userId: 'u2', username: 'player_a1b2c3', name: 'player_a1b2c3', score: 50 },
+      { userId: 'u1', name: 'Arjun Mehta', score: 90 },
+      { userId: 'u2', name: 'riya.sharma', score: 50 },
     ]);
-    // the query itself cannot return an email or a real name
     expect(prisma.user.findMany).toHaveBeenCalledWith({
       where: { id: { in: ['u1', 'u2'] } },
-      select: { id: true, username: true },
+      select: { id: true, name: true, email: true },
     });
   });
 
-  it('uses usernames on a zone leaderboard too', async () => {
+  it('names players the same way on a zone leaderboard', async () => {
     const { redis, prisma, controller } = setup();
     redis.getTerritoryTop.mockResolvedValue([{ userId: 'u1', score: 12 }]);
-    prisma.user.findMany.mockResolvedValue([{ id: 'u1', username: 'arjun_m' }]);
+    prisma.user.findMany.mockResolvedValue([{ id: 'u1', name: 'Arjun Mehta', email: 'arjun@thapar.edu' }]);
 
     await expect(controller.getTerritoryLeaderboard('t1')).resolves.toEqual([
-      { userId: 'u1', username: 'arjun_m', name: 'arjun_m', score: 12 },
+      { userId: 'u1', name: 'Arjun Mehta', score: 12 },
     ]);
   });
 
-  it('shows a short id, and no profile link, for a player who no longer exists', async () => {
+  it('shows a short id for a player who no longer exists', async () => {
     const { redis, prisma, controller } = setup();
     redis.getCollegeTop.mockResolvedValue([{ userId: '12345678-aaaa-bbbb-cccc-1234567890ab', score: 5 }]);
     prisma.user.findMany.mockResolvedValue([]);
@@ -59,17 +58,16 @@ describe('LeaderboardController names', () => {
     const [entry] = await controller.getCollegeLeaderboard();
 
     expect(entry.name).toBe('12345678');
-    expect(entry.username).toBeNull();
   });
 
-  it('names the next player up by username in the near-miss nudge', async () => {
+  it('names the next player up in the near-miss nudge', async () => {
     const { redis, prisma, controller } = setup();
     redis.getCollegeRank.mockResolvedValue(3);
     redis.getCollegeScore.mockResolvedValue(40);
     redis.getCollegeEntryAtRank.mockResolvedValue({ userId: 'u9', score: 55 });
-    prisma.user.findMany.mockResolvedValue([{ id: 'u9', username: 'rival_9' }]);
+    prisma.user.findMany.mockResolvedValue([{ id: 'u9', name: 'Rival Nine', email: 'rival9@thapar.edu' }]);
 
-    await expect(controller.getNearMiss('u1')).resolves.toEqual({ rank: 3, pointsToNext: 15, nextRankName: 'rival_9' });
+    await expect(controller.getNearMiss('u1')).resolves.toEqual({ rank: 3, pointsToNext: 15, nextRankName: 'Rival Nine' });
   });
 
   it('returns nothing for an empty board without touching the database', async () => {

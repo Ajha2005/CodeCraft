@@ -37,22 +37,24 @@ const contestRow = {
   endedAt: null,
   cell: { id: 'c1', row: 1, col: 2, territoryId: 't1', territory: { name: 'M Hostel', tier: 'SETTLEMENT' } },
   problem: { id: 1, title: 'Two Sum', difficultyLevel: 'Easy' },
-  challenger: { id: 'u1', username: 'arjun_m' },
-  defender: { id: 'u2', username: 'player_a1b2c3' },
+  // one player has a name from their login, the other only an email
+  challenger: { id: 'u1', name: ' Arjun Mehta ', email: 'arjun@thapar.edu' },
+  defender: { id: 'u2', name: null, email: 'riya.sharma@thapar.edu' },
 };
 
 describe('ContestService player names', () => {
-  it('lists challenges with both players named by username', async () => {
+  it('lists challenges with each player under the name they signed in with', async () => {
     const { prisma, service } = setup();
     prisma.contest.findMany.mockResolvedValue([contestRow]);
 
     const [challenge] = await service.listIncoming('u2');
 
-    expect(challenge.challenger).toEqual({ id: 'u1', name: 'arjun_m' });
-    expect(challenge.defender).toEqual({ id: 'u2', name: 'player_a1b2c3' });
+    // their name from login (trimmed), or the start of their email when there is none
+    expect(challenge.challenger).toEqual({ id: 'u1', name: 'Arjun Mehta' });
+    expect(challenge.defender).toEqual({ id: 'u2', name: 'riya.sharma' });
   });
 
-  it('selects only id and username of the players, never email or real name', async () => {
+  it('selects id, name and email of the players', async () => {
     const { prisma, service } = setup();
     prisma.contest.findMany.mockResolvedValue([]);
 
@@ -61,26 +63,26 @@ describe('ContestService player names', () => {
     expect(prisma.contest.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         include: expect.objectContaining({
-          challenger: { select: { id: true, username: true } },
-          defender: { select: { id: true, username: true } },
+          challenger: { select: { id: true, name: true, email: true } },
+          defender: { select: { id: true, name: true, email: true } },
         }),
       }),
     );
   });
 
-  it('names both players by username in a single contest too', async () => {
+  it('names both players the same way in a single contest', async () => {
     const { prisma, service } = setup();
     prisma.contest.findUnique.mockResolvedValue({ ...contestRow, challengerId: 'u1', defenderId: 'u2', problemId: 1, participants: [] });
 
     const contest = await service.getContest('k1', 'u1');
 
-    expect(contest.challenger).toEqual({ id: 'u1', name: 'arjun_m' });
-    expect(contest.defender).toEqual({ id: 'u2', name: 'player_a1b2c3' });
+    expect(contest.challenger).toEqual({ id: 'u1', name: 'Arjun Mehta' });
+    expect(contest.defender).toEqual({ id: 'u2', name: 'riya.sharma' });
     expect(prisma.contest.findUnique).toHaveBeenCalledWith(
       expect.objectContaining({
         include: expect.objectContaining({
-          challenger: { select: { id: true, username: true } },
-          defender: { select: { id: true, username: true } },
+          challenger: { select: { id: true, name: true, email: true } },
+          defender: { select: { id: true, name: true, email: true } },
         }),
       }),
     );
@@ -88,13 +90,13 @@ describe('ContestService player names', () => {
 });
 
 describe('ContestService.transferCell', () => {
-  it("tells the map the new owner's username", async () => {
+  it('tells the map about the new owner of the cell', async () => {
     const { prisma, territoryGateway, service } = setup();
     const tx = {
       territoryCellOwnership: {
         findFirst: jest.fn().mockResolvedValue({ id: 'o1', userId: 'u2' }),
         update: jest.fn(),
-        create: jest.fn().mockResolvedValue({ cell: { territoryId: 't1', row: 1, col: 2 }, user: { username: 'arjun_m' } }),
+        create: jest.fn().mockResolvedValue({ cell: { territoryId: 't1', row: 1, col: 2 } }),
       },
     };
     prisma.$transaction.mockImplementation((work: (t: typeof tx) => unknown) => work(tx));
@@ -106,7 +108,7 @@ describe('ContestService.transferCell', () => {
     expect(moved).toBe(true);
     expect(tx.territoryCellOwnership.create).toHaveBeenCalledWith({
       data: { cellId: 'c1', userId: 'u1', sourceType: 'contest' },
-      include: { cell: true, user: { select: { username: true } } },
+      include: { cell: true },
     });
     expect(territoryGateway.broadcastCellUpdate).toHaveBeenCalledWith({
       territoryId: 't1',
@@ -114,7 +116,6 @@ describe('ContestService.transferCell', () => {
       row: 1,
       col: 2,
       ownerId: 'u1',
-      ownerUsername: 'arjun_m',
       ownerColor: getColorForUser('u1'),
     });
   });

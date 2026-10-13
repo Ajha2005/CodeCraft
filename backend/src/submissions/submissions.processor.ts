@@ -313,14 +313,13 @@ export class SubmissionsProcessor extends WorkerHost {
     tier: string,
     cell: { id: string; territoryId: string; row: number; col: number },
   ) {
-    const ownership = await this.prisma.territoryCellOwnership.create({
+    await this.prisma.territoryCellOwnership.create({
       data: { cellId: cell.id, userId, sourceType: 'solve' },
-      include: { user: { select: { username: true } } },
     });
     this.logger.log(
       `Assigned unclaimed ${tier} cell ${cell.id} (territory ${cell.territoryId}) to user ${userId}`,
     );
-    this.broadcastCell(cell, userId, ownership.user.username);
+    this.broadcastCell(cell, userId);
   }
 
   private async captureCell(
@@ -333,20 +332,18 @@ export class SubmissionsProcessor extends WorkerHost {
       where: { id: openOwnershipId },
       data: { closedAt: new Date() },
     });
-    const ownership = await this.prisma.territoryCellOwnership.create({
+    await this.prisma.territoryCellOwnership.create({
       data: { cellId: cell.id, userId, sourceType: 'solve' },
-      include: { user: { select: { username: true } } },
     });
     this.logger.log(
       `User ${userId} captured ${tier} cell ${cell.id} (territory ${cell.territoryId})`,
     );
-    this.broadcastCell(cell, userId, ownership.user.username);
+    this.broadcastCell(cell, userId);
   }
 
   private broadcastCell(
     cell: { id: string; territoryId: string; row: number; col: number },
     userId: string,
-    username: string,
   ) {
     this.territoryGateway.broadcastCellUpdate({
       territoryId: cell.territoryId,
@@ -354,7 +351,6 @@ export class SubmissionsProcessor extends WorkerHost {
       row: cell.row,
       col: cell.col,
       ownerId: userId,
-      ownerUsername: username,
       ownerColor: getColorForUser(userId),
     });
   }
