@@ -3,6 +3,7 @@ import type { LaneMark } from './nav';
 import type { Fx } from './fx';
 import { DecorKit, baseRoof, tintStrength } from './decor';
 import { darken, lighten, mix, rgba } from './color';
+import { LINE_HEIGHT, NUDGES, STAY, fitName, overlapsAny } from './labels';
 import { OBL_X, cellKey, liftedHeight, type ZoneView } from './scene';
 import { FONT_DISPLAY, FONT_MONO, PALETTE, TIER_STYLE } from './theme';
 
@@ -24,8 +25,14 @@ const SLAB_THICKNESS = 70;
 const STRIPE_ZOOM = 0.95;
 /** Share of the roof art (windows, markings) kept on blocks nobody is looking at. */
 const DECOR_REST = 0.5;
-/** Smallest label, in screen pixels. Anything that would be smaller is left out. */
+/** Smallest comfortable label, in screen pixels. A name that would be smaller breaks onto two lines first. */
 const LABEL_MIN_PX = 10.5;
+/** Absolute smallest label. Past this a name spills over its block rather than shrink further or vanish. */
+const LABEL_FLOOR_PX = 8.5;
+/** The avatar's box leads each frame's list of taken label spots; this many numbers skips it. */
+const AVATAR_BOX = 4;
+/** Label spots are looked for clear of everything first, then clear of the other names only. */
+const SPOT_PASSES = [0, AVATAR_BOX];
 
 export interface TrailPoint {
   x: number;
@@ -90,16 +97,19 @@ export interface Frame {
 
 interface LabelPlan {
   v: ZoneView;
-  text: string;
+  /** The name, a line each (a long one breaks onto two), and the width of each line. */
+  lines: string[];
+  widths: number[];
   fs: number;
-  tw: number;
   icon: boolean;
   iconSize: number;
   /** Drawn as a pill above the roof instead of on it. */
   tag: boolean;
   focused: boolean;
+  /** Left edge of the label (icon included) and the vertical middle of all its lines. */
   x: number;
   y: number;
+  /** The widest line, plus the icon. */
   total: number;
   alpha: number;
 }
@@ -837,14 +847,19 @@ export class WorldRenderer {
 
   // ------------------------------------------------------------------ labels
 
+  /**
+   * Width of `text` at `size`. Measured once at a large size and scaled, so the
+   * cache holds one entry per name instead of one per name per zoom level, and
+   * fitting a name (which tries several sizes) stays cheap while the camera moves.
+   */
   private textWidth(ctx: CanvasRenderingContext2D, text: string, size: number): number {
-    const key = `${text}|${Math.round(size * 4)}`;
-    let w = this.labelWidthCache.get(key);
-    if (w === undefined) {
-      w = ctx.measureText(text).width;
-      this.labelWidthCache.set(key, w);
+    let unit = this.labelWidthCache.get(text);
+    if (unit === undefined) {
+      ctx.font = `700 100px ${FONT_DISPLAY}`;
+      unit = ctx.measureText(text).width / 100;
+      this.labelWidthCache.set(text, unit);
     }
-    return w;
+    return unit * size;
   }
 
   /** Call after web fonts load so cached measurements are re-taken. */
@@ -858,11 +873,15 @@ export class WorldRenderer {
     ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round';
 
-    // Plan first, draw second. The zone you stand in, the one under the cursor,
-    // the selection and the pinned waypoint always get their name; every other
-    // zone competes for space (biggest first) and is left out if it would
-    // overlap or would have to be tiny. A name is all a label carries - the
-    // details live in the tooltip and the zone panel.
+    // Plan first, draw second. Every block on screen gets its name: one that is
+    // too wide for its block shrinks, then breaks onto two lines (see labels.ts),
+    // and one whose spot is taken by the avatar or a neighbour's name slides
+    // along its block. The zone you are looking at (cursor, selection, pinned
+    // waypoint, dive mode) is placed first and is never left out; the rest
+    // compete for space, biggest block first, and only give way when their
+    // whole block is crowded. A name is all a label carries - the details live
+    // in the tooltip and the zone panel.
+    const measure = (s: string, size: number) => this.textWidth(ctx, s, size);
     const plans: LabelPlan[] = [];
     for (const idx of f.order) {
       const v = f.views[idx];
@@ -881,38 +900,24 @@ export class WorldRenderer {
       const minPx = focused ? 9 : LABEL_MIN_PX;
       const minWorld = minPx / zoom;
       // Natural size follows the block, but it is never smaller than legible
-      // (so far-away blocks still get a name if it fits) nor louder than ~28px.
-      let fs = Math.max(minWorld, Math.min(focused ? 24 : 19, Math.max(11, Math.sqrt(z.area) * 0.062), 28 / zoom));
-      ctx.font = `700 ${fs}px ${FONT_DISPLAY}`;
-      let shown = text;
-      let tw = this.textWidth(ctx, shown, fs);
-
-      if (tw + 5 > maxW) {
-        fs = Math.max((fs * (maxW - 5)) / tw, minWorld);
-        ctx.font = `700 ${fs}px ${FONT_DISPLAY}`;
-        tw = this.textWidth(ctx, shown, fs);
-        if (tw + 5 > maxW) {
-          if (!focused) continue; // better no label than a chopped one
-          const keep = Math.floor((maxW - 5) / (tw / shown.length)) - 1;
-          if (keep < 3) continue;
-          shown = shown.slice(0, keep).trimEnd() + '…';
-          tw = this.textWidth(ctx, shown, fs);
-        }
-      }
-
-      const iconSize = fs * 0.95;
-      const icon = focused && tw + iconSize + 5 <= maxW + 8 && fs * zoom >= 9;
-      const total = tw + (icon ? iconSize + 4 : 0);
-      // In dive mode the name becomes a tag above the roof. Elsewhere, a label
-      // the avatar would stand on top of is simply left out.
-      const underAvatar = f.currentZone === z.index && Math.hypot(f.player.x - z.anchor.x, f.player.y - z.anchor.y) < 70 + fs * 2.4;
-      if (underAvatar && !v.detail) continue;
+      // (so far-away blocks still get a name) nor louder than ~28px.
+      const want = Math.max(minWorld, Math.min(focused ? 24 : 19, Math.max(11, Math.sqrt(z.area) * 0.062), 28 / zoom));
+      // In dive mode the name becomes a one-line tag above the roof.
       const tag = v.detail;
+      const floor = Math.min(minWorld, LABEL_FLOOR_PX / zoom);
+      const { lines, fs, widths } = fitName(measure, { text, want, min: minWorld, floor, maxW, wrap: !tag });
+
+      const tw = Math.max(...widths);
+      const iconSize = fs * 0.95;
+      const icon = focused && lines.length === 1 && tw + iconSize + 5 <= maxW + 8 && fs * zoom >= 9;
+      const total = tw + (icon ? iconSize + 4 : 0);
       let x = ax - total / 2;
       if (tag) x = Math.max(x, z.box.x - OBL_X * h);
       const y = tag ? z.box.y - h - Math.max(10, 13 / zoom) : ay;
 
-      plans.push({ v, text: shown, fs, tw, icon, iconSize, tag, focused, x, y, total, alpha: (v.discovered ? 1 : 0.6) * (focused ? 1 : 0.84) });
+      // Zones you have not explored are dimmed, but their names stay readable:
+      // the name is how you tell where you are headed.
+      plans.push({ v, lines, widths, fs, icon, iconSize, tag, focused, x, y, total, alpha: (v.discovered ? 1 : 0.8) * (focused ? 1 : 0.84) });
     }
 
     plans.sort((a, b) => (a.focused === b.focused ? b.v.zone.area - a.v.zone.area : a.focused ? -1 : 1));
@@ -928,23 +933,49 @@ export class WorldRenderer {
       placed.push(ax - r * 2, ay - r * 3, ax + r * 2, ay + r * 1.1);
     }
     for (const p of plans) {
-      const x0 = p.x - gap;
-      const x1 = p.x + p.total + gap;
-      const y0 = p.y - p.fs * 0.7 - gap * 0.4;
-      const y1 = p.y + p.fs * 0.7 + gap * 0.4;
-      if (!p.focused) {
-        let clash = false;
-        for (let i = 0; i < placed.length; i += 4) {
-          if (x0 < placed[i + 2] && x1 > placed[i] && y0 < placed[i + 3] && y1 > placed[i + 1]) {
-            clash = true;
-            break;
-          }
-        }
-        if (clash) continue;
-      }
-      placed.push(x0, y0, x1, y1);
-      this.drawLabel(ctx, f, p);
+      if (this.placeLabel(p, placed, gap)) this.drawLabel(ctx, f, p);
     }
+  }
+
+  /**
+   * Reserves a spot for a label, moving it when its usual one is taken: along
+   * its own block, nearest the usual spot first (see NUDGES). A tag keeps to the
+   * roof edge. Returns false only for a plain label with nowhere left to go; a
+   * label that is being looked at is drawn at its usual spot regardless.
+   */
+  private placeLabel(p: LabelPlan, placed: number[], gap: number): boolean {
+    const z = p.v.zone;
+    const h = liftedHeight(p.v);
+    const halfH = ((p.lines.length - 1) * p.fs * LINE_HEIGHT) / 2 + p.fs * 0.7 + gap * 0.4;
+    // Where the block's roof is centred: a moved name stays within reach of it.
+    const midX = z.box.x + z.box.w / 2 - OBL_X * h;
+    const midY = z.box.y + z.box.h / 2 - h;
+    const stepX = p.total * 0.5 + gap;
+    const nudges = p.tag ? STAY : NUDGES;
+
+    // Failing a spot clear of everything, take one clear of the other names
+    // only: the avatar is drawn on top, and a name half under it beats a block
+    // with no name - a small block at a far zoom can be nothing but avatar.
+    for (const skip of SPOT_PASSES) {
+      for (const [i, j] of nudges) {
+        const dx = i * stepX;
+        const dy = j * halfH;
+        if ((i !== 0 || j !== 0) && (Math.abs(p.x + dx + p.total / 2 - midX) > z.box.w * 0.36 || Math.abs(p.y + dy - midY) > z.box.h * 0.36)) continue;
+        const x0 = p.x + dx - gap;
+        const x1 = p.x + dx + p.total + gap;
+        const y0 = p.y + dy - halfH;
+        const y1 = p.y + dy + halfH;
+        if (overlapsAny(placed, x0, y0, x1, y1, skip)) continue;
+        p.x += dx;
+        p.y += dy;
+        placed.push(x0, y0, x1, y1);
+        return true;
+      }
+    }
+
+    if (!p.focused) return false;
+    placed.push(p.x - gap, p.y - halfH, p.x + p.total + gap, p.y + halfH);
+    return true;
   }
 
   private drawLabel(ctx: CanvasRenderingContext2D, f: Frame, p: LabelPlan) {
@@ -982,9 +1013,16 @@ export class WorldRenderer {
     ctx.font = `700 ${p.fs}px ${FONT_DISPLAY}`;
     ctx.lineWidth = p.fs * 0.22;
     ctx.strokeStyle = 'rgba(3,8,14,0.8)';
-    ctx.strokeText(p.text, x, p.y);
     ctx.fillStyle = 'rgb(238,246,252)';
-    ctx.fillText(p.text, x, p.y);
+    const textW = p.total - (p.icon ? p.iconSize + 4 : 0);
+    const lineH = p.fs * LINE_HEIGHT;
+    for (let i = 0; i < p.lines.length; i++) {
+      // the lines of a two-line name are centred on each other
+      const lx = x + (textW - p.widths[i]) / 2;
+      const ly = p.y + (i - (p.lines.length - 1) / 2) * lineH;
+      ctx.strokeText(p.lines[i], lx, ly);
+      ctx.fillText(p.lines[i], lx, ly);
+    }
     ctx.globalAlpha = 1;
   }
 
