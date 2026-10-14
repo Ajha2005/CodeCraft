@@ -27,6 +27,7 @@ Solve problems → earn a Performance Score → claim territory on a live campus
   - [Submission Flow](#submission-flow)
   - [1v1 Contest Flow](#1v1-contest-flow)
   - [Data Model](#data-model)
+- [Demo Mode](#demo-mode)
 - [Territory & Scoring Model](#territory--scoring-model)
 - [Anti-Cheating](#anti-cheating)
 - [Project Structure](#project-structure)
@@ -97,6 +98,7 @@ flowchart LR
 **Leaderboard & Accounts**
 - College-wide leaderboard plus per-territory rankings
 - Auth via email/password or Google OAuth, both restricted server-side to `@thapar.edu` addresses, backed by JWT sessions
+- A read-only **demo mode** (the *Try the demo* button on the login page) for visitors without a Thapar ID: browse, run code on a problem's example cases, explore the map. See [Demo Mode](#demo-mode)
 
 ## Tech Stack
 
@@ -242,6 +244,26 @@ On touch devices a virtual stick replaces the keyboard. The page deep-links too:
 
 **Performance:** the renderer draws only what is on screen, caches textures, and watches its own frame rate: on a slow device it drops purely decorative effects and pixel density automatically, then tries to restore them. `prefers-reduced-motion` disables camera smoothing, parallax and particles.
 
+## Demo Mode
+
+The login page has a **Try the demo** button for people without a Thapar ID (a reviewer, a prospective student, a friend on a borrowed laptop). It starts a read-only guest session. Signing in with Google works exactly as before and is unaffected.
+
+| A demo visitor can | A demo visitor cannot |
+|---|---|
+| Browse the quest board and every problem statement | Submit for score, XP or territory |
+| Press **Run examples** to run their own Python or C++ on a problem's published example cases | Challenge anyone, or open the duel pages and the personal campaign report |
+| Walk the live campus map, inspect zones, read the leaderboards | Change a setting or save anything |
+
+How it works:
+
+- `POST /auth/guest` signs a JWT with `role: GUEST` and a `guest:<uuid>` subject, valid for two hours. No account, database row or personal data is created, and the server stores nothing about the visit.
+- A global guard (`GuestPolicyGuard`) refuses every write made with a guest token (`POST`, `PUT`, `PATCH`, `DELETE`) except `POST /auth/guest` and `POST /run`, and refuses anything marked `@NoGuests()` (a single duel's details) even for `GET`; the duel lists simply come back empty for a guest. It reads the metadata of the route Nest resolved, never the URL, so no spelling of a path can get a write past it. Tokens of real accounts carry no role and behave exactly as before.
+- `POST /run` runs a program on the problem's **example** cases only. The graded (hidden) cases never leave the server, nothing is persisted (no submission, score, streak or territory), and the program runs with explicit time and memory caps.
+- `/run` is rate limited per IP for guests (10 a minute) and per account for signed-in users (30 a minute); `POST /auth/guest` is limited to 100 an hour per IP. A guest can hold at most one of the code runner's slots at a time, and queued runs are served graded submissions first, signed-in users next, demo visitors last.
+- In the app, a banner stays on screen for the whole visit, **Submit** is a locked button, `/scoring` and `/contests` show a short sign-in prompt, and drafts and the map position are kept in one shared browser slot (`guest`) instead of one per session. A demo that runs out says so on the login page.
+
+Signed-in players get **Run examples** too, next to Submit. Setup notes for operators (reverse-proxy header, limits) are in [`DEPLOYMENT.md`](./DEPLOYMENT.md#demo-mode).
+
 ## Territory & Scoring Model
 
 ```
@@ -357,6 +379,9 @@ curl -X POST http://localhost:2000/api/v2/packages \
 | `GOOGLE_CALLBACK_URL` | `http://localhost:3000/auth/google/callback` locally |
 | `FRONTEND_URL` | `http://localhost:5173` locally |
 | `PORT` | Optional, defaults to `3000` |
+| `PISTON_URL` | Optional, where Piston listens. Defaults to `http://localhost:2000` |
+| `TRUST_PROXY_HOPS` | Optional. How many reverse proxies sit in front of the API (`1` behind the Nginx setup in `DEPLOYMENT.md`), so the per-IP demo limits see the visitor's real address. Leave unset locally |
+| `PISTON_MAX_CONCURRENCY` | Optional, programs Piston may run at once. Defaults to `2` |
 
 `frontend/.env` (see [`frontend/.env.example`](./frontend/.env.example)):
 
