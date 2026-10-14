@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { LOGIN_GREETINGS, pickDaily } from '../lib/flavorText'
 import { FlavorToggle } from '../components/FlavorToggle'
+import { takeDemoEndedNote } from './demoSession'
 import { useAuth } from './AuthContext'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3000'
@@ -31,8 +32,13 @@ function makeCaptureGrid(cols: number, rows: number): CaptureCell[] {
 
 function LoginPage() {
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const error = searchParams.get('error')
-  const { flavorTextEnabled } = useAuth()
+  const { flavorTextEnabled, startDemo } = useAuth()
+  // Read once: tells a visitor whose demo ran out why they are back here.
+  const [demoEnded] = useState(takeDemoEndedNote)
+  const [demoStarting, setDemoStarting] = useState(false)
+  const [demoError, setDemoError] = useState('')
   const greeting = useMemo(
     () => (flavorTextEnabled ? pickDaily(LOGIN_GREETINGS) : 'Sign in to pick up where you left off.'),
     [flavorTextEnabled],
@@ -63,6 +69,18 @@ function LoginPage() {
 
   function handleGoogleLogin() {
     window.location.href = `${API_BASE}/auth/google`
+  }
+
+  function handleDemo() {
+    if (demoStarting) return
+    setDemoStarting(true)
+    setDemoError('')
+    startDemo()
+      .then(() => navigate('/', { replace: true }))
+      .catch((err: unknown) => {
+        setDemoError(err instanceof Error ? err.message : 'The demo could not be started right now.')
+        setDemoStarting(false)
+      })
   }
 
   const statItems = [
@@ -152,6 +170,12 @@ function LoginPage() {
             </p>
           )}
 
+          {demoEnded && !error && (
+            <p className="text-sm text-amber-300 mb-10 bg-amber-950/30 border border-amber-800/40 rounded-lg py-2 px-4 inline-block">
+              Your demo session ended. Start it again, or sign in to carry on.
+            </p>
+          )}
+
           <button
             onClick={handleGoogleLogin}
             className="flex items-center justify-center gap-3 rounded-full px-8 py-3.5 text-sm font-semibold bg-slate-100 text-slate-900 hover:bg-white transition-all hover:scale-[1.03] active:scale-[0.98] animate-glow-pulse mx-auto mb-6"
@@ -176,10 +200,30 @@ function LoginPage() {
             </svg>
             Sign in with Google
           </button>
-          <p className="text-xs text-slate-500 mb-4">New commander? Signing in enlists you automatically.</p>
+          <p className="text-xs text-slate-500 mb-5">New commander? Signing in enlists you automatically.</p>
 
+          <div className="mx-auto mb-6 max-w-sm border-t border-slate-800/80 pt-5">
+            <button
+              type="button"
+              onClick={handleDemo}
+              disabled={demoStarting}
+              className="rounded-full border border-cyan-400/40 px-6 py-2.5 text-sm font-semibold text-cyan-200 transition-all hover:border-cyan-300 hover:bg-cyan-400/10 disabled:opacity-60 disabled:hover:bg-transparent"
+            >
+              {demoStarting ? 'Starting the demo…' : 'Try the demo'}
+            </button>
+            <p className="mt-2 text-xs leading-relaxed text-slate-500 [@media(max-height:700px)]:hidden">
+              No Thapar ID? Look around read-only: browse the problems, run code on the sample cases and explore the live map.
+            </p>
+            {demoError && (
+              <p className="mt-2 text-xs text-red-400" role="alert">
+                {demoError}
+              </p>
+            )}
+          </div>
+
+          {/* The stat chips are the first thing to go on a very short screen, so the sign-in and demo buttons never are. */}
           {statItems.length > 0 && (
-            <div className="flex flex-wrap items-center justify-center gap-2">
+            <div className="flex flex-wrap items-center justify-center gap-2 [@media(max-height:760px)]:hidden">
               {statItems.map((item) => (
                 <span
                   key={item}

@@ -68,13 +68,15 @@ export function MapFullScreen() {
   // refetches on score changes) while the ranks panel is actually open.
   const [showBoard, setShowBoard] = useState(false);
   const { entries: boardEntries, loading: boardLoading } = useCollegeLeaderboard(50, showBoard);
-  const { user, flavorTextEnabled } = useAuth();
+  const { user, isGuest, flavorTextEnabled } = useAuth();
   const { refresh: refreshStats } = usePlayerStats();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { toasts, push, dismiss } = useToasts();
 
-  const userId = user?.userId ?? null;
+  // Where this browser remembers the player's position and explored zones. Demo visitors share one slot.
+  const userId = isGuest ? 'guest' : (user?.userId ?? null);
+  const guestNoteAt = useRef(0);
   const world = getWorld();
   const [engine] = useState(() => new MapEngine(world));
   const traveling = useEngineSelector(engine, (s) => s.traveling);
@@ -210,7 +212,19 @@ export function MapFullScreen() {
     setSelectedId(id);
     if (id) sfx.play('click');
   });
-  const handleCellChallenge = useEffectEvent((cell: TerritoryCellDto, zone: Zone) => setChallenge({ cell, zone }));
+  const handleCellChallenge = useEffectEvent((cell: TerritoryCellDto, zone: Zone) => {
+    if (isGuest) {
+      // A duel changes the map, which a demo visit cannot do. Say so, but not on every click.
+      const now = Date.now();
+      if (now - guestNoteAt.current > 4000) {
+        guestNoteAt.current = now;
+        sfx.play('error');
+        push('Challenging a cell needs a Thapar ID. The demo is read-only.', 'warning');
+      }
+      return;
+    }
+    setChallenge({ cell, zone });
+  });
   const handleMoved = useEffectEvent((pos: { x: number; y: number }) => {
     if (userId) writeJson(posKey(userId), pos);
     if (welcome) dismissWelcome();
@@ -382,7 +396,9 @@ export function MapFullScreen() {
   const hoverNote =
     hover?.cell && hoverSummary
       ? hover.challengeable
-        ? 'Rival cell · click to challenge'
+        ? isGuest
+          ? 'Rival cell'
+          : 'Rival cell · click to challenge'
         : hover.cell.ownerId
           ? 'Your cell'
           : 'Unclaimed cell'

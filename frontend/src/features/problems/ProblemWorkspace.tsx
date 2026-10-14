@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import confetti from 'canvas-confetti';
 import { useAuth } from '../../auth/AuthContext';
+import { GUEST_LOCK_TOOLTIP, noteDemoEnded } from '../../auth/demoSession';
 import { usePlayerStats } from '../../lib/playerStatsContext';
 import { useMediaQuery } from '../../lib/useMediaQuery';
 import { sfx } from '../../lib/sfx';
@@ -12,12 +13,13 @@ import { Icon } from '../../components/ui/Icon';
 import { LevelBadge } from '../../components/ui/LevelBadge';
 import { Pips } from '../../components/ui/Pips';
 import { XPBar } from '../../components/ui/XPBar';
-import { fetchProblem, fetchScore, fetchSubmission, postSubmission, type ProblemDetail, type ScoreResult, type SubmissionResult } from './api';
+import { fetchProblem, fetchScore, fetchSubmission, postSubmission, runExamples, RunRequestError, type ProblemDetail, type RunResult, type ScoreResult, type SubmissionResult } from './api';
 import { DifficultyBadge } from './DifficultyBadge';
 import { difficultyMeta, padId } from './difficulty';
 import { loadDraft, loadLanguage, saveDraft, saveLanguage, type Language } from './drafts';
 import { pickNextAfter } from './nextQuest';
 import { ExampleBlock, InlineText } from './RichText';
+import { RunPanel } from './RunPanel';
 import type { ProblemCatalog } from './useProblemCatalog';
 
 const POLL_MS = 2000;
@@ -112,11 +114,23 @@ export function ProblemWorkspace(props: WorkspaceProps) {
   );
 }
 
+/** What to tell the player when "Run" could not produce a result. */
+function runErrorText(err: unknown): string {
+  if (err instanceof RunRequestError) {
+    if (err.status === 429) return 'You’re running code too fast. Wait a few seconds and try again.';
+    if (err.status === 503) return 'The code runner is busy right now. Try again in a moment.';
+    if (err.status === 401) return 'Your session has ended. Sign in again to run code.';
+    if (err.status === 400 || err.status === 404 || err.status === 422) return err.message;
+  }
+  return 'Could not run your code. Try again in a moment.';
+}
+
 function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: WorkspaceProps & { problem: ProblemDetail }) {
-  const { user, token, flavorTextEnabled } = useAuth();
+  const { user, token, isGuest, logout, flavorTextEnabled } = useAuth();
   const { stats, refresh: refreshStats } = usePlayerStats();
   const fineKeyboard = useMediaQuery('(pointer: fine)');
-  const userId = user?.userId ?? 'anon';
+  // Demo visitors share one draft slot instead of leaving a new one behind per session.
+  const userId = isGuest ? 'guest' : (user?.userId ?? 'anon');
   const meta = difficultyMeta(problem.difficultyLevel);
 
   const [language, setLanguage] = useState<Language>(loadLanguage);
@@ -130,6 +144,9 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
   const [score, setScore] = useState<ScoreResult | null>(null);
   const [submitError, setSubmitError] = useState('');
   const [runningLine, setRunningLine] = useState('');
+  const [running, setRunning] = useState(false);
+  const [runResult, setRunResult] = useState<RunResult | null>(null);
+  const [runError, setRunError] = useState('');
 
   const code = codes[language];
   const starter = starterFor(problem, language);
@@ -140,12 +157,15 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
   const next = result?.verdict === 'AC' ? pickNextAfter(catalog.problems, catalog.status, problem.id) : null;
 
   const busyRef = useRef(false);
+  const runningRef = useRef(false);
   const mountedRef = useRef(true);
   const lineTimer = useRef<number | undefined>(undefined);
-  const submitRef = useRef<() => void>(() => {});
+  /** What Ctrl/Cmd+Enter does: submit for a player, run the examples for a demo visitor (who cannot submit). */
+  const primaryRef = useRef<() => void>(() => {});
   const editorRef = useRef<CodeEditor | null>(null);
   const editorPanelRef = useRef<HTMLDivElement>(null);
   const resultRef = useRef<HTMLDivElement>(null);
+  const runPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -158,16 +178,16 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
     };
   }, []);
 
-  // Always point the shortcut at the latest submit handler.
+  // Always point the shortcut at the latest handler.
   useEffect(() => {
-    submitRef.current = handleSubmit;
+    primaryRef.current = isGuest ? handleRun : handleSubmit;
   });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
-        submitRef.current();
+        primaryRef.current();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -201,14 +221,22 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
     }
   }
 
-  /** Nudge the page just far enough that the verdict is on screen (the tab bar covers the bottom on phones). */
-  function revealResult() {
+  /**
+   * Nudge the page just far enough that a result panel is on screen (the tab bar covers the bottom on
+   * phones), without pushing its top under the nav. This scrolls the window itself: scrollIntoView
+   * could also scroll the page's overflow-hidden background box and leave the layout shifted.
+   */
+  function revealPanel(ref: { current: HTMLElement | null }) {
     window.requestAnimationFrame(() => {
-      const el = resultRef.current;
-      if (!el) return;
+      const panel = ref.current;
+      if (!panel) return;
+      const rect = panel.getBoundingClientRect();
       const bottomInset = window.matchMedia('(max-width: 639px)').matches ? 100 : 24;
-      const overflow = el.getBoundingClientRect().bottom - (window.innerHeight - bottomInset);
-      if (overflow > 0) window.scrollBy({ top: overflow, behavior: 'smooth' });
+      const overflow = rect.bottom - (window.innerHeight - bottomInset);
+      if (overflow <= 0) return;
+      const navBottom = document.querySelector('[data-site-nav]')?.getBoundingClientRect().bottom ?? 0;
+      const room = rect.top - navBottom - 12;
+      window.scrollBy({ top: Math.min(overflow, Math.max(room, 0)), behavior: 'smooth' });
     });
   }
 
@@ -232,7 +260,7 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
     } else if (mountedRef.current) {
       sfx.play('error');
     }
-    if (mountedRef.current) revealResult();
+    if (mountedRef.current) revealPanel(resultRef);
   }
 
   function pollSubmission(submissionId: string) {
@@ -281,8 +309,42 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
     }
   }
 
+  function handleRun() {
+    if (runningRef.current) return;
+    runningRef.current = true;
+    sfx.play('click');
+    setRunning(true);
+    setRunError('');
+
+    // Read the editor itself: React state can trail the last keystroke by a frame.
+    const source = editorRef.current?.getValue() ?? code;
+    runExamples(token, { problemId: problem.id, language, code: source })
+      .then((data) => {
+        if (!mountedRef.current) return;
+        setRunResult(data);
+        sfx.play(data.verdict === 'AC' ? 'win' : 'error');
+        // The panel opens below the editor, often off screen: bring it into view (a no-op when it already is).
+        revealPanel(runPanelRef);
+      })
+      .catch((err: unknown) => {
+        if (!mountedRef.current) return;
+        setRunResult(null);
+        if (isGuest && err instanceof RunRequestError && err.status === 401) {
+          // The demo ran out (or the server forgot it): leave the visitor where they can start another.
+          noteDemoEnded();
+          logout();
+          return;
+        }
+        setRunError(runErrorText(err));
+      })
+      .finally(() => {
+        runningRef.current = false;
+        if (mountedRef.current) setRunning(false);
+      });
+  }
+
   function handleSubmit() {
-    if (!user || busyRef.current) return;
+    if (!user || isGuest || busyRef.current) return;
     busyRef.current = true;
     sfx.play('click');
     setSubmitting(true);
@@ -411,7 +473,7 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
                 // a model kept from an earlier visit may predate a cleared draft
                 if (editor.getValue() !== code) editor.setValue(code);
                 // Monaco would otherwise use Ctrl/Cmd+Enter to insert a line.
-                editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => submitRef.current());
+                editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => primaryRef.current());
               }}
               theme="vs-dark"
               options={{ fontSize: 14, minimap: { enabled: false }, scrollBeyondLastLine: false, padding: { top: 12 }, automaticLayout: true }}
@@ -419,17 +481,23 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <button type="button" onClick={handleSubmit} disabled={submitting || judging} className="btn-primary h-11 gap-2 rounded-lg px-6 text-sm">
-              {submitting || judging ? (
+            <button
+              type="button"
+              onClick={handleRun}
+              disabled={running}
+              title="Run your code on this problem’s examples. Nothing is saved or scored."
+              className={`h-11 gap-2 rounded-lg px-5 text-sm ${isGuest ? 'btn-primary' : 'btn-ghost font-semibold'}`}
+            >
+              {running ? (
                 <>
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-900/30 border-t-slate-900" />
-                  {judging ? 'Judging…' : 'Deploying…'}
+                  <span className={`h-4 w-4 animate-spin rounded-full border-2 ${isGuest ? 'border-slate-900/30 border-t-slate-900' : 'border-slate-400/30 border-t-slate-200'}`} />
+                  Running…
                 </>
               ) : (
                 <>
-                  <Icon name="rocket" className="h-4 w-4" />
-                  {flavorTextEnabled ? 'Deploy solution' : 'Submit'}
-                  {fineKeyboard && (
+                  <Icon name="play" className="h-4 w-4" />
+                  Run examples
+                  {isGuest && fineKeyboard && (
                     <span className="ml-1 flex gap-1" aria-hidden="true">
                       <span className="keycap">{MOD_KEY}</span>
                       <span className="keycap">↵</span>
@@ -438,10 +506,56 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
                 </>
               )}
             </button>
+            {isGuest ? (
+              <span
+                className="inline-flex h-11 cursor-not-allowed items-center gap-2 rounded-lg border border-slate-700/80 px-4 text-sm font-semibold text-slate-500"
+                title={GUEST_LOCK_TOOLTIP}
+                aria-disabled="true"
+              >
+                <Icon name="lock" className="h-4 w-4" />
+                {flavorTextEnabled ? 'Deploy solution' : 'Submit'}
+              </span>
+            ) : (
+              <button type="button" onClick={handleSubmit} disabled={submitting || judging} className="btn-primary h-11 gap-2 rounded-lg px-6 text-sm">
+                {submitting || judging ? (
+                  <>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-900/30 border-t-slate-900" />
+                    {judging ? 'Judging…' : 'Deploying…'}
+                  </>
+                ) : (
+                  <>
+                    <Icon name="rocket" className="h-4 w-4" />
+                    {flavorTextEnabled ? 'Deploy solution' : 'Submit'}
+                    {fineKeyboard && (
+                      <span className="ml-1 flex gap-1" aria-hidden="true">
+                        <span className="keycap">{MOD_KEY}</span>
+                        <span className="keycap">↵</span>
+                      </span>
+                    )}
+                  </>
+                )}
+              </button>
+            )}
             {judging && flavorTextEnabled && <p className="text-sm text-amber-300/90 animate-pulse">{runningLine}</p>}
             {submitError && <p className="text-sm text-rose-400">{submitError}</p>}
+            {runError && (
+              <p className="text-sm text-rose-400" role="alert">
+                {runError}
+              </p>
+            )}
           </div>
+          {isGuest && (
+            <p className="mt-3 text-xs leading-relaxed text-slate-500">
+              Demo mode: your code runs on this problem’s examples only. Submitting for score and territory needs a Thapar ID.
+            </p>
+          )}
         </div>
+
+        {runResult && (
+          <div ref={runPanelRef}>
+            <RunPanel result={runResult} flavor={flavorTextEnabled} />
+          </div>
+        )}
 
         {result && verdict && (
           <div ref={resultRef} className={`hud-panel scroll-mt-24 overflow-hidden bg-gradient-to-br p-4 animate-pop-in md:p-5 ${verdict.bg}`} style={{ borderColor: `${verdict.color}66` }}>

@@ -31,6 +31,30 @@ export interface SubmissionResult {
   noPointsReason?: string | null;
 }
 
+/** What "Run" reports for one of the problem's own examples. */
+export interface RunCaseResult {
+  index: number;
+  input: unknown;
+  expectedOutput: string;
+  actualOutput: string;
+  /** AC | WA | TLE | RE | CE */
+  status: string;
+  passed: boolean;
+  runtimeMs: number;
+  /** Compiler or runtime error text. */
+  error?: string;
+}
+
+export interface RunResult {
+  problemId: number;
+  language: string;
+  passed: number;
+  total: number;
+  /** AC when every example passed, otherwise the first failing example's status. */
+  verdict: string;
+  results: RunCaseResult[];
+}
+
 export interface ScoreResult {
   difficultyWeight: number;
   correctness: number;
@@ -79,6 +103,38 @@ export async function postSubmission(token: string | null, body: { userId: strin
   });
   if (!res.ok) throw new Error(`Request failed: ${res.status}`);
   return (await res.json()) as SubmissionResult;
+}
+
+/** A failed request, with the HTTP status and the server's own message when it sent one. */
+export class RunRequestError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'RunRequestError';
+    this.status = status;
+  }
+}
+
+/** Runs the code on the problem's own examples. Nothing is saved, scored or captured, so a demo visitor may use it too. */
+export async function runExamples(token: string | null, body: { problemId: number; language: string; code: string }): Promise<RunResult> {
+  const res = await fetch(`${API_BASE}/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let message = `Request failed: ${res.status}`;
+    try {
+      const data = (await res.json()) as { message?: unknown };
+      if (typeof data.message === 'string') message = data.message;
+      else if (Array.isArray(data.message) && typeof data.message[0] === 'string') message = data.message[0];
+    } catch {
+      // not JSON: keep the generic text
+    }
+    throw new RunRequestError(res.status, message);
+  }
+  return (await res.json()) as RunResult;
 }
 
 export function fetchSubmission(token: string | null, id: string): Promise<SubmissionResult> {

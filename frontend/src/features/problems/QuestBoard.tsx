@@ -125,7 +125,7 @@ export function QuestBoard({ catalog, active, onOpen }: QuestBoardProps) {
         <header className="hud-panel mb-6 grid grid-cols-[1fr_auto] items-center gap-x-5 gap-y-4 overflow-hidden p-5 md:p-7 animate-fade-in-up">
           <div className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-cyan-400/10 blur-3xl" />
           <div className="relative col-start-1 min-w-0">
-            <p className="hud-label text-cyan-300">{flavorTextEnabled ? `Welcome back, ${name}` : 'Problems'}</p>
+            <p className="hud-label text-cyan-300">{flavorTextEnabled ? (user?.isGuest ? 'Welcome, visitor' : `Welcome back, ${name}`) : 'Problems'}</p>
             <h1 className="font-display mt-1 text-4xl font-bold leading-none tracking-wide text-slate-50 sm:text-5xl">{flavorTextEnabled ? 'Quest board' : 'Problems'}</h1>
             <p className="mt-3 max-w-lg text-sm leading-relaxed text-slate-400">
               {flavorTextEnabled

@@ -1,5 +1,6 @@
 import { Fragment } from 'react';
 import type { ProblemExample } from './api';
+import { fmt, inputLines } from './format';
 
 /** `like this` in a statement becomes inline code. Unbalanced backticks are left alone. */
 export function InlineText({ text }: { text: string }) {
@@ -19,24 +20,6 @@ export function InlineText({ text }: { text: string }) {
       )}
     </>
   );
-}
-
-/** Compact, readable values: `[1, 2, 3]` rather than JSON's `[1,2,3]`. */
-function fmt(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(fmt).join(', ')}]`;
-  if (value && typeof value === 'object') {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .map(([k, v]) => `${k}: ${fmt(v)}`)
-      .join(', ')}}`;
-  }
-  return JSON.stringify(value) ?? String(value);
-}
-
-function inputLines(input: unknown): string[] {
-  if (input && typeof input === 'object' && !Array.isArray(input)) {
-    return Object.entries(input as Record<string, unknown>).map(([name, v]) => `${name} = ${fmt(v)}`);
-  }
-  return [fmt(input)];
 }
 
 export function ExampleBlock({ example }: { example: ProblemExample }) {

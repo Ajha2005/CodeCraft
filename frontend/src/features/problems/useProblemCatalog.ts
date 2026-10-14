@@ -9,7 +9,8 @@ import { fetchAllProblems, fetchStatuses, type ProblemStatus, type ProblemSummar
  */
 export function useProblemCatalog() {
   const { user, token } = useAuth();
-  const userId = user?.userId ?? null;
+  // A demo session has no progress of its own to fetch.
+  const userId = user && !user.isGuest ? user.userId : null;
   const [problems, setProblems] = useState<ProblemSummary[]>([]);
   const [status, setStatus] = useState<Record<number, ProblemStatus>>({});
   const [loading, setLoading] = useState(true);
