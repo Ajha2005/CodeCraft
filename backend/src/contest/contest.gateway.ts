@@ -11,6 +11,7 @@ import { Inject, Logger, forwardRef } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Server, Socket } from 'socket.io';
+import { AccessTokenPayload, userFromPayload } from '../auth/auth-user';
 import { PrismaService } from '../prisma/prisma.service';
 import { ContestService } from './contest.service';
 
@@ -58,15 +59,18 @@ export class ContestGateway
     }
 
     try {
-      const payload = await this.jwtService.verifyAsync<{
-        sub: string;
-        email: string;
-      }>(token, {
+      const payload = await this.jwtService.verifyAsync<AccessTokenPayload>(token, {
         secret: this.config.get<string>(
           'JWT_SECRET',
           'dev_secret_change_this_in_production',
         ),
       });
+      // Duels are between real accounts: a demo (guest) session is refused.
+      const caller = userFromPayload(payload);
+      if (!caller || caller.isGuest) {
+        client.disconnect(true);
+        return;
+      }
       client.data.userId = payload.sub;
       client.data.contestIds = new Set<string>();
       await client.join(`user:${payload.sub}`);

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
+import { ThrottlerModule } from '@nestjs/throttler';
 import Redis from 'ioredis';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -14,6 +15,7 @@ import { LeaderboardModule } from './leaderboard/leaderboard.module';
 import { RedisModule } from './common/redis/redis.module';
 import { ScoringModule } from './scoring/scoring.module';
 import { ContestModule } from './contest/contest.module';
+import { RunModule } from './run/run.module';
 
 @Module({
   imports: [
@@ -23,6 +25,8 @@ import { ContestModule } from './contest/contest.module';
         ? new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null })
         : { host: 'localhost', port: 6379 },
     }),
+    // Used route by route (see AppThrottlerGuard), not as a blanket limit: a route says how many calls it allows.
+    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 60 }]),
     PrismaModule,
     RedisModule,
     AuthModule,
@@ -33,6 +37,7 @@ import { ContestModule } from './contest/contest.module';
     LeaderboardModule,
     ScoringModule,
     ContestModule,
+    RunModule,
   ],
   controllers: [AppController],
   providers: [AppService],

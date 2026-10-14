@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
+import { ExecutionLimiter, RunPriority } from './execution-limiter';
 
 const LANGUAGE_VERSIONS: Record<string, string> = {
   python: '3.10.0',
@@ -21,21 +22,77 @@ const PYTHON_TREE_CLASS = `class TreeNode:
         self.left = left
         self.right = right`;
 
+/** An operator's setting from the environment, when it is a positive number. */
+function numberFromEnv(name: string): number | undefined {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
 @Injectable()
 export class JudgeService {
-  private readonly pistonUrl = 'http://localhost:2000/api/v2/execute';
+  private readonly logger = new Logger(JudgeService.name);
 
-  constructor(private readonly httpService: HttpService) {}
+  constructor(
+    private readonly httpService: HttpService,
+    private readonly limiter: ExecutionLimiter,
+  ) {}
 
-  async runCode(code: string, language: string, version: string) {
-    const response = await firstValueFrom(
-      this.httpService.post(this.pistonUrl, {
-        language,
-        version,
-        files: [{ content: code }],
-      }),
-    );
-    return response.data;
+  // Where the code runner (Piston) lives. It sits next to the backend and must never be reachable from outside.
+  private get pistonUrl(): string {
+    return `${(process.env.PISTON_URL || 'http://localhost:2000').replace(/\/+$/, '')}/api/v2/execute`;
+  }
+
+  /**
+   * The limits sent along with one run. A request can lower the runner's own
+   * caps, never raise them. Runs started from the page ("Run", demo or not) get
+   * explicit time and memory caps, because without them the runner's default is
+   * unlimited memory and one careless loop could take a small server down.
+   * Graded submissions send nothing of their own and keep the runner's
+   * defaults, exactly as before - unless the operator sets a value in the
+   * environment, which then applies to every run.
+   */
+  private limitsFor(priority: RunPriority) {
+    const interactive = priority !== 'submission';
+    const pick = (name: string, interactiveDefault: number) => numberFromEnv(name) ?? (interactive ? interactiveDefault : undefined);
+    const runTimeout = pick('JUDGE_RUN_TIMEOUT_MS', 3000);
+    const compileTimeout = pick('JUDGE_COMPILE_TIMEOUT_MS', 10_000);
+    return {
+      run_timeout: runTimeout,
+      compile_timeout: compileTimeout,
+      run_cpu_time: pick('JUDGE_RUN_CPU_MS', 3000),
+      compile_cpu_time: pick('JUDGE_COMPILE_CPU_MS', 10_000),
+      run_memory_limit: pick('JUDGE_RUN_MEMORY_BYTES', 128 * 1024 * 1024),
+      compile_memory_limit: pick('JUDGE_COMPILE_MEMORY_BYTES', 384 * 1024 * 1024),
+      // how long to wait for the runner itself, on top of the limits above
+      wait: interactive ? (compileTimeout ?? 0) + (runTimeout ?? 0) + 5000 : undefined,
+    };
+  }
+
+  /**
+   * Runs one program. The call waits for a slot in the ExecutionLimiter, so at
+   * most a couple of programs ever run at the same time, graded submissions are
+   * served before signed-in users' runs, and those before demo (guest) runs.
+   */
+  async runCode(code: string, language: string, version: string, priority: RunPriority = 'submission') {
+    const { wait, ...limits } = this.limitsFor(priority);
+    const interactive = priority !== 'submission';
+    return this.limiter.run(priority, async () => {
+      try {
+        const response = await firstValueFrom(
+          this.httpService.post(
+            this.pistonUrl,
+            { language, version, files: [{ content: code }], ...limits },
+            interactive ? { timeout: wait, maxContentLength: 1_000_000 } : undefined,
+          ),
+        );
+        return response.data;
+      } catch (err) {
+        if (!interactive) throw err; // the grading worker deals with its own failures
+        // Say what failed in the log (never the code or the response body); tell the visitor only that the runner is unavailable.
+        this.logger.error(`Code runner call failed: ${err instanceof Error ? err.message : 'unknown error'}`);
+        throw new ServiceUnavailableException('The code runner is unavailable right now. Please try again shortly.');
+      }
+    });
   }
 
   // ---------- Type inference ----------
@@ -332,10 +389,11 @@ ${paramDecls}
     expectedOutput: any,
     language: string = 'python',
     paramTypes: Record<string, string> = {},
+    priority: RunPriority = 'submission',
   ) {
     const wrapper = this.buildWrapper(language, studentCode, input, paramTypes);
     const version = LANGUAGE_VERSIONS[language];
-    const result = await this.runCode(wrapper, language, version);
+    const result = await this.runCode(wrapper, language, version, priority);
 
     const compileStderr = result.compile?.stderr;
     const runStderr = result.run.stderr;

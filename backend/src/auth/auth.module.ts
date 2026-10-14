@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -6,6 +7,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { GoogleStrategy } from './google.strategy';
+import { GuestPolicyGuard } from './guest-policy.guard';
 
 @Module({
   imports: [
@@ -22,7 +24,13 @@ import { GoogleStrategy } from './google.strategy';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, GoogleStrategy],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    GoogleStrategy,
+    // Global: a demo (guest) session is read-only on every route, wherever the route lives.
+    { provide: APP_GUARD, useClass: GuestPolicyGuard },
+  ],
   exports: [JwtStrategy, PassportModule],
 })
 export class AuthModule {}

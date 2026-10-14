@@ -1,7 +1,9 @@
 import { Injectable, ConflictException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { AccessTokenPayload, AuthUser, GUEST_PREFIX, GUEST_TOKEN_TTL_SECONDS } from './auth-user';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 
@@ -68,9 +70,20 @@ export class AuthService {
     return { accessToken };
   }
 
-  async getProfile(userId: string) {
+  /** A demo session: no account, no database row, two hours, read-only (see GuestPolicyGuard). */
+  async issueGuestToken() {
+    const payload: AccessTokenPayload = { sub: `${GUEST_PREFIX}${randomUUID()}`, role: 'GUEST' };
+    const accessToken = await this.jwtService.signAsync(payload, { expiresIn: GUEST_TOKEN_TTL_SECONDS });
+    return { accessToken, role: 'GUEST' as const, expiresIn: GUEST_TOKEN_TTL_SECONDS };
+  }
+
+  async getProfile(caller: AuthUser) {
+    if (caller.isGuest) {
+      // No account stands behind a demo session: nothing to look up, nothing personal to show.
+      return { userId: caller.userId, email: '', name: 'Demo visitor', isGuest: true, flavorTextEnabled: true };
+    }
     const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: caller.userId },
       select: { id: true, email: true, name: true, flavorTextEnabled: true },
     });
     if (!user) {
