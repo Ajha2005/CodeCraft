@@ -11,6 +11,17 @@ import { getColorForUser } from '../common/color/color.util';
 
 const DAILY_LIMIT = 6;
 
+// Cell allocation reads and writes the same two tables whether it runs on the
+// plain client or inside the award's transaction.
+type CellDb = Pick<PrismaService, 'territoryCell' | 'territoryCellOwnership'>;
+
+interface ClaimedCell {
+  id: string;
+  territoryId: string;
+  row: number;
+  col: number;
+}
+
 @Processor('submissions', { stalledInterval: 300000 })
 export class SubmissionsProcessor extends WorkerHost {
   private readonly logger = new Logger(SubmissionsProcessor.name);
@@ -151,58 +162,60 @@ export class SubmissionsProcessor extends WorkerHost {
       attempts,
     });
 
-    await this.prisma.performanceScore.create({
-      data: {
-        submissionId,
-        difficultyWeight: score.difficultyWeight,
-        correctness: score.correctness,
-        attemptsPenalty: score.attemptsPenalty,
-        timeEfficiency: score.timeEfficiency,
-        totalScore: score.totalScore,
-      },
-    });
-
-    const userScoreAgg = await this.prisma.performanceScore.aggregate({
-      where: { submission: { userId } },
-      _sum: { totalScore: true },
-    });
-    const totalUserScore = userScoreAgg._sum.totalScore ?? 0;
-    await this.leaderboardRedis.updateCollegeScore(userId, totalUserScore);
-    this.territoryGateway.broadcastLeaderboardUpdate({
-      userId,
-      newScore: totalUserScore,
-    });
-
-    await this.prisma.dailyProgress.upsert({
-      where: { userId_date: { userId, date: today } },
-      create: { userId, date: today, qualifyingCount: 1 },
-      update: { qualifyingCount: { increment: 1 } },
-    });
-
     const tier = this.scoringService.getTerritoryTier(score.totalScore);
-    await this.assignTerritory(userId, tier);
+    const locked = await this.contestService.lockedCellIds();
+
+    // The score, the day's count and the cell are one award: they are saved
+    // together or not at all. Saved one by one, a failure part-way (or a worker
+    // dying) left a player with the points but no cell, and the retry was then
+    // turned away as ALREADY_SOLVED, so the cell was never made up.
+    const cell = await this.prisma.$transaction(async (tx) => {
+      await tx.performanceScore.create({
+        data: {
+          submissionId,
+          difficultyWeight: score.difficultyWeight,
+          correctness: score.correctness,
+          attemptsPenalty: score.attemptsPenalty,
+          timeEfficiency: score.timeEfficiency,
+          totalScore: score.totalScore,
+        },
+      });
+
+      await tx.dailyProgress.upsert({
+        where: { userId_date: { userId, date: today } },
+        create: { userId, date: today, qualifyingCount: 1 },
+        update: { qualifyingCount: { increment: 1 } },
+      });
+
+      return this.allocateCell(tx, userId, tier, locked);
+    });
+
+    // Past this point the award is saved. What is left only tells other people
+    // about it, so none of it may undo or hold back the award.
+    if (cell) this.broadcastCell(cell, userId);
+    await this.refreshLeaderboard(userId);
 
     return { awarded: true, reason: null };
   }
 
-  private async assignTerritory(userId: string, tier: string) {
-    // If the user already holds cells in this tier, grow their territory
-    // outward from those cells instead of handing them an unrelated one.
-    const ownedCells = await this.prisma.territoryCellOwnership.findMany({
-      where: { userId, closedAt: null, cell: { territory: { tier } } },
-      include: { cell: true },
-    });
-
-    if (ownedCells.length > 0) {
-      const grown = await this.tryGrowTerritory(
+  private async refreshLeaderboard(userId: string) {
+    try {
+      const userScoreAgg = await this.prisma.performanceScore.aggregate({
+        where: { submission: { userId } },
+        _sum: { totalScore: true },
+      });
+      const totalUserScore = userScoreAgg._sum.totalScore ?? 0;
+      await this.leaderboardRedis.updateCollegeScore(userId, totalUserScore);
+      this.territoryGateway.broadcastLeaderboardUpdate({
         userId,
-        tier,
-        ownedCells.map((o) => o.cell),
+        newScore: totalUserScore,
+      });
+    } catch (err) {
+      this.logger.error(
+        `Leaderboard update failed for user ${userId}; their solve is saved`,
+        err as Error,
       );
-      if (grown) return;
     }
-
-    await this.assignAnyCellInTier(userId, tier);
   }
 
   private isAdjacent(
@@ -212,133 +225,134 @@ export class SubmissionsProcessor extends WorkerHost {
     return Math.abs(a.row - b.row) + Math.abs(a.col - b.col) === 1;
   }
 
-  // Tries to extend the user's existing footprint in this tier by one cell,
-  // touching a cell they already own. Prefers an unclaimed neighbor; if every
-  // neighbor is already someone else's, captures one instead. Returns false
-  // when no owned cell has any neighboring cell at all, so the caller can
-  // fall back to the tier-wide assignment.
-  private async tryGrowTerritory(
+  // Picks the one cell a correct solve earns and writes the ownership, but
+  // announces nothing: the caller broadcasts once the write is committed.
+  // Returns null only when the tier has nothing the player can take.
+  //
+  // A solve adds land before it takes any, so in order of preference:
+  //   1. a free cell touching the cells the player already holds in this tier
+  //   2. any other free cell in the zones they already hold
+  //   3. any free cell in the tier
+  //   4. only once the whole tier is spoken for: a rival's cell touching theirs
+  //   5. or, failing that, any rival's cell in the tier
+  // Cells tied up in a pending or active duel (`locked`) are never taken.
+  private async allocateCell(
+    db: CellDb,
     userId: string,
     tier: string,
-    ownedCells: { territoryId: string; row: number; col: number }[],
-  ): Promise<boolean> {
-    const territoryIds = [...new Set(ownedCells.map((c) => c.territoryId))];
-
-    const candidates = await this.prisma.territoryCell.findMany({
-      where: { territoryId: { in: territoryIds } },
-      include: { ownerships: { where: { closedAt: null } } },
+    locked: string[],
+  ): Promise<ClaimedCell | null> {
+    const owned = await db.territoryCellOwnership.findMany({
+      where: { userId, closedAt: null, cell: { territory: { tier } } },
+      include: { cell: true },
     });
+    const mine = owned.map((o) => o.cell);
 
-    const isNeighborOfOwned = (cell: {
+    // Every cell of the zones they already hold, with its current owner.
+    const nearby = mine.length
+      ? await db.territoryCell.findMany({
+          where: {
+            territoryId: { in: [...new Set(mine.map((c) => c.territoryId))] },
+          },
+          include: { ownerships: { where: { closedAt: null } } },
+          orderBy: [{ row: 'asc' }, { col: 'asc' }],
+        })
+      : [];
+
+    const touchesMine = (cell: {
       territoryId: string;
       row: number;
       col: number;
     }) =>
-      ownedCells.some(
-        (owned) =>
-          owned.territoryId === cell.territoryId &&
-          this.isAdjacent(owned, cell),
+      mine.some(
+        (own) =>
+          own.territoryId === cell.territoryId && this.isAdjacent(own, cell),
       );
 
-    const unclaimedNeighbor = candidates.find(
-      (cell) => cell.ownerships.length === 0 && isNeighborOfOwned(cell),
-    );
-    if (unclaimedNeighbor) {
-      await this.claimCell(userId, tier, unclaimedNeighbor);
-      return true;
-    }
+    const freeNearby = nearby.filter((c) => c.ownerships.length === 0);
+    const free = freeNearby.find(touchesMine) ?? freeNearby[0];
+    if (free) return this.claimCell(db, userId, tier, free);
 
-    // Cells tied up in a pending or active duel are off limits to solo play.
-    const locked = new Set(await this.contestService.lockedCellIds());
-    const contestedNeighbor = candidates.find(
-      (cell) =>
-        isNeighborOfOwned(cell) &&
-        !locked.has(cell.id) &&
-        cell.ownerships.length > 0 &&
-        cell.ownerships[0].userId !== userId,
-    );
-    if (contestedNeighbor) {
-      await this.captureCell(
+    const freeInTier = await db.territoryCell.findFirst({
+      where: { territory: { tier }, ownerships: { none: { closedAt: null } } },
+      orderBy: [{ territory: { name: 'asc' } }, { row: 'asc' }, { col: 'asc' }],
+    });
+    if (freeInTier) return this.claimCell(db, userId, tier, freeInTier);
+
+    const takeable = (cell: (typeof nearby)[number]) =>
+      !locked.includes(cell.id) &&
+      cell.ownerships.length > 0 &&
+      cell.ownerships[0].userId !== userId;
+    const rivalNearby = nearby.find((c) => takeable(c) && touchesMine(c));
+    if (rivalNearby) {
+      return this.captureCell(
+        db,
         userId,
         tier,
-        contestedNeighbor,
-        contestedNeighbor.ownerships[0].id,
+        rivalNearby,
+        rivalNearby.ownerships[0].id,
       );
-      return true;
     }
 
-    return false;
-  }
-
-  // Original tier-wide behavior: any unclaimed cell in the tier, else contest
-  // a cell someone else holds. Used when the user has no foothold yet in this
-  // tier, or their existing cells have no free/contestable neighbor left.
-  private async assignAnyCellInTier(userId: string, tier: string) {
-    const unclaimedCell = await this.prisma.territoryCell.findFirst({
+    // Skip cells the player already owns (no point re-capturing your own cell).
+    const rivalInTier = await db.territoryCell.findFirst({
       where: {
         territory: { tier },
-        ownerships: { none: { closedAt: null } },
-      },
-    });
-
-    if (unclaimedCell) {
-      await this.claimCell(userId, tier, unclaimedCell);
-      return;
-    }
-
-    // Nothing unclaimed anywhere in this tier — contest a cell owned by someone else.
-    // Skip cells the user already owns themselves (no point re-capturing your own cell)
-    // and cells tied up in a pending or active duel.
-    const contested = await this.prisma.territoryCell.findFirst({
-      where: {
-        territory: { tier },
-        id: { notIn: await this.contestService.lockedCellIds() },
+        id: { notIn: locked },
         ownerships: { some: { closedAt: null, NOT: { userId } } },
       },
       include: { ownerships: { where: { closedAt: null } } },
+      orderBy: [{ territory: { name: 'asc' } }, { row: 'asc' }, { col: 'asc' }],
     });
-
-    if (!contested) {
-      this.logger.error(
-        `No contestable ${tier} cells exist — seed data missing or all cells self-owned.`,
+    if (rivalInTier) {
+      return this.captureCell(
+        db,
+        userId,
+        tier,
+        rivalInTier,
+        rivalInTier.ownerships[0].id,
       );
-      return;
     }
 
-    await this.captureCell(userId, tier, contested, contested.ownerships[0].id);
+    this.logger.error(
+      `No cell in ${tier} for user ${userId} to take — seed data missing or every cell is theirs or in a duel.`,
+    );
+    return null;
   }
 
   private async claimCell(
+    db: CellDb,
     userId: string,
     tier: string,
-    cell: { id: string; territoryId: string; row: number; col: number },
-  ) {
-    await this.prisma.territoryCellOwnership.create({
+    cell: ClaimedCell,
+  ): Promise<ClaimedCell> {
+    await db.territoryCellOwnership.create({
       data: { cellId: cell.id, userId, sourceType: 'solve' },
     });
     this.logger.log(
       `Assigned unclaimed ${tier} cell ${cell.id} (territory ${cell.territoryId}) to user ${userId}`,
     );
-    this.broadcastCell(cell, userId);
+    return cell;
   }
 
   private async captureCell(
+    db: CellDb,
     userId: string,
     tier: string,
-    cell: { id: string; territoryId: string; row: number; col: number },
+    cell: ClaimedCell,
     openOwnershipId: string,
-  ) {
-    await this.prisma.territoryCellOwnership.update({
+  ): Promise<ClaimedCell> {
+    await db.territoryCellOwnership.update({
       where: { id: openOwnershipId },
       data: { closedAt: new Date() },
     });
-    await this.prisma.territoryCellOwnership.create({
+    await db.territoryCellOwnership.create({
       data: { cellId: cell.id, userId, sourceType: 'solve' },
     });
     this.logger.log(
       `User ${userId} captured ${tier} cell ${cell.id} (territory ${cell.territoryId})`,
     );
-    this.broadcastCell(cell, userId);
+    return cell;
   }
 
   private broadcastCell(

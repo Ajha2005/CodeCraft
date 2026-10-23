@@ -38,6 +38,19 @@ export function colorForUser(userId: string | null | undefined): string {
   return PALETTE[hashString(userId) % PALETTE.length];
 }
 
+/**
+ * The color to paint a cell. A cell somebody holds is always in its owner's
+ * color: the one the server sent when it is a real player color, otherwise the
+ * one derived from the owner id (the same hash the server uses). A held cell can
+ * therefore never come out as the grey of an unclaimed one, whatever a payload
+ * carried (nothing, a malformed value, or the unclaimed color itself).
+ */
+export function cellOwnerColor(ownerId: string | null | undefined, sentColor?: string | null): string {
+  if (!ownerId) return UNCLAIMED_COLOR;
+  const sent = sentColor?.trim().toLowerCase();
+  return sent && /^#[0-9a-f]{6}$/.test(sent) && sent !== UNCLAIMED_COLOR ? sent : colorForUser(ownerId);
+}
+
 /** Up-to-two-letter initials for avatar badges. */
 export function initialsOf(name: string | null | undefined, fallback = '?'): string {
   const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);

@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useState, useMemo } from 'react';
 import { fetchTerritoryCells } from '../../../lib/api';
 import { getSocket } from '../../../lib/socket';
+import { cellOwnerColor } from '../../../lib/playerColor';
 import type { TerritoryCellDto } from '../../../lib/api';
+
+// Held cells are always drawn in their owner's color (see cellOwnerColor).
+const withOwnerColor = (cell: TerritoryCellDto): TerritoryCellDto => ({
+  ...cell,
+  ownerColor: cellOwnerColor(cell.ownerId, cell.ownerColor),
+});
 
 export function useTerritoryCells() {
   const [cells, setCells] = useState<TerritoryCellDto[]>([]);
@@ -21,7 +28,7 @@ export function useTerritoryCells() {
     fetchTerritoryCells()
       .then((data) => {
         if (cancelled) return;
-        setCells(data);
+        setCells(data.map(withOwnerColor));
         setLoading(false);
       })
       .catch((err: unknown) => {
@@ -37,10 +44,14 @@ export function useTerritoryCells() {
       row: number;
       col: number;
       ownerId: string | null;
-      ownerColor: string;
+      ownerColor?: string;
     }) => {
       setCells((prev) =>
-        prev.map((c) => (c.id === payload.cellId ? { ...c, ownerId: payload.ownerId, ownerColor: payload.ownerColor } : c)),
+        prev.map((c) =>
+          c.id === payload.cellId
+            ? { ...c, ownerId: payload.ownerId, ownerColor: cellOwnerColor(payload.ownerId, payload.ownerColor) }
+            : c,
+        ),
       );
     };
 

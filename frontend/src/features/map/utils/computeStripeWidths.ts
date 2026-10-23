@@ -1,3 +1,5 @@
+import { cellOwnerColor } from '../../../lib/playerColor';
+
 export interface OwnerShare {
   userId: string;
   color: string;
@@ -43,7 +45,7 @@ export function aggregateOwnership(cells: CellOwnershipInput[]): OwnerShare[] {
     if (existing) {
       existing.cellCount += 1;
     } else {
-      counts.set(cell.ownerId, { color: cell.ownerColor ?? '#999999', cellCount: 1 });
+      counts.set(cell.ownerId, { color: cellOwnerColor(cell.ownerId, cell.ownerColor), cellCount: 1 });
     }
   }
   return Array.from(counts.entries()).map(([userId, v]) => ({
