@@ -116,7 +116,7 @@ A solve never takes another player's cell, so each point-earning solve needs a f
 
     cd ~/CodeCraft/backend && DATABASE_URL="$(tr '\0' '\n' < /proc/$(pm2 pid codecraft-backend)/environ | grep '^DATABASE_URL=' | cut -d= -f2-)" npx tsx prisma/check-capacity.ts
 
-If it says NOT ENOUGH, the grid needs a smaller cell size (`generate-grid.ts` now defaults to 18, about 11,100 cells; 18.5 gives about 10,600). Rebuilding the grid erases who holds which cell (`reset-grid.ts`), so do it before launch, not after players have cells.
+If it says NOT ENOUGH, the grid needs a smaller cell size (`generate-grid.ts` now defaults to 18, about 11,100 cells; 18.5 gives about 10,600). Rebuilding the grid erases who holds which cell (`reset-grid.ts`). After `generate-grid.ts`, run `npx tsx prisma/backfill-cells.ts` (stop the backend first): it gives every past scored solve a fresh cell, oldest first, so players keep one cell per solved problem. It is safe to run twice. Take an RDS snapshot before rebuilding.
 
 ## Known code-level gotchas (already fixed on main, watch for regressions)
 - src/common/redis/redis.module.ts - was hardcoded to localhost:6379; must read process.env.REDIS_URL

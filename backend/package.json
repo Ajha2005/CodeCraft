@@ -9,6 +9,7 @@
     "seed": "tsx prisma/seed.ts",
     "reset-grid": "tsx prisma/reset-grid.ts",
     "check-capacity": "tsx prisma/check-capacity.ts",
+    "backfill-cells": "tsx prisma/backfill-cells.ts",
     "build": "nest build",
     "postbuild": "mkdir -p dist/generated/prisma && cp generated/prisma/package.json dist/generated/prisma/package.json",
     "postgenerate": "echo '{\"type\": \"commonjs\"}' > generated/prisma/package.json",
