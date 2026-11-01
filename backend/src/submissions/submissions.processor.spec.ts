@@ -42,12 +42,12 @@ function setup() {
   );
   type Priv = {
     handleAcceptedSubmission(s: string, u: string, p: number): Promise<{ awarded: boolean; reason: string | null }>;
-    allocateCell(db: unknown, u: string, tier: string, locked: string[]): Promise<Cell | null>;
+    allocateCell(db: unknown, u: string, tier: string): Promise<Cell | null>;
   };
   const priv = processor as unknown as Priv;
   // a correct solve of an Easy problem: scores into the OUTPOST tier
   const accept = (userId: string) => priv.handleAcceptedSubmission('s1', userId, 1);
-  const allocate = (userId: string, tier = 'OUTPOST', locked: string[] = []) => priv.allocateCell(tx, userId, tier, locked);
+  const allocate = (userId: string, tier = 'OUTPOST') => priv.allocateCell(tx, userId, tier);
   return { prisma, tx, territoryGateway, leaderboardRedis, contestService, accept, allocate };
 }
 
@@ -72,30 +72,19 @@ describe('SubmissionsProcessor territory broadcasts', () => {
     });
   });
 
-  it("tells the map when a rival's cell is captured", async () => {
+  it("never takes a rival's cell: with the tier full it hands out free ground elsewhere", async () => {
     const { tx, territoryGateway, accept } = setup();
     tx.territoryCell.findFirst
-      .mockResolvedValueOnce(null) // nothing unclaimed left in the tier
-      .mockResolvedValueOnce({ id: 'c2', territoryId: 't1', row: 3, col: 4, ownerships: [{ id: 'o9', userId: 'u2' }] });
+      .mockResolvedValueOnce(null) // nothing free left in the tier
+      .mockResolvedValueOnce({ id: 'c7', territoryId: 't2', row: 1, col: 1 }); // free in the next tier
 
     await accept('u1');
 
-    expect(tx.territoryCellOwnership.update).toHaveBeenCalledWith({
-      where: { id: 'o9' },
-      data: { closedAt: expect.any(Date) },
-    });
-    // a taken cell is marked as captured, against the solve that took it
+    expect(tx.territoryCellOwnership.update).not.toHaveBeenCalled();
     expect(tx.territoryCellOwnership.create).toHaveBeenCalledWith({
-      data: { cellId: 'c2', userId: 'u1', sourceType: 'solve', submissionId: 's1', captured: true },
+      data: { cellId: 'c7', userId: 'u1', sourceType: 'solve', submissionId: 's1', captured: false },
     });
-    expect(territoryGateway.broadcastCellUpdate).toHaveBeenCalledWith({
-      territoryId: 't1',
-      cellId: 'c2',
-      row: 3,
-      col: 4,
-      ownerId: 'u1',
-      ownerColor: colorFromIndex(3),
-    });
+    expect(territoryGateway.broadcastCellUpdate).toHaveBeenCalledWith(expect.objectContaining({ cellId: 'c7', ownerId: 'u1' }));
   });
 });
 
@@ -140,34 +129,9 @@ describe('SubmissionsProcessor award', () => {
   });
 });
 
-describe('SubmissionsProcessor and cells tied up in a duel', () => {
-  it('does not look for a cell to capture among the ones in a pending or active duel', async () => {
-    const { tx, allocate } = setup();
-    tx.territoryCell.findFirst.mockResolvedValue(null); // nothing free, nothing capturable
-
-    await allocate('u1', 'OUTPOST', ['staked-1', 'target-2']);
-
-    expect(tx.territoryCell.findFirst).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ where: expect.objectContaining({ id: { notIn: ['staked-1', 'target-2'] } }) }),
-    );
-    expect(tx.territoryCellOwnership.update).not.toHaveBeenCalled();
-  });
-
-  it('reads the duel-locked cells once, before the award transaction opens', async () => {
-    const { prisma, contestService, accept } = setup();
-    contestService.lockedCellIds.mockImplementation(async () => {
-      expect(prisma.$transaction).not.toHaveBeenCalled();
-      return [];
-    });
-
-    await accept('u1');
-
-    expect(contestService.lockedCellIds).toHaveBeenCalledTimes(1);
-  });
-
+describe('SubmissionsProcessor and other players\' cells', () => {
   // u1 holds (0,0); the cell next to it, (0,1), is a rival's
-  const growSetup = (locked: string[]) => {
+  const rivalNextDoor = () => {
     const s = setup();
     s.tx.territoryCellOwnership.findMany.mockResolvedValue([{ cell: { id: 'c0', territoryId: 't1', row: 0, col: 0 } }]);
     s.tx.territoryCell.findMany.mockResolvedValue([
@@ -175,27 +139,47 @@ describe('SubmissionsProcessor and cells tied up in a duel', () => {
       { id: 'c1', territoryId: 't1', row: 0, col: 1, ownerships: [{ id: 'o1', userId: 'u2' }] },
     ]);
     s.tx.territoryCell.findFirst.mockResolvedValue(null);
-    return { ...s, locked };
+    return s;
   };
 
-  it('does not grow into a neighbouring rival cell that is tied up in a duel', async () => {
-    const { tx, allocate, locked } = growSetup(['c1']);
+  it('never grows into a neighbouring rival cell', async () => {
+    const { tx, allocate } = rivalNextDoor();
 
-    await allocate('u1', 'OUTPOST', locked);
+    expect(await allocate('u1')).toBeNull();
 
     expect(tx.territoryCellOwnership.update).not.toHaveBeenCalled();
     expect(tx.territoryCellOwnership.create).not.toHaveBeenCalled();
   });
 
-  it('still captures that neighbour once it is free of any duel', async () => {
-    const { tx, allocate, locked } = growSetup([]);
+  it('only ever looks for cells nobody holds', async () => {
+    const { tx, allocate } = setup();
+    tx.territoryCell.findFirst.mockResolvedValue(null);
 
-    await allocate('u1', 'OUTPOST', locked);
+    await allocate('u1', 'OUTPOST');
 
-    expect(tx.territoryCellOwnership.update).toHaveBeenCalledWith({
-      where: { id: 'o1' },
-      data: { closedAt: expect.any(Date) },
-    });
+    for (const [query] of tx.territoryCell.findFirst.mock.calls) {
+      expect(query.where.ownerships).toEqual({ none: { closedAt: null } });
+    }
+  });
+
+  it('asks for the nearest other tiers next, lower ones first', async () => {
+    const { tx, allocate } = setup();
+    tx.territoryCell.findFirst.mockResolvedValue(null);
+
+    await allocate('u1', 'STRONGHOLD');
+
+    const asked = tx.territoryCell.findFirst.mock.calls.map(([q]) => q.where.territory.tier);
+    expect(asked).toEqual(['STRONGHOLD', 'SETTLEMENT', 'CITADEL', 'OUTPOST']);
+  });
+
+  it('still awards the score when no cell is left anywhere, just without a cell', async () => {
+    const { tx, territoryGateway, accept } = setup();
+    tx.territoryCell.findFirst.mockResolvedValue(null);
+
+    await expect(accept('u1')).resolves.toEqual({ awarded: true, reason: null });
+
+    expect(tx.performanceScore.create).toHaveBeenCalled();
+    expect(territoryGateway.broadcastCellUpdate).not.toHaveBeenCalled();
   });
 });
 
@@ -243,16 +227,13 @@ describe('SubmissionsProcessor: a solve adds land before it takes any', () => {
     expect(tx.territoryCellOwnership.update).not.toHaveBeenCalled();
   });
 
-  it('takes a rival cell only once nothing in the tier is free, and prefers one next door', async () => {
+  it('leaves rival cells alone even when nothing else is free', async () => {
     const { tx, allocate } = withFootprint([held('c0', 0, 0), rival('far', 3, 3), rival('next', 0, 1)]);
 
-    const cell = await allocate('u1');
+    expect(await allocate('u1')).toBeNull();
 
-    expect(cell?.id).toBe('next');
-    expect(tx.territoryCellOwnership.update).toHaveBeenCalledWith({
-      where: { id: 'o-next' },
-      data: { closedAt: expect.any(Date) },
-    });
+    expect(tx.territoryCellOwnership.update).not.toHaveBeenCalled();
+    expect(tx.territoryCellOwnership.create).not.toHaveBeenCalled();
   });
 
   it('gives a player with no foothold yet a free cell, never a rival one', async () => {
@@ -263,7 +244,7 @@ describe('SubmissionsProcessor: a solve adds land before it takes any', () => {
     expect(s.tx.territoryCellOwnership.update).not.toHaveBeenCalled();
   });
 
-  it('says so, and awards no cell, when the tier has nothing the player can take', async () => {
+  it('awards no cell when nothing on the map is free', async () => {
     const s = setup();
     s.tx.territoryCell.findFirst.mockResolvedValue(null);
 

@@ -24,7 +24,7 @@ export function CellReveal({ cell, color, flavor = true }: CellRevealProps) {
     return (
       <p className="mt-3 flex items-start gap-2 border-t border-white/10 pt-3 text-sm text-slate-400">
         <Icon name="lock" className="mt-0.5 h-4 w-4 shrink-0" />
-        No cell could be awarded this time — every cell of this tier is held or tied up in a duel.
+        Your score counted, but every cell on the map is taken right now, so no cell could be awarded this time.
       </p>
     );
   }

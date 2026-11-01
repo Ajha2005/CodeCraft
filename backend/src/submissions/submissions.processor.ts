@@ -22,6 +22,18 @@ interface ClaimedCell {
   col: number;
 }
 
+const TIER_ORDER = ['OUTPOST', 'SETTLEMENT', 'STRONGHOLD', 'CITADEL'];
+
+/** The tier itself, then the others by how near they are, lower tiers before higher ones. */
+function tiersByCloseness(tier: string): string[] {
+  const at = Math.max(0, TIER_ORDER.indexOf(tier));
+  return [...TIER_ORDER].sort((a, b) => {
+    const da = Math.abs(TIER_ORDER.indexOf(a) - at);
+    const db = Math.abs(TIER_ORDER.indexOf(b) - at);
+    return da - db || TIER_ORDER.indexOf(a) - TIER_ORDER.indexOf(b);
+  });
+}
+
 @Processor('submissions', { stalledInterval: 300000 })
 export class SubmissionsProcessor extends WorkerHost {
   private readonly logger = new Logger(SubmissionsProcessor.name);
@@ -166,7 +178,6 @@ export class SubmissionsProcessor extends WorkerHost {
     });
 
     const tier = this.scoringService.getTerritoryTier(score.totalScore);
-    const locked = await this.contestService.lockedCellIds();
 
     // The score, the day's count and the cell are one award: they are saved
     // together or not at all. Saved one by one, a failure part-way (or a worker
@@ -190,7 +201,7 @@ export class SubmissionsProcessor extends WorkerHost {
         update: { qualifyingCount: { increment: 1 } },
       });
 
-      return this.allocateCell(tx, userId, tier, locked, submissionId);
+      return this.allocateCell(tx, userId, tier, submissionId);
     });
 
     // Past this point the award is saved. What is left only tells other people
@@ -230,20 +241,20 @@ export class SubmissionsProcessor extends WorkerHost {
 
   // Picks the one cell a correct solve earns and writes the ownership, but
   // announces nothing: the caller broadcasts once the write is committed.
-  // Returns null only when the tier has nothing the player can take.
   //
-  // A solve adds land before it takes any, so in order of preference:
+  // A solve only ever hands out ground nobody holds: it never takes a cell from
+  // another player (cells change hands only through a duel both sides accepted),
+  // so every player's cells are theirs alone. In order of preference:
   //   1. a free cell touching the cells the player already holds in this tier
   //   2. any other free cell in the zones they already hold
   //   3. any free cell in the tier
-  //   4. only once the whole tier is spoken for: a rival's cell touching theirs
-  //   5. or, failing that, any rival's cell in the tier
-  // Cells tied up in a pending or active duel (`locked`) are never taken.
+  //   4. when the tier is full, a free cell in the nearest other tier (lower
+  //      tiers first), so the solve still earns ground
+  // Returns null only when no cell on the whole map is free.
   private async allocateCell(
     db: CellDb,
     userId: string,
     tier: string,
-    locked: string[],
     submissionId?: string,
   ): Promise<ClaimedCell | null> {
     const owned = await db.territoryCellOwnership.findMany({
@@ -277,51 +288,25 @@ export class SubmissionsProcessor extends WorkerHost {
     const free = freeNearby.find(touchesMine) ?? freeNearby[0];
     if (free) return this.claimCell(db, userId, tier, free, submissionId);
 
-    const freeInTier = await db.territoryCell.findFirst({
-      where: { territory: { tier }, ownerships: { none: { closedAt: null } } },
-      orderBy: [{ territory: { name: 'asc' } }, { row: 'asc' }, { col: 'asc' }],
-    });
-    if (freeInTier) return this.claimCell(db, userId, tier, freeInTier, submissionId);
-
-    const takeable = (cell: (typeof nearby)[number]) =>
-      !locked.includes(cell.id) &&
-      cell.ownerships.length > 0 &&
-      cell.ownerships[0].userId !== userId;
-    const rivalNearby = nearby.find((c) => takeable(c) && touchesMine(c));
-    if (rivalNearby) {
-      return this.captureCell(
-        db,
-        userId,
-        tier,
-        rivalNearby,
-        rivalNearby.ownerships[0].id,
-        submissionId,
-      );
-    }
-
-    // Skip cells the player already owns (no point re-capturing your own cell).
-    const rivalInTier = await db.territoryCell.findFirst({
-      where: {
-        territory: { tier },
-        id: { notIn: locked },
-        ownerships: { some: { closedAt: null, NOT: { userId } } },
-      },
-      include: { ownerships: { where: { closedAt: null } } },
-      orderBy: [{ territory: { name: 'asc' } }, { row: 'asc' }, { col: 'asc' }],
-    });
-    if (rivalInTier) {
-      return this.captureCell(
-        db,
-        userId,
-        tier,
-        rivalInTier,
-        rivalInTier.ownerships[0].id,
-        submissionId,
-      );
+    for (const candidate of tiersByCloseness(tier)) {
+      const freeInTier = await db.territoryCell.findFirst({
+        where: {
+          territory: { tier: candidate },
+          ownerships: { none: { closedAt: null } },
+        },
+        orderBy: [
+          { territory: { name: 'asc' } },
+          { row: 'asc' },
+          { col: 'asc' },
+        ],
+      });
+      if (freeInTier) {
+        return this.claimCell(db, userId, candidate, freeInTier, submissionId);
+      }
     }
 
     this.logger.error(
-      `No cell in ${tier} for user ${userId} to take — seed data missing or every cell is theirs or in a duel.`,
+      `No free cell anywhere for user ${userId} (wanted ${tier}) — every cell is taken or seed data is missing.`,
     );
     return null;
   }
@@ -338,27 +323,6 @@ export class SubmissionsProcessor extends WorkerHost {
     });
     this.logger.log(
       `Assigned unclaimed ${tier} cell ${cell.id} (territory ${cell.territoryId}) to user ${userId}`,
-    );
-    return cell;
-  }
-
-  private async captureCell(
-    db: CellDb,
-    userId: string,
-    tier: string,
-    cell: ClaimedCell,
-    openOwnershipId: string,
-    submissionId?: string,
-  ): Promise<ClaimedCell> {
-    await db.territoryCellOwnership.update({
-      where: { id: openOwnershipId },
-      data: { closedAt: new Date() },
-    });
-    await db.territoryCellOwnership.create({
-      data: { cellId: cell.id, userId, sourceType: 'solve', submissionId, captured: true },
-    });
-    this.logger.log(
-      `User ${userId} captured ${tier} cell ${cell.id} (territory ${cell.territoryId})`,
     );
     return cell;
   }
