@@ -49,6 +49,7 @@ const PATHS = {
   play: 'M6 4l14 8-14 8z',
   bell: 'M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7zM10 20a2 2 0 0 0 4 0',
   zap: 'M13 2 3 14h9l-1 8 10-12h-9z',
+  flask: 'M9 3h6M10 3v6L4 19a2 2 0 0 0 2 3h12a2 2 0 0 0 2-3l-6-10V3M7 15h10',
 } as const;
 
 export type IconName = keyof typeof PATHS;

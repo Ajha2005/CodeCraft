@@ -2,6 +2,7 @@ import { Injectable, ConflictException, UnauthorizedException } from '@nestjs/co
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
+import { colorFromIndex } from '../common/color/color.util';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 
@@ -71,7 +72,7 @@ export class AuthService {
   async getProfile(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, name: true, flavorTextEnabled: true },
+      select: { id: true, email: true, name: true, flavorTextEnabled: true, colorIndex: true },
     });
     if (!user) {
       throw new UnauthorizedException('User not found');
@@ -81,6 +82,7 @@ export class AuthService {
       email: user.email,
       name: user.name,
       flavorTextEnabled: user.flavorTextEnabled,
+      color: colorFromIndex(user.colorIndex),
     };
   }
 

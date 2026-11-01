@@ -1,6 +1,5 @@
 import { useTerritoryLeaderboard } from './hooks/useLeaderboard';
-import { useAuth } from '../../auth/AuthContext';
-import { colorForUser } from '../../lib/playerColor';
+import { useAuth } from '../../auth/useAuth';
 import type { TerritoryDto } from '../../types/territory';
 
 const MEDAL = ['🥇', '🥈', '🥉'];
@@ -32,7 +31,7 @@ export function TerritoryLeaderboard({ territory }: TerritoryLeaderboardProps) {
     <ol className="space-y-1">
       {entries.map((entry, i) => {
         const me = entry.userId === user?.userId;
-        const color = colorForUser(entry.userId);
+        const color = entry.color;
         return (
           <li
             key={entry.userId}

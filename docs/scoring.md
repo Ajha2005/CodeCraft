@@ -28,6 +28,10 @@ The scoring formula must be simple enough to explain in a viva, while still rewa
 | 35 – 55 | Stronghold | Medium region, visually distinct color. |
 | 55+ | Citadel | Largest available region; reserved for Hard problems solved efficiently. |
 
+Every correct solve that earns points is recorded against the one cell it won (zone, row, column, and whether it was taken from a rival). The scoring tab shows that cell next to the solve, and the result panel shows it the moment the solve is accepted. Each player has their own unique colour, stored as a sequence number on the user, and every cell they hold is painted in it.
+
+**Demo mode.** Visitors without a Thapar account can try the problems with no login: submissions are judged and scored by the same formula, but nothing is saved on the server, so they earn no cell and no leaderboard place. Their score is kept in the browser.
+
 A student's total map presence is the sum of currently-owned territories, not a single running score — the leaderboard reflects cumulative territorial control, while each individual solve is scored independently against this formula.
 
 ## Daily Limit Policy

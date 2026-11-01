@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { getColorForUser, UNCLAIMED_COLOR } from '../common/color/color.util';
+import { colorFromIndex, UNCLAIMED_COLOR } from '../common/color/color.util';
 
 export interface TerritoryDto {
   id: string;
@@ -29,6 +29,7 @@ export class TerritoryService {
       include: {
         ownerships: {
           where: { closedAt: null },
+          include: { user: { select: { colorIndex: true } } },
         },
       },
     });
@@ -41,7 +42,7 @@ export class TerritoryService {
         id: t.id,
         name: t.name,
         svgPathId: t.svgPathId,
-        ownerColor: ownerId ? getColorForUser(ownerId) : UNCLAIMED_COLOR,
+        ownerColor: currentOwnership ? colorFromIndex(currentOwnership.user.colorIndex) : UNCLAIMED_COLOR,
         ownerId,
         tier: t.tier,
       };
@@ -53,6 +54,7 @@ export class TerritoryService {
       include: {
         ownerships: {
           where: { closedAt: null },
+          include: { user: { select: { colorIndex: true } } },
         },
       },
     });
@@ -67,7 +69,7 @@ export class TerritoryService {
         row: c.row,
         col: c.col,
         ownerId,
-        ownerColor: ownerId ? getColorForUser(ownerId) : UNCLAIMED_COLOR,
+        ownerColor: current ? colorFromIndex(current.user.colorIndex) : UNCLAIMED_COLOR,
       };
     });
   }

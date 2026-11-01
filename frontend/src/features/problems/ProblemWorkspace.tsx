@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import confetti from 'canvas-confetti';
-import { useAuth } from '../../auth/AuthContext';
+import { useAuth } from '../../auth/useAuth';
 import { usePlayerStats } from '../../lib/playerStatsContext';
 import { useMediaQuery } from '../../lib/useMediaQuery';
 import { sfx } from '../../lib/sfx';
@@ -12,7 +12,20 @@ import { Icon } from '../../components/ui/Icon';
 import { LevelBadge } from '../../components/ui/LevelBadge';
 import { Pips } from '../../components/ui/Pips';
 import { XPBar } from '../../components/ui/XPBar';
-import { fetchProblem, fetchScore, fetchSubmission, postSubmission, type ProblemDetail, type ScoreResult, type SubmissionResult } from './api';
+import { CellReveal } from '../../components/CellReveal';
+import { recordDemoSolve, startDemoAttempt } from '../../lib/demoStore';
+import {
+  fetchDemoSubmission,
+  fetchProblem,
+  fetchScore,
+  fetchSubmission,
+  postDemoSubmission,
+  postSubmission,
+  type DemoSubmissionResult,
+  type ProblemDetail,
+  type ScoreResult,
+  type SubmissionResult,
+} from './api';
 import { DifficultyBadge } from './DifficultyBadge';
 import { difficultyMeta, padId } from './difficulty';
 import { loadDraft, loadLanguage, saveDraft, saveLanguage, type Language } from './drafts';
@@ -113,7 +126,7 @@ export function ProblemWorkspace(props: WorkspaceProps) {
 }
 
 function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: WorkspaceProps & { problem: ProblemDetail }) {
-  const { user, token, flavorTextEnabled } = useAuth();
+  const { user, token, isDemo, flavorTextEnabled } = useAuth();
   const { stats, refresh: refreshStats } = usePlayerStats();
   const fineKeyboard = useMediaQuery('(pointer: fine)');
   const userId = user?.userId ?? 'anon';
@@ -212,7 +225,7 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
     });
   }
 
-  function settle(data: SubmissionResult) {
+  function settle(data: SubmissionResult, demoScore: ScoreResult | null = null) {
     const accepted = data.verdict === 'AC';
     catalog.markStatus(problem.id, accepted ? 'AC' : 'ATTEMPTED');
     const streak = recordVerdict(accepted);
@@ -221,13 +234,39 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
         sfx.play('win');
         confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
       }
-      fetchScore(token, data.id)
-        .then((s) => {
-          if (mountedRef.current) setScore(s);
-        })
-        .catch(() => {})
-        // the score is final now: refresh level/XP/streak (and the level-up celebration)
-        .finally(() => void refreshStats());
+      if (isDemo) {
+        // Demo scores live on this device. A problem only ever scores once, and never earns a cell.
+        const counted = demoScore
+          ? recordDemoSolve({
+              problemId: problem.id,
+              title: problem.title,
+              difficultyLevel: problem.difficultyLevel,
+              difficultyWeight: demoScore.difficultyWeight,
+              attemptsPenalty: demoScore.attemptsPenalty,
+              timeEfficiency: demoScore.timeEfficiency,
+              totalScore: demoScore.totalScore,
+              createdAt: new Date().toISOString(),
+            })
+          : false;
+        if (mountedRef.current) {
+          setResult({ ...data, pointsAwarded: counted, noPointsReason: counted ? null : 'ALREADY_SOLVED' });
+          setScore(counted ? demoScore : null);
+        }
+        void refreshStats();
+      } else {
+        void (async () => {
+          let won: ScoreResult['cell'] = null;
+          try {
+            const s = await fetchScore(token, data.id);
+            won = s?.cell ?? null;
+            if (mountedRef.current) setScore(s);
+          } catch {
+            // no score row means nothing was awarded; the verdict panel already says why
+          }
+          // the score is final now: refresh level/XP/streak/cells (and any celebration it earns)
+          await refreshStats({ cell: won });
+        })();
+      }
       if (streak >= 2 && flavorTextEnabled) push(streakToast(streak), 'success');
     } else if (mountedRef.current) {
       sfx.play('error');
@@ -263,12 +302,13 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
       inFlight = true;
       polls += 1;
       try {
-        const data = await fetchSubmission(token, submissionId);
+        const data: DemoSubmissionResult | SubmissionResult = isDemo ? await fetchDemoSubmission(submissionId) : await fetchSubmission(token, submissionId);
+        const demoScore = 'score' in data ? (data.score as ScoreResult | null) : null;
         failures = 0;
         if (mountedRef.current) setResult(data);
         if (data.verdict !== 'PENDING') {
           stop();
-          settle(data);
+          settle(data, demoScore);
         } else if (polls >= MAX_POLLS) {
           giveUp();
         }
@@ -283,6 +323,7 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
 
   function handleSubmit() {
     if (!user || busyRef.current) return;
+    if (!isDemo && !token) return;
     busyRef.current = true;
     sfx.play('click');
     setSubmitting(true);
@@ -292,7 +333,10 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
 
     // Read the editor itself: React state can trail the last keystroke by a frame.
     const source = editorRef.current?.getValue() ?? code;
-    postSubmission(token, { userId: user.userId, problemId: problem.id, language, code: source })
+    const posted: Promise<SubmissionResult> = isDemo
+      ? postDemoSubmission({ problemId: problem.id, language, code: source, attempts: startDemoAttempt(problem.id) })
+      : postSubmission(token, { problemId: problem.id, language, code: source });
+    posted
       .then((data) => {
         if (mountedRef.current) setResult(data);
         pollSubmission(data.id);
@@ -493,12 +537,25 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
                   </div>
                   <XPBar pct={stats.level.pct} className="mt-1.5" />
                   <p className="mt-1.5 text-xs text-slate-500">
-                    {flavorTextEnabled ? 'Territory captured · ' : ''}difficulty {score.difficultyWeight}
+                    difficulty {score.difficultyWeight}
                     <span className="text-rose-400"> · retries −{score.attemptsPenalty.toFixed(1)}</span>
                     <span className="text-emerald-400"> · speed +{score.timeEfficiency.toFixed(1)}</span>
                   </p>
                 </div>
               </div>
+            )}
+
+            {result.verdict === 'AC' && score && !isDemo && (
+              <CellReveal cell={score.cell ?? null} color={user?.color ?? '#22d3ee'} flavor={flavorTextEnabled} />
+            )}
+
+            {result.verdict === 'AC' && score && isDemo && (
+              <p className="mt-3 flex items-start gap-2 border-t border-white/10 pt-3 text-sm text-slate-300">
+                <Icon name="flask" className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+                <span>
+                  Demo score saved on this device. Demo players don’t claim territory — sign in with a Thapar ID to win a cell for every solve.
+                </span>
+              </p>
             )}
 
             {next && (

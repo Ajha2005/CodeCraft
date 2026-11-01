@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { TIER_META } from '../../../lib/tiers';
-import { colorForUser } from '../../../lib/playerColor';
 import { TierBadge } from '../../../components/ui/TierBadge';
 import { Icon } from '../../../components/ui/Icon';
-import { useAuth } from '../../../auth/AuthContext';
+import { useAuth } from '../../../auth/useAuth';
 import { EMPTY_ZONE_TAP } from '../../../lib/flavorText';
 import type { TerritoryDto } from '../../../types/territory';
 import { TerritoryLeaderboard } from '../TerritoryLeaderboard';
@@ -85,7 +84,7 @@ export function ZonePanel({ summary, territory, distanceMeters, here, pinned, on
               const me = s.userId === user?.userId;
               return (
                 <li key={s.userId} className="flex items-center gap-2 text-xs">
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: s.color || colorForUser(s.userId) }} />
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: s.color }} />
                   <span className="min-w-0 flex-1 truncate text-slate-200">{me ? 'You' : (names.get(s.userId) ?? 'Another commander')}</span>
                   <span className="font-mono font-bold tabular-nums text-slate-400">
                     {s.cellCount} · {Math.round((s.cellCount / Math.max(1, summary.total)) * 100)}%

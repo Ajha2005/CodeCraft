@@ -17,6 +17,9 @@ model User {
   googleId          String?  @unique
   name              String?
   flavorTextEnabled Boolean  @default(true)
+  // Sequence number handed out once per player. The map colour is derived from
+  // it (see common/color/color.util.ts), so no two players ever share one.
+  colorIndex        Int      @unique @default(autoincrement())
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -68,6 +71,7 @@ model Submission {
 
   performanceScore PerformanceScore?
   bestForParticipant ContestParticipant?
+  cellOwnerships TerritoryCellOwnership[]
 
   @@index([userId])
   @@index([problemId])
@@ -154,14 +158,20 @@ model TerritoryCellOwnership {
   cellId     String
   userId     String
   sourceType String
+  // The solve that earned this cell (null for contest wins and older rows), and
+  // whether it was taken from a rival rather than claimed free.
+  submissionId String?
+  captured     Boolean  @default(false)
   createdAt  DateTime  @default(now())
   closedAt   DateTime?
 
-  cell TerritoryCell @relation(fields: [cellId], references: [id])
-  user User          @relation(fields: [userId], references: [id])
+  cell       TerritoryCell @relation(fields: [cellId], references: [id])
+  user       User          @relation(fields: [userId], references: [id])
+  submission Submission?   @relation(fields: [submissionId], references: [id])
 
   @@index([cellId])
   @@index([userId])
+  @@index([submissionId])
   @@map("territory_cell_ownerships")
 }
 

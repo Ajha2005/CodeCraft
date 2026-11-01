@@ -7,9 +7,9 @@ import { ScoringService } from '../scoring/scoring.service';
 import { LeaderboardRedisService } from '../common/redis/leaderboard-redis.service';
 import { TerritoryGateway } from '../territory/territory.gateway';
 import { ContestService } from '../contest/contest.service';
-import { getColorForUser } from '../common/color/color.util';
-
-const DAILY_LIMIT = 6;
+import { lookupUserColor } from '../common/color/color.util';
+import { campusDay } from '../common/date/day.util';
+import { DAILY_LIMIT } from '../scoring/scoring.constants';
 
 // Cell allocation reads and writes the same two tables whether it runs on the
 // plain client or inside the award's transaction.
@@ -53,6 +53,10 @@ export class SubmissionsProcessor extends WorkerHost {
       testCases,
       language,
     );
+
+    // A demo run has no account behind it: nothing is saved and no cell is
+    // awarded. The result stays on the job for the demo endpoint to read.
+    if (job.data.demo) return judgeResult;
 
     // Contest submissions never touch the daily-limit/territory-tier scoring
     // path below — winning a contest transfers the contested cell directly,
@@ -137,8 +141,7 @@ export class SubmissionsProcessor extends WorkerHost {
       return { awarded: false, reason: 'ALREADY_SOLVED' };
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = campusDay();
 
     const progress = await this.prisma.dailyProgress.findUnique({
       where: { userId_date: { userId, date: today } },
@@ -187,12 +190,12 @@ export class SubmissionsProcessor extends WorkerHost {
         update: { qualifyingCount: { increment: 1 } },
       });
 
-      return this.allocateCell(tx, userId, tier, locked);
+      return this.allocateCell(tx, userId, tier, locked, submissionId);
     });
 
     // Past this point the award is saved. What is left only tells other people
     // about it, so none of it may undo or hold back the award.
-    if (cell) this.broadcastCell(cell, userId);
+    if (cell) await this.broadcastCell(cell, userId);
     await this.refreshLeaderboard(userId);
 
     return { awarded: true, reason: null };
@@ -241,6 +244,7 @@ export class SubmissionsProcessor extends WorkerHost {
     userId: string,
     tier: string,
     locked: string[],
+    submissionId?: string,
   ): Promise<ClaimedCell | null> {
     const owned = await db.territoryCellOwnership.findMany({
       where: { userId, closedAt: null, cell: { territory: { tier } } },
@@ -271,13 +275,13 @@ export class SubmissionsProcessor extends WorkerHost {
 
     const freeNearby = nearby.filter((c) => c.ownerships.length === 0);
     const free = freeNearby.find(touchesMine) ?? freeNearby[0];
-    if (free) return this.claimCell(db, userId, tier, free);
+    if (free) return this.claimCell(db, userId, tier, free, submissionId);
 
     const freeInTier = await db.territoryCell.findFirst({
       where: { territory: { tier }, ownerships: { none: { closedAt: null } } },
       orderBy: [{ territory: { name: 'asc' } }, { row: 'asc' }, { col: 'asc' }],
     });
-    if (freeInTier) return this.claimCell(db, userId, tier, freeInTier);
+    if (freeInTier) return this.claimCell(db, userId, tier, freeInTier, submissionId);
 
     const takeable = (cell: (typeof nearby)[number]) =>
       !locked.includes(cell.id) &&
@@ -291,6 +295,7 @@ export class SubmissionsProcessor extends WorkerHost {
         tier,
         rivalNearby,
         rivalNearby.ownerships[0].id,
+        submissionId,
       );
     }
 
@@ -311,6 +316,7 @@ export class SubmissionsProcessor extends WorkerHost {
         tier,
         rivalInTier,
         rivalInTier.ownerships[0].id,
+        submissionId,
       );
     }
 
@@ -325,9 +331,10 @@ export class SubmissionsProcessor extends WorkerHost {
     userId: string,
     tier: string,
     cell: ClaimedCell,
+    submissionId?: string,
   ): Promise<ClaimedCell> {
     await db.territoryCellOwnership.create({
-      data: { cellId: cell.id, userId, sourceType: 'solve' },
+      data: { cellId: cell.id, userId, sourceType: 'solve', submissionId, captured: false },
     });
     this.logger.log(
       `Assigned unclaimed ${tier} cell ${cell.id} (territory ${cell.territoryId}) to user ${userId}`,
@@ -341,13 +348,14 @@ export class SubmissionsProcessor extends WorkerHost {
     tier: string,
     cell: ClaimedCell,
     openOwnershipId: string,
+    submissionId?: string,
   ): Promise<ClaimedCell> {
     await db.territoryCellOwnership.update({
       where: { id: openOwnershipId },
       data: { closedAt: new Date() },
     });
     await db.territoryCellOwnership.create({
-      data: { cellId: cell.id, userId, sourceType: 'solve' },
+      data: { cellId: cell.id, userId, sourceType: 'solve', submissionId, captured: true },
     });
     this.logger.log(
       `User ${userId} captured ${tier} cell ${cell.id} (territory ${cell.territoryId})`,
@@ -355,17 +363,24 @@ export class SubmissionsProcessor extends WorkerHost {
     return cell;
   }
 
-  private broadcastCell(
+  private async broadcastCell(
     cell: { id: string; territoryId: string; row: number; col: number },
     userId: string,
   ) {
-    this.territoryGateway.broadcastCellUpdate({
-      territoryId: cell.territoryId,
-      cellId: cell.id,
-      row: cell.row,
-      col: cell.col,
-      ownerId: userId,
-      ownerColor: getColorForUser(userId),
-    });
+    try {
+      this.territoryGateway.broadcastCellUpdate({
+        territoryId: cell.territoryId,
+        cellId: cell.id,
+        row: cell.row,
+        col: cell.col,
+        ownerId: userId,
+        ownerColor: await lookupUserColor(this.prisma, userId),
+      });
+    } catch (err) {
+      this.logger.error(
+        `Could not announce cell ${cell.id} for user ${userId}; the cell is theirs regardless`,
+        err as Error,
+      );
+    }
   }
 }

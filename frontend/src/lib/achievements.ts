@@ -43,3 +43,39 @@ export function computeAchievements(i: AchievementInput): Achievement[] {
   ];
   return defs.map((d) => ({ ...d, progress: Math.min(d.progress, d.target), unlocked: d.progress >= d.target }));
 }
+
+/** The numbers the achievements are worked out from, taken from whatever the page has fetched. */
+export function achievementInputFrom(parts: {
+  solves: number;
+  hardestWeight: number;
+  longestStreak: number;
+  territoriesHeld: number;
+  hasCitadel: boolean;
+  rank: number | null;
+  daily: { qualifyingCount: number; cap: number } | null;
+  explored: number;
+}): AchievementInput {
+  return {
+    solves: parts.solves,
+    hardestWeight: parts.hardestWeight,
+    longestStreak: parts.longestStreak,
+    territoriesHeld: parts.territoriesHeld,
+    hasCitadel: parts.hasCitadel,
+    rank: parts.rank,
+    dailyCapReached: !!parts.daily && parts.daily.qualifyingCount >= parts.daily.cap,
+    explored: parts.explored,
+  };
+}
+
+const EXPLORED_PREFIX = 'cc.map.explored.v1:';
+
+/** How many different zones this player has walked into on the map (the map keeps the list in localStorage). */
+export function readExploredCount(userId: string): number {
+  try {
+    const raw = localStorage.getItem(EXPLORED_PREFIX + userId);
+    const list = raw ? (JSON.parse(raw) as unknown) : [];
+    return Array.isArray(list) ? list.length : 0;
+  } catch {
+    return 0;
+  }
+}

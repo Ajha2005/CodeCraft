@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTerritories } from './hooks/useTerritories';
 import { useTerritoryCells } from './hooks/useTerritoryCells';
 import { useCollegeLeaderboard } from './hooks/useLeaderboard';
-import { useAuth } from '../../auth/AuthContext';
+import { useAuth } from '../../auth/useAuth';
 import { usePlayerStats } from '../../lib/playerStatsContext';
 import { useToasts } from '../../lib/useToasts';
 import { getApiErrorMessage } from '../../lib/apiError';
@@ -68,13 +68,15 @@ export function MapFullScreen() {
   // refetches on score changes) while the ranks panel is actually open.
   const [showBoard, setShowBoard] = useState(false);
   const { entries: boardEntries, loading: boardLoading } = useCollegeLeaderboard(50, showBoard);
-  const { user, flavorTextEnabled } = useAuth();
+  const { user, isDemo, flavorTextEnabled } = useAuth();
   const { refresh: refreshStats } = usePlayerStats();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { toasts, push, dismiss } = useToasts();
 
-  const userId = user?.userId ?? null;
+  // A demo visitor looks around as a spectator: no position, no cells, no duels.
+  const userId = isDemo ? null : (user?.userId ?? null);
+  const userColor = isDemo ? null : (user?.color ?? null);
   const world = getWorld();
   const [engine] = useState(() => new MapEngine(world));
   const traveling = useEngineSelector(engine, (s) => s.traveling);
@@ -210,7 +212,13 @@ export function MapFullScreen() {
     setSelectedId(id);
     if (id) sfx.play('click');
   });
-  const handleCellChallenge = useEffectEvent((cell: TerritoryCellDto, zone: Zone) => setChallenge({ cell, zone }));
+  const handleCellChallenge = useEffectEvent((cell: TerritoryCellDto, zone: Zone) => {
+    if (isDemo) {
+      push('Duels need a Thapar account — sign in to take cells from rivals.', 'info');
+      return;
+    }
+    setChallenge({ cell, zone });
+  });
   const handleMoved = useEffectEvent((pos: { x: number; y: number }) => {
     if (userId) writeJson(posKey(userId), pos);
     if (welcome) dismissWelcome();
@@ -246,11 +254,12 @@ export function MapFullScreen() {
     }
     engine.setUser({
       userId,
+      color: userColor,
       startPos: userId ? readJson<{ x: number; y: number }>(posKey(userId)) : null,
       explored: userId ? (readJson<string[]>(exploredKey(userId)) ?? []) : null,
       skipIntro: seenIntro,
     });
-  }, [engine, ready, userId]);
+  }, [engine, ready, userId, userColor]);
 
   useEffect(() => {
     if (ready) engine.setData(territories, cellsByTerritory);

@@ -9,7 +9,10 @@ import { MapFullScreen } from './features/map/MapFullScreen';
 import ChallengesPage from './features/contest/ChallengesPage';
 import ContestRoomPage from './features/contest/ContestRoomPage';
 import { Nav } from './components/Nav';
+import { DemoBanner } from './components/DemoBanner';
+import { RequireAccount } from './auth/RequireAccount';
 import { LevelUpOverlay } from './components/LevelUpOverlay';
+import { CelebrationOverlay } from './components/CelebrationOverlay';
 import { PlayerStatsProvider } from './lib/PlayerStatsProvider';
 
 function ProtectedLayout() {
@@ -18,11 +21,13 @@ function ProtectedLayout() {
     <ProtectedRoute>
       <PlayerStatsProvider>
         <Nav />
+        <DemoBanner />
         {/* keyed by route so every page change replays the entrance */}
         <div key={pathname} className="page-enter flex min-h-0 flex-1 flex-col pb-[var(--tabbar-h)]">
           <Outlet />
         </div>
         <LevelUpOverlay />
+        <CelebrationOverlay />
       </PlayerStatsProvider>
     </ProtectedRoute>
   );
@@ -39,8 +44,8 @@ export default function AppRouter() {
             <Route path="/" element={<ProblemsPage />} />
             <Route path="/scoring" element={<ScoringDashboard />} />
             <Route path="/map" element={<MapFullScreen />} />
-            <Route path="/contests" element={<ChallengesPage />} />
-            <Route path="/contest/:id" element={<ContestRoomPage />} />
+            <Route path="/contests" element={<RequireAccount feature="Duels"><ChallengesPage /></RequireAccount>} />
+            <Route path="/contest/:id" element={<RequireAccount feature="Duels"><ContestRoomPage /></RequireAccount>} />
           </Route>
         </Routes>
       </BrowserRouter>

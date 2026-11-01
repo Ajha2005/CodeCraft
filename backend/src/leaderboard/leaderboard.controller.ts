@@ -1,11 +1,20 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { LeaderboardRedisService } from '../common/redis/leaderboard-redis.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { colorFromIndex, UNCLAIMED_COLOR } from '../common/color/color.util';
 
 export interface LeaderboardEntryDto {
   userId: string;
   name: string;
   score: number;
+  /** The player's own map colour, unique to them. */
+  color: string;
+}
+
+/** A positive whole number from a query string, capped; anything else gets the default. */
+function parseLimit(raw: string | undefined, fallback: number, max = 100): number {
+  const n = Number.parseInt(raw ?? '', 10);
+  return Number.isFinite(n) && n > 0 ? Math.min(n, max) : fallback;
 }
 
 @Controller('leaderboard')
@@ -17,8 +26,7 @@ export class LeaderboardController {
 
   @Get('college')
   async getCollegeLeaderboard(@Query('limit') limit?: string): Promise<LeaderboardEntryDto[]> {
-    const parsedLimit = limit ? parseInt(limit, 10) : 50;
-    const raw = await this.leaderboardRedis.getCollegeTop(parsedLimit);
+    const raw = await this.leaderboardRedis.getCollegeTop(parseLimit(limit, 50));
     return this.attachNames(raw);
   }
 
@@ -27,8 +35,7 @@ export class LeaderboardController {
     @Param('id') territoryId: string,
     @Query('limit') limit?: string,
   ): Promise<LeaderboardEntryDto[]> {
-    const parsedLimit = limit ? parseInt(limit, 10) : 20;
-    const raw = await this.leaderboardRedis.getTerritoryTop(territoryId, parsedLimit);
+    const raw = await this.leaderboardRedis.getTerritoryTop(territoryId, parseLimit(limit, 20));
     return this.attachNames(raw);
   }
 
@@ -70,7 +77,7 @@ export class LeaderboardController {
     const userIds = raw.map((r) => r.userId);
     const users = await this.prisma.user.findMany({
       where: { id: { in: userIds } },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, colorIndex: true },
     });
 
     const userMap = new Map(users.map((u) => [u.id, u]));
@@ -82,6 +89,7 @@ export class LeaderboardController {
         userId: entry.userId,
         name: displayName,
         score: entry.score,
+        color: user ? colorFromIndex(user.colorIndex) : UNCLAIMED_COLOR,
       };
     });
   }

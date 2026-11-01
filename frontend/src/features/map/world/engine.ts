@@ -1,6 +1,6 @@
 import type { TerritoryDto } from '../../../types/territory';
 import type { TerritoryCellDto } from '../../../lib/api';
-import { colorForUser } from '../../../lib/playerColor';
+import { fallbackColor } from '../../../lib/playerColor';
 import { Fx } from './fx';
 import { distanceToPolygonEdge, type Pt, type Zone } from './geometry';
 import { sectorOf, spawnPoint, toMeters, type World } from './campus';
@@ -379,10 +379,10 @@ export class MapEngine {
   // ================================================================ data
 
   /** Who is playing; call before the first setData. */
-  setUser(opts: { userId: string | null; startPos?: Pt | null; explored?: string[] | null; skipIntro?: boolean }) {
+  setUser(opts: { userId: string | null; color?: string | null; startPos?: Pt | null; explored?: string[] | null; skipIntro?: boolean }) {
     this.userId = opts.userId;
     this.skipIntro = !!opts.skipIntro;
-    this.meColor = colorForUser(opts.userId);
+    this.meColor = opts.color || fallbackColor(opts.userId);
     this.playerRender.color = this.meColor;
     this.frame.meId = opts.userId;
     this.frame.meColor = this.meColor;

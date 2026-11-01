@@ -1,5 +1,6 @@
 import type { LeaderboardRedisService } from '../common/redis/leaderboard-redis.service';
 import type { PrismaService } from '../prisma/prisma.service';
+import { colorFromIndex, UNCLAIMED_COLOR } from '../common/color/color.util';
 import { LeaderboardController } from './leaderboard.controller';
 
 function setup() {
@@ -26,27 +27,27 @@ describe('LeaderboardController names', () => {
       { userId: 'u2', score: 50 },
     ]);
     prisma.user.findMany.mockResolvedValue([
-      { id: 'u1', name: ' Arjun Mehta ', email: 'arjun@thapar.edu' },
-      { id: 'u2', name: null, email: 'riya.sharma@thapar.edu' },
+      { id: 'u1', name: ' Arjun Mehta ', email: 'arjun@thapar.edu', colorIndex: 1 },
+      { id: 'u2', name: null, email: 'riya.sharma@thapar.edu', colorIndex: 2 },
     ]);
 
     await expect(controller.getCollegeLeaderboard()).resolves.toEqual([
-      { userId: 'u1', name: 'Arjun Mehta', score: 90 },
-      { userId: 'u2', name: 'riya.sharma', score: 50 },
+      { userId: 'u1', name: 'Arjun Mehta', score: 90, color: colorFromIndex(1) },
+      { userId: 'u2', name: 'riya.sharma', score: 50, color: colorFromIndex(2) },
     ]);
     expect(prisma.user.findMany).toHaveBeenCalledWith({
       where: { id: { in: ['u1', 'u2'] } },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, colorIndex: true },
     });
   });
 
   it('names players the same way on a zone leaderboard', async () => {
     const { redis, prisma, controller } = setup();
     redis.getTerritoryTop.mockResolvedValue([{ userId: 'u1', score: 12 }]);
-    prisma.user.findMany.mockResolvedValue([{ id: 'u1', name: 'Arjun Mehta', email: 'arjun@thapar.edu' }]);
+    prisma.user.findMany.mockResolvedValue([{ id: 'u1', name: 'Arjun Mehta', email: 'arjun@thapar.edu', colorIndex: 1 }]);
 
     await expect(controller.getTerritoryLeaderboard('t1')).resolves.toEqual([
-      { userId: 'u1', name: 'Arjun Mehta', score: 12 },
+      { userId: 'u1', name: 'Arjun Mehta', score: 12, color: colorFromIndex(1) },
     ]);
   });
 

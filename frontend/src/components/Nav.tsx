@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../auth/useAuth';
 import { usePlayerStats } from '../lib/playerStatsContext';
 import { useIncomingChallenges } from '../lib/useIncomingChallenges';
 import { useSfxEnabled } from '../lib/useSfx';
@@ -8,6 +8,9 @@ import { rankTitle } from '../lib/flavorText';
 import { Icon, type IconName } from './ui/Icon';
 import { LevelBadge } from './ui/LevelBadge';
 import { XPBar } from './ui/XPBar';
+import { StreakFlame } from './ui/StreakFlame';
+import { streakRisk, streakStage } from '../lib/streak';
+import { useNow } from '../lib/useNow';
 
 const NAV_LINKS: { to: string; label: string; icon: IconName; match: (p: string) => boolean }[] = [
   { to: '/', label: 'Problems', icon: 'code', match: (p) => p === '/' },
@@ -35,10 +38,13 @@ function IconToggle({ on, onClick, label, icon }: { on: boolean; onClick: () => 
 
 export function Nav() {
   const { pathname } = useLocation();
-  const { user, logout, flavorTextEnabled, setFlavorTextEnabled } = useAuth();
+  const { user, isDemo, logout, flavorTextEnabled, setFlavorTextEnabled } = useAuth();
   const { stats } = usePlayerStats();
   const [soundOn, setSoundOn] = useSfxEnabled();
-  const incoming = useIncomingChallenges(!!user);
+  const incoming = useIncomingChallenges(!!user && !isDemo);
+  const now = useNow();
+  const streakDays = stats.streak?.current ?? 0;
+  const risk = streakRisk(streakDays, stats.daily?.qualifyingCount ?? 0, now);
   const name = user?.name?.trim() || user?.email?.split('@')[0] || 'Commander';
 
   return (
@@ -96,6 +102,26 @@ export function Nav() {
         </div>
 
         <div className="flex items-center gap-2">
+          {streakDays > 0 && (
+            <Link
+              to="/scoring"
+              className={`flex h-9 items-center gap-1 rounded-lg border px-2 transition-colors ${
+                risk.late ? 'border-rose-400/60 bg-rose-500/10' : 'border-slate-700/70 bg-slate-900/60 hover:border-orange-400/50'
+              }`}
+              title={
+                risk.atRisk
+                  ? risk.late
+                    ? `${streakDays}-day streak at risk — solve one problem today to keep it`
+                    : `${streakDays}-day streak — solve one today to extend it`
+                  : `${streakDays}-day streak · ${streakStage(streakDays).name}`
+              }
+            >
+              <StreakFlame days={streakDays} size={26} atRisk={risk.late} />
+              <span className="font-mono text-sm font-bold tabular-nums" style={{ color: risk.late ? '#fda4af' : streakStage(streakDays).glow }}>
+                {streakDays}
+              </span>
+            </Link>
+          )}
           <Link
             to="/scoring"
             className="group hidden items-center gap-2.5 rounded-xl border border-slate-700/70 bg-slate-900/60 py-1 pl-1.5 pr-3 transition-colors hover:border-cyan-400/50 md:flex"
@@ -126,8 +152,8 @@ export function Nav() {
           <button
             type="button"
             onClick={logout}
-            aria-label="Log out"
-            title="Log out"
+            aria-label={isDemo ? 'Leave the demo' : 'Log out'}
+            title={isDemo ? 'Leave the demo' : 'Log out'}
             className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700/80 text-slate-400 transition-all hover:scale-105 hover:border-rose-400/60 hover:text-rose-300 active:scale-95"
           >
             <Icon name="logout" className="h-[17px] w-[17px]" />

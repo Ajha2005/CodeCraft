@@ -1,4 +1,4 @@
-import { getColorForUser } from '../common/color/color.util';
+import { colorFromIndex } from '../common/color/color.util';
 import { ScoringService } from '../scoring/scoring.service';
 import { SubmissionsProcessor } from './submissions.processor';
 
@@ -24,6 +24,7 @@ function setup() {
     ...makeDb(),
     problem: { findUnique: jest.fn().mockResolvedValue({ difficultyLevel: 'Easy' }) },
     submission: { count: jest.fn().mockResolvedValue(1) },
+    user: { findUnique: jest.fn().mockResolvedValue({ colorIndex: 3 }) },
     // the award runs on `tx`, so a test can tell what was written inside it
     $transaction: jest.fn((fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
   };
@@ -57,8 +58,9 @@ describe('SubmissionsProcessor territory broadcasts', () => {
 
     await accept('u1');
 
+    // the ownership remembers which solve earned it, so the scoring tab can show it
     expect(tx.territoryCellOwnership.create).toHaveBeenCalledWith({
-      data: { cellId: 'c1', userId: 'u1', sourceType: 'solve' },
+      data: { cellId: 'c1', userId: 'u1', sourceType: 'solve', submissionId: 's1', captured: false },
     });
     expect(territoryGateway.broadcastCellUpdate).toHaveBeenCalledWith({
       territoryId: 't1',
@@ -66,7 +68,7 @@ describe('SubmissionsProcessor territory broadcasts', () => {
       row: 0,
       col: 1,
       ownerId: 'u1',
-      ownerColor: getColorForUser('u1'),
+      ownerColor: colorFromIndex(3),
     });
   });
 
@@ -82,13 +84,17 @@ describe('SubmissionsProcessor territory broadcasts', () => {
       where: { id: 'o9' },
       data: { closedAt: expect.any(Date) },
     });
+    // a taken cell is marked as captured, against the solve that took it
+    expect(tx.territoryCellOwnership.create).toHaveBeenCalledWith({
+      data: { cellId: 'c2', userId: 'u1', sourceType: 'solve', submissionId: 's1', captured: true },
+    });
     expect(territoryGateway.broadcastCellUpdate).toHaveBeenCalledWith({
       territoryId: 't1',
       cellId: 'c2',
       row: 3,
       col: 4,
       ownerId: 'u1',
-      ownerColor: getColorForUser('u1'),
+      ownerColor: colorFromIndex(3),
     });
   });
 });
@@ -217,7 +223,7 @@ describe('SubmissionsProcessor: a solve adds land before it takes any', () => {
     expect(cell?.id).toBe('c9');
     expect(tx.territoryCellOwnership.update).not.toHaveBeenCalled();
     expect(tx.territoryCellOwnership.create).toHaveBeenCalledWith({
-      data: { cellId: 'c9', userId: 'u1', sourceType: 'solve' },
+      data: { cellId: 'c9', userId: 'u1', sourceType: 'solve', captured: false },
     });
   });
 

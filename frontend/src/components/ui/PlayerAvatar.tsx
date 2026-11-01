@@ -1,7 +1,9 @@
-import { colorForUser, initialsOf } from '../../lib/playerColor';
+import { fallbackColor, initialsOf } from '../../lib/playerColor';
 
 interface PlayerAvatarProps {
   userId?: string | null;
+  /** The player's own colour, as the server gave it. */
+  color?: string | null;
   name?: string | null;
   size?: number;
   ring?: boolean;
@@ -9,8 +11,8 @@ interface PlayerAvatarProps {
 }
 
 /** Round initials badge, colored exactly like the player's territory on the map. */
-export function PlayerAvatar({ userId, name, size = 36, ring = true, className }: PlayerAvatarProps) {
-  const color = colorForUser(userId);
+export function PlayerAvatar({ userId, color: given, name, size = 36, ring = true, className }: PlayerAvatarProps) {
+  const color = given || fallbackColor(userId);
   return (
     <div
       className={`relative shrink-0 rounded-full flex items-center justify-center font-display font-bold text-slate-950 select-none ${className ?? ''}`}

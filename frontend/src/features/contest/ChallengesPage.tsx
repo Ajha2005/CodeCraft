@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../auth/AuthContext';
+import { useAuth } from '../../auth/useAuth';
 import { ToastStack } from '../../components/ToastStack';
 import { useToasts } from '../../lib/useToasts';
 import { getApiErrorMessage } from '../../lib/apiError';
@@ -35,15 +35,15 @@ function Versus({
   leftCell,
   rightCell,
 }: {
-  left: { id: string; name: string };
-  right: { id: string; name: string };
+  left: { id: string; name: string; color: string };
+  right: { id: string; name: string; color: string };
   you: string | undefined;
   leftCell: ContestCellSummary | null;
   rightCell: ContestCellSummary | null;
 }) {
-  const side = (p: { id: string; name: string }, align: 'left' | 'right', cell: ContestCellSummary | null) => (
+  const side = (p: { id: string; name: string; color: string }, align: 'left' | 'right', cell: ContestCellSummary | null) => (
     <div className={`flex min-w-0 items-center gap-3 ${align === 'right' ? 'flex-row-reverse text-right' : ''}`}>
-      <PlayerAvatar userId={p.id} name={p.name} size={44} />
+      <PlayerAvatar userId={p.id} name={p.name} color={p.color} size={44} />
       <div className="min-w-0">
         <p className="truncate text-sm font-semibold text-slate-50">{p.name}</p>
         {p.id === you && <p className="hud-label !text-[0.58rem] !text-cyan-300">You</p>}

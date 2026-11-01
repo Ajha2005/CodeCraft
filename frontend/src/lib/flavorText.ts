@@ -1,6 +1,6 @@
 // Central copy bank for CodeCraft's "territory capture" flavor text.
 // Everything here is optional dressing — every call site has a plain-English
-// fallback, and the flavorTextEnabled setting (see auth/AuthContext) lets a
+// fallback, and the flavorTextEnabled setting (see auth/useAuth) lets a
 // user turn all of it off for a minimal-chrome interface.
 
 function dayIndex(): number {

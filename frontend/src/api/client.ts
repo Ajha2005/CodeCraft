@@ -12,6 +12,20 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+/** The cell a correct solve won; null on solves from before cells were recorded, or when none was left to take. */
+export interface SolveCell {
+  id: string;
+  territoryId: string;
+  territoryName: string;
+  tier: string;
+  row: number;
+  col: number;
+  /** Taken from a rival rather than claimed free. */
+  captured: boolean;
+  /** Still the player's; false once a rival or a duel has taken it since. */
+  held: boolean;
+}
+
 export interface PerformanceScore {
   id: string;
   submissionId: string;
@@ -21,6 +35,8 @@ export interface PerformanceScore {
   timeEfficiency: number;
   totalScore: number;
   createdAt: string;
+  problem: { id: number; title: string; difficultyLevel: string };
+  cell: SolveCell | null;
 }
 export interface ScoreResponse {
   totalScore: number;
@@ -73,8 +89,21 @@ export const fetchNearMiss = async (userId: string) => {
   const res = await api.get<NearMiss>(`/leaderboard/near-miss/${userId}`);
   return res.data;
 };
+export interface MajorityZone {
+  territoryId: string;
+  name: string;
+  tier: string;
+  held: number;
+  total: number;
+}
+
 export interface CampaignSummary {
   territoriesHeld: number;
+  cellsHeld: number;
+  /** Cells held per tier (OUTPOST / SETTLEMENT / STRONGHOLD / CITADEL). */
+  cellsByTier: Record<string, number>;
+  /** Zones where the player holds more than half the cells. */
+  majorityZones: MajorityZone[];
   cellsGainedToday: number;
   cellsLostToday: number;
 }

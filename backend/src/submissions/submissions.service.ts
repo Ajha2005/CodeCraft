@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
@@ -15,7 +15,7 @@ export class SubmissionsService {
       where: { id: problemId },
     });
     if (!problem) {
-      throw new Error('Problem not found');
+      throw new NotFoundException('Problem not found');
     }
     const submission = await this.prisma.submission.create({
       data: {

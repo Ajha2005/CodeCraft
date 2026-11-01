@@ -20,6 +20,8 @@ export interface ContestProblemSummary {
 export interface ContestUserSummary {
   id: string;
   name: string;
+  /** The player's own map colour. */
+  color: string;
 }
 
 export interface ContestSummary {
@@ -55,7 +57,6 @@ export interface ContestProblemDetail {
   difficultyLevel: string;
   examples: { input: unknown; output: unknown }[];
   constraints: string[];
-  testCases: { input: unknown; expected_output: unknown }[];
   boilerplate: Record<string, string>;
 }
 

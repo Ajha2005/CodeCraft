@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { getColorForUser } from '../common/color/color.util';
+import { colorFromIndex } from '../common/color/color.util';
 import { ContestService } from './contest.service';
 import { CreateChallengeDto } from './dto/create-challenge.dto';
 
@@ -38,8 +38,8 @@ const contestRow = {
   cell: { id: 'c1', row: 1, col: 2, territoryId: 't1', territory: { name: 'M Hostel', tier: 'SETTLEMENT' } },
   problem: { id: 1, title: 'Two Sum', difficultyLevel: 'Easy' },
   // one player has a name from their login, the other only an email
-  challenger: { id: 'u1', name: ' Arjun Mehta ', email: 'arjun@thapar.edu' },
-  defender: { id: 'u2', name: null, email: 'riya.sharma@thapar.edu' },
+  challenger: { id: 'u1', name: ' Arjun Mehta ', email: 'arjun@thapar.edu', colorIndex: 1 },
+  defender: { id: 'u2', name: null, email: 'riya.sharma@thapar.edu', colorIndex: 2 },
 };
 
 describe('ContestService player names', () => {
@@ -50,11 +50,11 @@ describe('ContestService player names', () => {
     const [challenge] = await service.listIncoming('u2');
 
     // their name from login (trimmed), or the start of their email when there is none
-    expect(challenge.challenger).toEqual({ id: 'u1', name: 'Arjun Mehta' });
-    expect(challenge.defender).toEqual({ id: 'u2', name: 'riya.sharma' });
+    expect(challenge.challenger).toEqual({ id: 'u1', name: 'Arjun Mehta', color: colorFromIndex(1) });
+    expect(challenge.defender).toEqual({ id: 'u2', name: 'riya.sharma', color: colorFromIndex(2) });
   });
 
-  it('selects id, name and email of the players', async () => {
+  it('selects id, name, email and colour number of the players', async () => {
     const { prisma, service } = setup();
     prisma.contest.findMany.mockResolvedValue([]);
 
@@ -63,8 +63,8 @@ describe('ContestService player names', () => {
     expect(prisma.contest.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         include: expect.objectContaining({
-          challenger: { select: { id: true, name: true, email: true } },
-          defender: { select: { id: true, name: true, email: true } },
+          challenger: { select: { id: true, name: true, email: true, colorIndex: true } },
+          defender: { select: { id: true, name: true, email: true, colorIndex: true } },
         }),
       }),
     );
@@ -76,13 +76,13 @@ describe('ContestService player names', () => {
 
     const contest = await service.getContest('k1', 'u1');
 
-    expect(contest.challenger).toEqual({ id: 'u1', name: 'Arjun Mehta' });
-    expect(contest.defender).toEqual({ id: 'u2', name: 'riya.sharma' });
+    expect(contest.challenger).toEqual({ id: 'u1', name: 'Arjun Mehta', color: colorFromIndex(1) });
+    expect(contest.defender).toEqual({ id: 'u2', name: 'riya.sharma', color: colorFromIndex(2) });
     expect(prisma.contest.findUnique).toHaveBeenCalledWith(
       expect.objectContaining({
         include: expect.objectContaining({
-          challenger: { select: { id: true, name: true, email: true } },
-          defender: { select: { id: true, name: true, email: true } },
+          challenger: { select: { id: true, name: true, email: true, colorIndex: true } },
+          defender: { select: { id: true, name: true, email: true, colorIndex: true } },
         }),
       }),
     );
@@ -98,6 +98,7 @@ describe('ContestService.transferCell', () => {
         update: jest.fn(),
         create: jest.fn().mockResolvedValue({ cell: { territoryId: 't1', row: 1, col: 2 } }),
       },
+      user: { findUnique: jest.fn().mockResolvedValue({ colorIndex: 4 }) },
     };
     prisma.$transaction.mockImplementation((work: (t: typeof tx) => unknown) => work(tx));
 
@@ -107,7 +108,7 @@ describe('ContestService.transferCell', () => {
 
     expect(moved).toBe(true);
     expect(tx.territoryCellOwnership.create).toHaveBeenCalledWith({
-      data: { cellId: 'c1', userId: 'u1', sourceType: 'contest' },
+      data: { cellId: 'c1', userId: 'u1', sourceType: 'contest', captured: true },
       include: { cell: true },
     });
     expect(territoryGateway.broadcastCellUpdate).toHaveBeenCalledWith({
@@ -116,7 +117,7 @@ describe('ContestService.transferCell', () => {
       row: 1,
       col: 2,
       ownerId: 'u1',
-      ownerColor: getColorForUser('u1'),
+      ownerColor: colorFromIndex(4),
     });
   });
 });

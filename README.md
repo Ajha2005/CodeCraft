@@ -86,6 +86,11 @@ flowchart LR
 - Territory tier (Outpost → Settlement → Stronghold → Citadel) is driven by the Performance Score formula, not manual admin assignment
 - A soft daily qualifying-problem cap (6/day) so territory farming is bounded without discouraging practice
 - Confetti, live capture effects, and toggleable "flavor text" for a lighter tone
+- **Know which cell you won**: every accepted solve records the cell it earned. The result panel and the scoring tab show the zone with that cell lit up (row, column, free or captured, still yours or not)
+- **A colour of your own**: every player gets a unique vivid colour (a sequence number on the user, spread around the colour wheel), and every cell they hold is painted in it on the map, in leaderboards and in duels
+- **Celebrations**: achievement unlock pop-ups, plus special moments for your first cell, your first cell in each tier and winning a zone majority; the streak flame grows at 3, 7, 14 and 30 days and flickers when the streak is at risk late in the day
+- **Live leaderboard**: ▲/▼ rank chips, a top-3 podium, rows that slide into place when scores change, and a pinned "you" row with the XP needed to pass the next player
+- **Demo mode**: "Try the demo" on the login page needs no account. Problems are judged and scored as usual, the score stays on the device, and no territory is awarded
 
 **Real-Time 1v1 Contests**
 - Challenge/accept flow: `POST /challenges` → target notified live or on next load → `POST /challenges/:id/accept` opens a dedicated WebSocket room
@@ -356,6 +361,7 @@ curl -X POST http://localhost:2000/api/v2/packages \
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | From Google Cloud Console → Credentials |
 | `GOOGLE_CALLBACK_URL` | `http://localhost:3000/auth/google/callback` locally |
 | `FRONTEND_URL` | `http://localhost:5173` locally |
+| `APP_TIMEZONE` | Optional, defaults to `Asia/Kolkata`. The daily cap and streaks roll over at midnight in this zone |
 | `PORT` | Optional, defaults to `3000` |
 
 `frontend/.env` (see [`frontend/.env.example`](./frontend/.env.example)):

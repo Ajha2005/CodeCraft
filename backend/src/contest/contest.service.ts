@@ -13,7 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ProblemsService } from '../problems/problems.service';
 import { TerritoryGateway } from '../territory/territory.gateway';
 import { ContestGateway } from './contest.gateway';
-import { getColorForUser } from '../common/color/color.util';
+import { colorFromIndex, lookupUserColor } from '../common/color/color.util';
 import { CreateChallengeDto } from './dto/create-challenge.dto';
 import { SubmitContestSolutionDto } from './dto/submit-contest-solution.dto';
 
@@ -37,6 +37,7 @@ interface DisplayUser {
   id: string;
   name: string | null;
   email: string;
+  colorIndex: number;
 }
 
 @Injectable()
@@ -197,8 +198,8 @@ export class ContestService {
       include: {
         cell: { include: { territory: true } },
         pledgedCell: { include: { territory: true } },
-        challenger: { select: { id: true, name: true, email: true } },
-        defender: { select: { id: true, name: true, email: true } },
+        challenger: { select: { id: true, name: true, email: true, colorIndex: true } },
+        defender: { select: { id: true, name: true, email: true, colorIndex: true } },
         participants: true,
       },
     });
@@ -588,7 +589,7 @@ export class ContestService {
         data: { closedAt: new Date() },
       });
       const ownership = await tx.territoryCellOwnership.create({
-        data: { cellId, userId: newOwnerId, sourceType: 'contest' },
+        data: { cellId, userId: newOwnerId, sourceType: 'contest', captured: true },
         include: { cell: true },
       });
 
@@ -598,7 +599,7 @@ export class ContestService {
         row: ownership.cell.row,
         col: ownership.cell.col,
         ownerId: newOwnerId,
-        ownerColor: getColorForUser(newOwnerId),
+        ownerColor: await lookupUserColor(tx, newOwnerId),
       });
 
       return true;
@@ -606,7 +607,11 @@ export class ContestService {
   }
 
   private displayUser(u: DisplayUser) {
-    return { id: u.id, name: u.name?.trim() || u.email.split('@')[0] };
+    return {
+      id: u.id,
+      name: u.name?.trim() || u.email.split('@')[0],
+      color: colorFromIndex(u.colorIndex),
+    };
   }
 
   private cellSummary(cell: {
@@ -631,8 +636,8 @@ export class ContestService {
       cell: { include: { territory: true } },
       pledgedCell: { include: { territory: true } },
       problem: { select: { id: true, title: true, difficultyLevel: true } },
-      challenger: { select: { id: true, name: true, email: true } },
-      defender: { select: { id: true, name: true, email: true } },
+      challenger: { select: { id: true, name: true, email: true, colorIndex: true } },
+      defender: { select: { id: true, name: true, email: true, colorIndex: true } },
     } as const;
   }
 

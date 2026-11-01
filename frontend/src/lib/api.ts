@@ -28,6 +28,8 @@ export interface LeaderboardEntry {
   userId: string;
   name: string;
   score: number;
+  /** The player's own map colour. */
+  color: string;
 }
 
 export async function fetchCollegeLeaderboard(limit = 50): Promise<LeaderboardEntry[]> {

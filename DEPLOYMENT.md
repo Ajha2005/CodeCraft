@@ -100,8 +100,15 @@ GOOGLE_CLIENT_ID=      Google Cloud Console -> Credentials
 GOOGLE_CLIENT_SECRET=  same place - ROTATE if ever pasted anywhere insecure
 GOOGLE_CALLBACK_URL=https://yourdomain.com/auth/google/callback
 FRONTEND_URL=https://your-vercel-app.vercel.app
+APP_TIMEZONE=Asia/Kolkata   optional (this is the default): the campus timezone. The daily solve cap and the streak roll over at midnight here, not at server midnight.
 
 Also update Google Cloud Console -> Credentials -> your OAuth client -> Authorized redirect URIs -> add the GOOGLE_CALLBACK_URL value above.
+
+## Releasing the cell-per-solve / player-colour update
+
+Run `npx prisma migrate deploy` (migration `20261101120000_add_color_index_and_solve_cell`) before starting the new backend. It numbers every existing player (`User.colorIndex`, which fixes their unique map colour) and lets a cell ownership remember the solve that earned it. Solves made before the migration have no recorded cell and show "No cell recorded" on the scoring tab.
+
+Demo mode (no login) uses the same judge queue. It saves nothing and is limited to 30 submissions per 10 minutes per client address. If the API sits behind a reverse proxy, enable Express `trust proxy` so the limit applies per visitor rather than to the proxy as a whole.
 
 ## Known code-level gotchas (already fixed on main, watch for regressions)
 - src/common/redis/redis.module.ts - was hardcoded to localhost:6379; must read process.env.REDIS_URL

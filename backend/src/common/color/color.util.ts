@@ -1,54 +1,77 @@
 /**
- * Deterministic color assignment.
+ * Player colours.
  *
- * Same userId -> same color, every time, with no DB lookup needed.
- * This matters because a territory's color must stay stable across
- * requests/sessions — you don't want the map flickering different
- * colors for the same owner on every refresh.
+ * Every player owns a permanent sequence number (`User.colorIndex`, handed out
+ * by the database, never reused). Their colour is a pure function of that
+ * number, which gives two guarantees a hash of the user id could not:
  *
- * Approach: hash the userId to an index into a curated palette.
- * Curated (not random HSL) so colors stay visually distinct and
- * readable against your map's background.
+ *   - no two players share a colour (checked for the first 10,000 players, far
+ *     more than the campus has; past that, a rare clash is possible), and
+ *   - players signing up one after another get colours that are far apart
+ *     (each new hue lands 137.5° from the previous one, the "golden angle", so
+ *     the wheel is filled evenly however many players join).
+ *
+ * Colours are always saturated and bright enough to read on the dark map, and
+ * can never be confused with the grey of unclaimed ground.
  */
 
-// Keep this reasonably large (15-20+) so collisions across active
-// players are rare. Tune to match your Tailwind theme later.
-const PALETTE = [
-  '#ef4444', // red-500
-  '#f97316', // orange-500
-  '#f59e0b', // amber-500
-  '#eab308', // yellow-500
-  '#84cc16', // lime-500
-  '#22c55e', // green-500
-  '#10b981', // emerald-500
-  '#14b8a6', // teal-500
-  '#06b6d4', // cyan-500
-  '#0ea5e9', // sky-500
-  '#3b82f6', // blue-500
-  '#6366f1', // indigo-500
-  '#8b5cf6', // violet-500
-  '#a855f7', // purple-500
-  '#d946ef', // fuchsia-500
-  '#ec4899', // pink-500
-  '#f43f5e', // rose-500
-];
+const GOLDEN_ANGLE = 137.50776405003785;
+// Neighbouring slots in the sequence differ in lightness too, so two players
+// whose hues drift close together still look different.
+const LIGHTNESS_STEPS = [56, 64, 48] as const;
 
 export const UNCLAIMED_COLOR = '#94a3b8'; // slate-400
 
-/** Simple, fast string hash (djb2). No crypto needed here. */
-function hashString(input: string): number {
-  let hash = 5381;
-  for (let i = 0; i < input.length; i++) {
-    hash = (hash * 33) ^ input.charCodeAt(i);
-  }
-  return hash >>> 0; // force unsigned
+function hslToHex(h: number, s: number, l: number): string {
+  const sat = s / 100;
+  const light = l / 100;
+  const k = (n: number) => (n + h / 30) % 12;
+  const a = sat * Math.min(light, 1 - light);
+  const channel = (n: number) => {
+    const v = light - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    return Math.round(v * 255)
+      .toString(16)
+      .padStart(2, '0');
+  };
+  return `#${channel(0)}${channel(8)}${channel(4)}`;
 }
 
-export function getColorForUser(userId: string | null | undefined): string {
+/** The colour of the player holding sequence number `index`. */
+export function colorFromIndex(index: number): string {
+  const n = Number.isFinite(index) ? Math.max(0, Math.floor(index)) : 0;
+  const hue = (n * GOLDEN_ANGLE) % 360;
+  // Blues and purples look dark on a dark map at the same lightness; lift them.
+  const blueLift = 12 * Math.exp(-(((hue - 250) / 40) ** 2));
+  // Slow secondary cycles in lightness and saturation keep the colours distinct
+  // as hex values long after the hue ring alone would start repeating.
+  const lightness =
+    LIGHTNESS_STEPS[n % LIGHTNESS_STEPS.length] +
+    (Math.floor(n / 3) % 5) * 1.2 -
+    2.4 +
+    blueLift;
+  const saturation = 86 + (Math.floor(n / 15) % 5) * 3.5;
+  return hslToHex(hue, saturation, lightness);
+}
+
+/** Anything that can look a user up - the Prisma client, or a transaction. */
+interface UserColorDb {
+  user: {
+    findUnique(args: {
+      where: { id: string };
+      select: { colorIndex: true };
+    }): PromiseLike<{ colorIndex: number } | null>;
+  };
+}
+
+/** The colour of one player, or the unclaimed grey for an unknown id. */
+export async function lookupUserColor(
+  db: UserColorDb,
+  userId: string | null | undefined,
+): Promise<string> {
   if (!userId) return UNCLAIMED_COLOR;
-  const index = hashString(userId) % PALETTE.length;
-  return PALETTE[index];
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { colorIndex: true },
+  });
+  return user ? colorFromIndex(user.colorIndex) : UNCLAIMED_COLOR;
 }
-
-
-//scratch test

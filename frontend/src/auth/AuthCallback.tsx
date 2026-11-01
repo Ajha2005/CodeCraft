@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useAuth } from './AuthContext'
+import { useAuth } from './useAuth'
+import { takeReturnTo } from './returnTo'
 
 function AuthCallback() {
   const [searchParams] = useSearchParams()
@@ -20,12 +21,12 @@ function AuthCallback() {
     }
 
     login(token)
-    navigate('/', { replace: true })
+    navigate(takeReturnTo(), { replace: true })
   }, [searchParams, login, navigate])
 
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <p className="text-sm opacity-70">Signing you in…</p>
+    <div className="hud-grid-bg flex min-h-dvh items-center justify-center">
+      <p className="font-display relative z-10 text-sm font-bold uppercase tracking-[0.3em] text-cyan-300">Signing you in…</p>
     </div>
   )
 }

@@ -2,6 +2,7 @@ import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import type { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import type { PrismaService } from '../prisma/prisma.service';
+import { colorFromIndex } from '../common/color/color.util';
 import { AuthService } from './auth.service';
 
 function setup() {
@@ -81,17 +82,18 @@ describe('AuthService.loginWithGoogle', () => {
 describe('AuthService.getProfile', () => {
   it('returns the account fields the app shows, name included', async () => {
     const { service, user } = setup();
-    user.findUnique.mockResolvedValue({ id: 'u1', email: dto.email, name: 'Student', flavorTextEnabled: true });
+    user.findUnique.mockResolvedValue({ id: 'u1', email: dto.email, name: 'Student', flavorTextEnabled: true, colorIndex: 9 });
 
     await expect(service.getProfile('u1')).resolves.toEqual({
       userId: 'u1',
       email: dto.email,
       name: 'Student',
       flavorTextEnabled: true,
+      color: colorFromIndex(9),
     });
     expect(user.findUnique).toHaveBeenCalledWith({
       where: { id: 'u1' },
-      select: { id: true, email: true, name: true, flavorTextEnabled: true },
+      select: { id: true, email: true, name: true, flavorTextEnabled: true, colorIndex: true },
     });
   });
 

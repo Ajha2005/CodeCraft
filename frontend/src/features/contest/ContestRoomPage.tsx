@@ -4,7 +4,7 @@ import Editor from '@monaco-editor/react';
 import type { Socket } from 'socket.io-client';
 import confetti from 'canvas-confetti';
 import axios from 'axios';
-import { useAuth } from '../../auth/AuthContext';
+import { useAuth } from '../../auth/useAuth';
 import { ToastStack } from '../../components/ToastStack';
 import { useToasts } from '../../lib/useToasts';
 import { createContestSocket } from '../../lib/socket';
@@ -48,6 +48,7 @@ function verdictTone(verdict: string | undefined | null): { text: string; color:
 function FighterCard({
   userId,
   name,
+  color,
   you,
   result,
   online,
@@ -57,6 +58,7 @@ function FighterCard({
 }: {
   userId: string;
   name: string;
+  color: string;
   you: boolean;
   result: LiveResult | null;
   online?: boolean;
@@ -70,7 +72,7 @@ function FighterCard({
   return (
     <div className={`hud-panel hud-panel-quiet p-3.5 ${you ? 'ring-1 ring-cyan-400/40' : ''}`}>
       <div className={`flex items-center gap-3 ${right ? 'flex-row-reverse text-right' : ''}`}>
-        <PlayerAvatar userId={userId} name={name} size={52} />
+        <PlayerAvatar userId={userId} name={name} color={color} size={52} />
         <div className="min-w-0 flex-1">
           <p className="hud-label !text-[0.6rem]" style={{ color: you ? '#67e8f9' : undefined }}>
             {you ? 'You' : 'Opponent'}
@@ -362,7 +364,7 @@ export default function ContestRoomPage() {
             <div className="pointer-events-none absolute left-1/2 top-0 h-48 w-96 -translate-x-1/2 rounded-full bg-orange-500/10 blur-3xl" />
             <div className="relative mx-auto grid max-w-xl grid-cols-[1fr_auto_1fr] items-center gap-4">
               <div className="flex flex-col items-center gap-2">
-                <PlayerAvatar userId={contest.challenger.id} name={contest.challenger.name} size={76} />
+                <PlayerAvatar userId={contest.challenger.id} name={contest.challenger.name} color={contest.challenger.color} size={76} />
                 <p className="font-display text-xl font-bold text-rose-300">{contest.challenger.name}</p>
                 <p className="hud-label !text-[0.58rem]">Challenger</p>
                 {contest.pledgedCell && <CellChip cell={contest.pledgedCell} />}
@@ -371,7 +373,7 @@ export default function ContestRoomPage() {
                 VS
               </span>
               <div className="flex flex-col items-center gap-2">
-                <PlayerAvatar userId={contest.defender.id} name={contest.defender.name} size={76} />
+                <PlayerAvatar userId={contest.defender.id} name={contest.defender.name} color={contest.defender.color} size={76} />
                 <p className="font-display text-xl font-bold text-cyan-300">{contest.defender.name}</p>
                 <p className="hud-label !text-[0.58rem]">Defender</p>
                 <CellChip cell={contest.cell} />
@@ -444,7 +446,7 @@ export default function ContestRoomPage() {
         {contest.status === 'ACTIVE' && !ended && (
           <>
             <div className="mb-5 grid items-stretch gap-3 md:grid-cols-[1fr_auto_1fr] animate-fade-in-up">
-              <FighterCard userId={self.id} name={self.name} you result={selfResult} align="left" cell={myCell} />
+              <FighterCard userId={self.id} name={self.name} color={self.color} you result={selfResult} align="left" cell={myCell} />
 
               <div className="hud-panel flex flex-col items-center justify-center px-6 py-3" style={urgent ? { borderColor: 'rgba(251,113,133,0.7)', boxShadow: '0 0 36px -10px rgba(244,63,94,0.7)' } : undefined}>
                 <ProgressRing pct={timeFrac} size={118} stroke={7} color={timerColor} track="rgba(51,65,85,0.5)">
@@ -456,6 +458,7 @@ export default function ContestRoomPage() {
               <FighterCard
                 userId={opponent.id}
                 name={opponent.name}
+                color={opponent.color}
                 you={false}
                 result={opponentResult}
                 online={opponentConnected}

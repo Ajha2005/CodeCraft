@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useAuth } from '../../auth/AuthContext';
+import { useAuth } from '../../auth/useAuth';
 import { usePlayerStats } from '../../lib/playerStatsContext';
 import { useMediaQuery } from '../../lib/useMediaQuery';
 import { sfx } from '../../lib/sfx';
@@ -54,7 +54,7 @@ interface QuestBoardProps {
 
 export function QuestBoard({ catalog, active, onOpen }: QuestBoardProps) {
   const { problems, status, loading, error, retry } = catalog;
-  const { user, flavorTextEnabled } = useAuth();
+  const { user, isDemo, flavorTextEnabled } = useAuth();
   const { stats } = usePlayerStats();
   const compact = useMediaQuery('(max-width: 639px)');
 
@@ -125,12 +125,14 @@ export function QuestBoard({ catalog, active, onOpen }: QuestBoardProps) {
         <header className="hud-panel mb-6 grid grid-cols-[1fr_auto] items-center gap-x-5 gap-y-4 overflow-hidden p-5 md:p-7 animate-fade-in-up">
           <div className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-cyan-400/10 blur-3xl" />
           <div className="relative col-start-1 min-w-0">
-            <p className="hud-label text-cyan-300">{flavorTextEnabled ? `Welcome back, ${name}` : 'Problems'}</p>
+            <p className="hud-label text-cyan-300">{isDemo ? 'Demo mode' : flavorTextEnabled ? `Welcome back, ${name}` : 'Problems'}</p>
             <h1 className="font-display mt-1 text-4xl font-bold leading-none tracking-wide text-slate-50 sm:text-5xl">{flavorTextEnabled ? 'Quest board' : 'Problems'}</h1>
             <p className="mt-3 max-w-lg text-sm leading-relaxed text-slate-400">
-              {flavorTextEnabled
-                ? 'Pick a front, clear it, and claim the ground. Every accepted solve earns XP and a cell of campus.'
-                : 'Solve problems to earn score and territory on the campus map.'}
+              {isDemo
+                ? 'Pick a problem and see how you score. In demo mode your score stays on this device, and no territory is awarded.'
+                : flavorTextEnabled
+                  ? 'Pick a front, clear it, and claim the ground. Every accepted solve earns XP and a cell of campus.'
+                  : 'Solve problems to earn score and territory on the campus map.'}
             </p>
           </div>
 

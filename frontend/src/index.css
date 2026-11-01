@@ -570,6 +570,128 @@ code {
   }
 }
 
+/* ▲/▼ rank-change chip on the leaderboard. */
+.lb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  border-radius: 4px;
+  padding: 0 4px;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.25rem;
+  height: 1.05rem;
+  line-height: 1.05rem;
+  animation: pop-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* The one lit cell in components/ui/CellMiniMap. */
+@keyframes cell-lit {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px #fff, 0 0 10px 2px var(--lit);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 2px #fff, 0 0 18px 6px var(--lit);
+    transform: scale(1.12);
+  }
+}
+.cell-lit {
+  position: relative;
+  z-index: 1;
+  animation: cell-lit 1.6s ease-in-out infinite;
+}
+
+/* Streak flame (components/ui/StreakFlame). */
+@keyframes flame-sway {
+  0%,
+  100% {
+    transform: scaleX(1) skewX(0deg);
+  }
+  35% {
+    transform: scaleX(0.96) scaleY(1.04) skewX(-2deg);
+  }
+  70% {
+    transform: scaleX(1.03) scaleY(0.98) skewX(2deg);
+  }
+}
+@keyframes flame-core {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.9, 1.06);
+    opacity: 0.85;
+  }
+}
+@keyframes flame-spark {
+  0% {
+    transform: translateY(8px) scale(1);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-16px) scale(0.2);
+    opacity: 0;
+  }
+}
+/* A flame that is about to go out: it gutters and dims in uneven bursts. */
+@keyframes flame-risk {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  8% {
+    opacity: 0.35;
+    transform: scale(0.88, 0.8);
+  }
+  16% {
+    opacity: 0.9;
+    transform: scale(1, 1.03);
+  }
+  34% {
+    opacity: 0.5;
+    transform: scale(0.9, 0.84);
+  }
+  44% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 0.6;
+    transform: scale(0.93, 0.88);
+  }
+  78% {
+    opacity: 1;
+  }
+}
+.flame-sway {
+  animation: flame-sway 2.4s ease-in-out infinite;
+}
+.flame-risk {
+  animation: flame-risk 1.3s steps(1, end) infinite;
+}
+.flame-core,
+.flame-tongue {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+.flame-core {
+  animation: flame-core 1.3s ease-in-out infinite;
+}
+.flame-tongue {
+  animation: flame-core 1.9s ease-in-out infinite;
+}
+.flame-spark {
+  animation: flame-spark 2s ease-out infinite;
+}
+
 @keyframes draw-line {
   from {
     stroke-dashoffset: var(--len, 400);
@@ -604,7 +726,13 @@ code {
   .animate-float,
   .animate-blink-soft,
   .animate-spin-slow,
-  .xp-fill {
+  .xp-fill,
+  .flame-sway,
+  .flame-risk,
+  .flame-core,
+  .flame-tongue,
+  .flame-spark,
+  .cell-lit {
     animation: none !important;
   }
   .page-enter,

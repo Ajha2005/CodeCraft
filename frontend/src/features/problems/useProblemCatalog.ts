@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '../../auth/AuthContext';
+import { useAuth } from '../../auth/useAuth';
+import { demoStatuses, useDemoState } from '../../lib/demoStore';
 import { fetchAllProblems, fetchStatuses, type ProblemStatus, type ProblemSummary } from './api';
 
 /**
@@ -8,10 +9,11 @@ import { fetchAllProblems, fetchStatuses, type ProblemStatus, type ProblemSummar
  * the browser instead of paging through the API.
  */
 export function useProblemCatalog() {
-  const { user, token } = useAuth();
-  const userId = user?.userId ?? null;
+  const { user, token, isDemo } = useAuth();
+  const userId = isDemo ? null : (user?.userId ?? null);
+  const demo = useDemoState();
   const [problems, setProblems] = useState<ProblemSummary[]>([]);
-  const [status, setStatus] = useState<Record<number, ProblemStatus>>({});
+  const [serverStatus, setStatus] = useState<Record<number, ProblemStatus>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
@@ -52,10 +54,12 @@ export function useProblemCatalog() {
     setAttempt((n) => n + 1);
   }, []);
 
-  /** Record a verdict. A cleared problem never goes back to "attempted". */
+  /** Record a verdict. A cleared problem never goes back to "attempted". Demo progress is read from the device instead. */
   const markStatus = useCallback((problemId: number, next: ProblemStatus) => {
     setStatus((prev) => (prev[problemId] === 'AC' || prev[problemId] === next ? prev : { ...prev, [problemId]: next }));
   }, []);
+
+  const status = isDemo ? demoStatuses(demo) : serverStatus;
 
   return { problems, status, loading, error, retry, markStatus };
 }

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { LOGIN_GREETINGS, pickDaily } from '../lib/flavorText'
 import { FlavorToggle } from '../components/FlavorToggle'
-import { useAuth } from './AuthContext'
+import { useAuth } from './useAuth'
+import { rememberReturnTo, takeReturnTo } from './returnTo'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3000'
 
@@ -32,7 +33,10 @@ function makeCaptureGrid(cols: number, rows: number): CaptureCell[] {
 function LoginPage() {
   const [searchParams] = useSearchParams()
   const error = searchParams.get('error')
-  const { flavorTextEnabled } = useAuth()
+  const { flavorTextEnabled, user, enterDemo } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const from = (location.state as { from?: string } | null)?.from
   const greeting = useMemo(
     () => (flavorTextEnabled ? pickDaily(LOGIN_GREETINGS) : 'Sign in to pick up where you left off.'),
     [flavorTextEnabled],
@@ -62,7 +66,13 @@ function LoginPage() {
   }, [])
 
   function handleGoogleLogin() {
+    rememberReturnTo(from)
     window.location.href = `${API_BASE}/auth/google`
+  }
+
+  function handleDemo() {
+    enterDemo()
+    navigate(from && !from.startsWith('/contest') ? from : '/', { replace: true })
   }
 
   const statItems = [
@@ -70,6 +80,9 @@ function LoginPage() {
     zoneCount !== null ? `${zoneCount} zones on the map` : null,
     topCommander ? `🏆 ${topCommander.name} leads the campaign` : null,
   ].filter((item): item is string => Boolean(item))
+
+  // Someone who is already signed in (or in the demo) has no business here.
+  if (user) return <Navigate to={takeReturnTo()} replace />
 
   return (
     <div className="h-dvh hud-grid-bg flex flex-col overflow-hidden relative">
@@ -177,6 +190,20 @@ function LoginPage() {
             Sign in with Google
           </button>
           <p className="text-xs text-slate-500 mb-4">New commander? Signing in enlists you automatically.</p>
+
+          <div className="mx-auto mb-6 flex max-w-sm flex-col items-center gap-2">
+            <button
+              type="button"
+              onClick={handleDemo}
+              className="rounded-full border border-cyan-400/40 bg-cyan-400/5 px-6 py-2.5 text-sm font-semibold text-cyan-200 transition-all hover:scale-[1.03] hover:border-cyan-300 hover:bg-cyan-400/10 active:scale-[0.98]"
+            >
+              Try the demo - no sign-in
+            </button>
+            <p className="text-xs leading-snug text-slate-500">
+              Not at Thapar? Solve problems and see your score right away. Demo scores stay on this device, and demo players
+              don’t claim territory.
+            </p>
+          </div>
 
           {statItems.length > 0 && (
             <div className="flex flex-wrap items-center justify-center gap-2">

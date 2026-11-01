@@ -32,6 +32,9 @@ export class ProblemsService {
       throw new NotFoundException(`Problem with id ${id} not found`);
     }
     const boilerplate = this.judgeService.generateBoilerplate(problem.testCases as any);
-    return { ...problem, boilerplate };
+    // The judge's test cases (with their expected outputs) stay on the server:
+    // sending them to the browser would hand every player the answers.
+    const { testCases: _hidden, ...publicProblem } = problem;
+    return { ...publicProblem, boilerplate };
   }
 }
