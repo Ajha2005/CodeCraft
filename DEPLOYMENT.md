@@ -110,6 +110,14 @@ Run `npx prisma migrate deploy` (migration `20261101120000_add_color_index_and_s
 
 Demo mode (no login) uses the same judge queue. It saves nothing and is limited to 30 submissions per 10 minutes per client address. If the API sits behind a reverse proxy, enable Express `trust proxy` so the limit applies per visitor rather than to the proxy as a whole.
 
+## Is there room for everyone's cells?
+
+A solve never takes another player's cell, so each point-earning solve needs a free cell of its own: 100 players solving 100 problems each need 10,000. Check the live map (read-only, changes nothing):
+
+    cd ~/CodeCraft/backend && DATABASE_URL="$(tr '\0' '\n' < /proc/$(pm2 pid codecraft-backend)/environ | grep '^DATABASE_URL=' | cut -d= -f2-)" npx tsx prisma/check-capacity.ts
+
+If it says NOT ENOUGH, the grid needs a smaller cell size (`generate-grid.ts` now defaults to 18, about 11,100 cells; 18.5 gives about 10,600). Rebuilding the grid erases who holds which cell (`reset-grid.ts`), so do it before launch, not after players have cells.
+
 ## Known code-level gotchas (already fixed on main, watch for regressions)
 - src/common/redis/redis.module.ts - was hardcoded to localhost:6379; must read process.env.REDIS_URL
 - src/app.module.ts - BullModule.forRoot() connection was ALSO hardcoded to localhost:6379 separately; must also parse REDIS_URL

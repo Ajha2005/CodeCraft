@@ -7,7 +7,9 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { isInside } from 'point-in-svg-polygon';
 
 // ---- CONFIG: change this and re-run in --dry-run to see the resulting count ----
-const CELL_SIZE = Number(process.argv.find((a) => a.startsWith('--size='))?.split('=')[1]) || 80;
+// 18 gives ~11,100 cells: room for 100 players to solve 100 problems each (10,000
+// cells, one per solve, since a solve never takes another player's cell).
+const CELL_SIZE = Number(process.argv.find((a) => a.startsWith('--size='))?.split('=')[1]) || 18;
 const DRY_RUN = process.argv.includes('--dry-run');
 // ----------------------------------------------------------------------------
 
