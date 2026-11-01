@@ -1,6 +1,7 @@
 // backend/prisma/reset-grid.ts
 //
-// Clears TerritoryCell rows (and their TerritoryCellOwnership history) so
+// Clears TerritoryCell rows (and their TerritoryCellOwnership history, and any
+// duels, which point at cells and cannot outlive them) so
 // generate-grid.ts can be re-run at a different --size without leaving the
 // old grid's cells mixed in alongside the new ones — generate-grid.ts only
 // ever inserts, it never removes stale rows from a previous grid size.
@@ -24,13 +25,14 @@ const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  const [cellCount, ownershipCount] = await Promise.all([
+  const [cellCount, ownershipCount, contestCount] = await Promise.all([
     prisma.territoryCell.count(),
     prisma.territoryCellOwnership.count(),
+    prisma.contest.count(),
   ]);
 
   console.log(
-    `This will permanently delete ${cellCount} territory_cells and ${ownershipCount} territory_cell_ownerships rows.`,
+    `This will permanently delete ${cellCount} territory_cells, ${ownershipCount} territory_cell_ownerships and ${contestCount} contests (duels) rows.`,
   );
 
   if (!CONFIRMED) {
@@ -38,11 +40,20 @@ async function main() {
     return;
   }
 
-  const ownerships = await prisma.territoryCellOwnership.deleteMany({});
-  console.log(`Deleted ${ownerships.count} territory_cell_ownerships rows.`);
+  // Duels name the cell fought over (and the one staked), so they go first. The
+  // submissions made inside a duel stay, just no longer tied to it.
+  await prisma.$transaction(async (tx) => {
+    await tx.contestParticipant.deleteMany({});
+    await tx.submission.updateMany({ where: { contestId: { not: null } }, data: { contestId: null } });
+    const contests = await tx.contest.deleteMany({});
+    console.log(`Deleted ${contests.count} contests rows.`);
 
-  const cells = await prisma.territoryCell.deleteMany({});
-  console.log(`Deleted ${cells.count} territory_cells rows.`);
+    const ownerships = await tx.territoryCellOwnership.deleteMany({});
+    console.log(`Deleted ${ownerships.count} territory_cell_ownerships rows.`);
+
+    const cells = await tx.territoryCell.deleteMany({});
+    console.log(`Deleted ${cells.count} territory_cells rows.`);
+  });
 
   console.log('\nGrid cleared. Now reseed at your chosen size, e.g.:');
   console.log('  npx tsx prisma/generate-grid.ts --size=18.5');
