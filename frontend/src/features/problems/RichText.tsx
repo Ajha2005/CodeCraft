@@ -41,7 +41,7 @@ function inputLines(input: unknown): string[] {
 
 export function ExampleBlock({ example }: { example: ProblemExample }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-700/70 bg-black/40">
+    <div className="overflow-hidden rounded-lg border border-slate-700/70 code-well">
       <div className="grid grid-cols-[4.5rem_1fr] border-b border-slate-800 text-sm">
         <span className="hud-label !text-[0.62rem] px-3 py-2 text-slate-500">Input</span>
         <div className="min-w-0 space-y-0.5 py-2 pr-3 font-mono text-[0.82rem] text-slate-200">

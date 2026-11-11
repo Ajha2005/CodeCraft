@@ -76,7 +76,7 @@ export function ChallengeModal({ zoneName, tier, cellLabel, rival, stakes, busy,
   const rivalName = rival ?? 'your rival';
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onClick={busy ? undefined : onCancel}>
+    <div className="fixed inset-0 z-[90] flex items-center justify-center scrim p-4 backdrop-blur-sm" onClick={busy ? undefined : onCancel}>
       <div
         className="hud-panel max-h-full w-[min(22rem,100%)] overflow-y-auto p-6 animate-pop-in"
         style={{ borderColor: 'rgba(249,115,22,0.5)' }}

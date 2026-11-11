@@ -11,12 +11,15 @@ import { XPBar } from './ui/XPBar';
 import { StreakFlame } from './ui/StreakFlame';
 import { streakRisk, streakStage } from '../lib/streak';
 import { useNow } from '../lib/useNow';
+import { ThemeToggle } from './ThemeToggle';
 
 const NAV_LINKS: { to: string; label: string; icon: IconName; match: (p: string) => boolean }[] = [
   { to: '/', label: 'Problems', icon: 'code', match: (p) => p === '/' },
+  { to: '/sheet', label: 'Warpath', icon: 'route', match: (p) => p === '/sheet' },
   { to: '/scoring', label: 'Scoring', icon: 'chart', match: (p) => p === '/scoring' },
   { to: '/map', label: 'Map', icon: 'map', match: (p) => p === '/map' },
   { to: '/contests', label: 'Contests', icon: 'swords', match: (p) => p === '/contests' || p.startsWith('/contest/') },
+  { to: '/about', label: 'About', icon: 'info', match: (p) => p === '/about' },
 ];
 
 function IconToggle({ on, onClick, label, icon }: { on: boolean; onClick: () => void; label: string; icon: IconName }) {
@@ -27,7 +30,7 @@ function IconToggle({ on, onClick, label, icon }: { on: boolean; onClick: () => 
       aria-label={label}
       aria-pressed={on}
       title={label}
-      className={`flex h-9 w-9 items-center justify-center rounded-lg border transition-all hover:scale-105 active:scale-95 ${
+      className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-all hover:scale-105 active:scale-95 sm:h-9 sm:w-9 ${
         on ? 'border-cyan-400/60 bg-cyan-400/10 text-cyan-200' : 'border-slate-700/80 text-slate-400 hover:border-slate-500 hover:text-slate-200'
       }`}
     >
@@ -53,7 +56,7 @@ export function Nav() {
         className="sticky top-0 z-40 flex shrink-0 items-center justify-between gap-3 border-b border-slate-800/80 bg-slate-950/85 px-3 backdrop-blur-xl sm:gap-6 sm:px-6 md:px-8"
         style={{ height: 'var(--nav-h)' }}
       >
-        <div className="flex min-w-0 items-center gap-6 min-[1320px]:gap-10">
+        <div className="flex min-w-0 items-center gap-6 min-[1560px]:gap-10">
           <Link to="/" className="font-display flex shrink-0 select-none items-center gap-2 text-xl font-bold tracking-wide">
             <span className="relative flex h-7 w-7 items-center justify-center">
               <span className="hex absolute inset-0 bg-gradient-to-b from-cyan-300 to-teal-500 opacity-90" />
@@ -78,15 +81,15 @@ export function Nav() {
                   to={link.to}
                   title={link.label}
                   onClick={() => sfx.play('click')}
-                  className={`group relative flex items-center gap-2 rounded-lg px-2.5 py-2 text-[0.8rem] font-bold uppercase tracking-[0.14em] transition-all min-[1320px]:px-3.5 ${
+                  className={`group relative flex items-center gap-2 rounded-lg px-2.5 py-2 text-[0.8rem] font-bold uppercase tracking-[0.14em] transition-all min-[1560px]:px-3.5 ${
                     active ? 'bg-cyan-400/10 text-cyan-300' : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-100'
                   }`}
                 >
                   <Icon name={link.icon} className={`h-4 w-4 transition-transform group-hover:scale-110 ${active ? 'drop-shadow-[0_0_6px_rgba(34,211,238,0.8)]' : ''}`} />
                   {/* Labels only where the bar has room for them next to the profile chip; icons alone before that. */}
-                  <span className="sr-only min-[1320px]:not-sr-only">{link.label}</span>
+                  <span className="sr-only min-[1560px]:not-sr-only">{link.label}</span>
                   {badge && (
-                    <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[0.62rem] font-bold text-white shadow-[0_0_10px_rgba(244,63,94,0.8)] animate-glow-pulse min-[1320px]:static">
+                    <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[0.62rem] font-bold text-white shadow-[0_0_10px_rgba(244,63,94,0.8)] animate-glow-pulse min-[1560px]:static">
                       {incoming}
                     </span>
                   )}
@@ -101,7 +104,7 @@ export function Nav() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {streakDays > 0 && (
             <Link
               to="/scoring"
@@ -142,6 +145,7 @@ export function Nav() {
             <LevelBadge level={stats.level.level} size={36} />
           </Link>
 
+          <ThemeToggle />
           <IconToggle on={soundOn} onClick={() => setSoundOn(!soundOn)} label={soundOn ? 'Sound on' : 'Sound off'} icon={soundOn ? 'volume' : 'mute'} />
           <IconToggle
             on={flavorTextEnabled}
@@ -154,7 +158,7 @@ export function Nav() {
             onClick={logout}
             aria-label={isDemo ? 'Leave the demo' : 'Log out'}
             title={isDemo ? 'Leave the demo' : 'Log out'}
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700/80 text-slate-400 transition-all hover:scale-105 hover:border-rose-400/60 hover:text-rose-300 active:scale-95"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700/80 text-slate-400 transition-all hover:scale-105 hover:border-rose-400/60 sm:h-9 sm:w-9 hover:text-rose-300 active:scale-95"
           >
             <Icon name="logout" className="h-[17px] w-[17px]" />
           </button>
@@ -165,7 +169,7 @@ export function Nav() {
 
       {/* phone tab bar */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-slate-800/80 bg-slate-950/92 backdrop-blur-xl sm:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t border-slate-800/80 bg-slate-950/92 backdrop-blur-xl sm:hidden"
         style={{ height: 'var(--tabbar-h)', paddingBottom: 'env(safe-area-inset-bottom)' }}
         aria-label="Primary"
       >
@@ -176,7 +180,7 @@ export function Nav() {
             <Link
               key={link.to}
               to={link.to}
-              className={`relative flex flex-col items-center justify-center gap-0.5 text-[0.62rem] font-bold uppercase tracking-[0.12em] transition-colors ${
+              className={`relative flex flex-col items-center justify-center gap-0.5 text-[0.54rem] font-bold uppercase tracking-[0.05em] transition-colors ${
                 active ? 'text-cyan-300' : 'text-slate-500'
               }`}
             >

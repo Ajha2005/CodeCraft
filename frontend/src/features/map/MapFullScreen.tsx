@@ -22,6 +22,7 @@ import { Minimap } from './hud/Minimap';
 import { ControlsDock } from './hud/ControlsDock';
 import { QuickTravel } from './hud/QuickTravel';
 import { LiveFeed, type FeedItem } from './hud/LiveFeed';
+import { QuestLog } from './hud/QuestLog';
 import { TravelBarLive, WaypointChip, ZonePanelLive } from './hud/LiveHud';
 import { FirstRunHint, InspectHint } from './hud/ActionHints';
 import { HelpOverlay } from './hud/HelpOverlay';
@@ -403,7 +404,7 @@ export function MapFullScreen() {
     <div
       ref={hostRef}
       data-moving={moving ? 'true' : undefined}
-      className="relative w-full overflow-hidden bg-[#03060b]"
+      className="map-host relative w-full overflow-hidden"
       style={{ height: 'calc(100dvh - var(--nav-h) - var(--tabbar-h))' }}
     >
       <canvas
@@ -413,8 +414,7 @@ export function MapFullScreen() {
         aria-label="Interactive campus map. Move with W A S D or the arrow keys, click a zone to inspect it."
       />
       <div
-        className="pointer-events-none absolute inset-0"
-        style={{ background: 'radial-gradient(ellipse at 50% 45%, transparent 52%, rgba(2,6,12,0.62) 100%)' }}
+        className="map-vignette pointer-events-none absolute inset-0"
       />
       <p className="sr-only" role="status" aria-live="polite">
         {current ? `You are at ${current.name}, ${TIER_META[current.tier].label}. ${STATUS_LABEL[current.status]}.` : 'You are on open ground.'}
@@ -431,7 +431,10 @@ export function MapFullScreen() {
           <ZoneSplash splash={splash} />
 
           {/* top-left: news that concerns you, briefly */}
-          <div className="absolute left-3 top-3 z-10 max-sm:top-12">
+          <div className="absolute left-3 top-3 z-10 flex flex-col items-start gap-2 max-sm:top-12">
+            <div className="hud-fade">
+              <QuestLog explored={explored} zoneTotal={world.campus.zones.length} />
+            </div>
             <LiveFeed items={feed} />
           </div>
 

@@ -62,7 +62,7 @@ export function CellMiniMap({ cells, highlight = null, highlightColor = '#22d3ee
             style={{
               width: cell,
               height: cell,
-              background: lit ? highlightColor : owned ? cellOwnerColor(c.ownerId, c.ownerColor) : '#1e2733',
+              background: lit ? highlightColor : owned ? cellOwnerColor(c.ownerId, c.ownerColor) : 'var(--cc-cell-free)',
               opacity: lit ? 1 : owned ? 0.55 : 1,
               ['--lit' as string]: highlightColor,
             }}

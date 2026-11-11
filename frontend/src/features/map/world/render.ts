@@ -5,7 +5,7 @@ import { DecorKit, baseRoof, tintStrength } from './decor';
 import { darken, lighten, mix, rgba } from './color';
 import { LINE_HEIGHT, NUDGES, STAY, fitName, overlapsAny } from './labels';
 import { OBL_X, cellKey, liftedHeight, type ZoneView } from './scene';
-import { FONT_DISPLAY, FONT_MONO, PALETTE, TIER_STYLE } from './theme';
+import { FONT_DISPLAY, FONT_MONO, PALETTE, TIER_STYLE, getMapMode } from './theme';
 
 // The world renderer. One call to `draw` paints a whole frame:
 //
@@ -122,6 +122,16 @@ interface Star {
   a: number;
 }
 
+interface Cloud {
+  fx: number;
+  fy: number;
+  w: number;
+  h: number;
+  d: number;
+  v: number;
+  a: number;
+}
+
 interface Mote {
   fx: number;
   fy: number;
@@ -158,6 +168,8 @@ export class WorldRenderer {
   private readonly orient: number[] = [];
   private readonly slabPath: Path2D;
   private readonly groundTex: HTMLCanvasElement;
+  private groundMode: 'dark' | 'light' = 'dark';
+  private readonly clouds: Cloud[] = [];
   private readonly labelWidthCache = new Map<string, number>();
   private readonly lanePath: Path2D;
   private readonly lampPoints: Pt[] = [];
@@ -231,13 +243,29 @@ export class WorldRenderer {
     this.groundTex = document.createElement('canvas');
     this.groundTex.width = 640;
     this.groundTex.height = 340;
+    this.bakeGround();
+    for (let i = 0; i < 16; i++) this.clouds.push({ fx: r(), fy: 0.08 + r() * 0.84, w: 160 + r() * 280, h: 40 + r() * 60, d: 0.2 + r() * 0.5, v: 4 + r() * 8, a: 0.35 + r() * 0.4 });
+  }
+
+  /** Paints the island's top face for the current map mode (day / night). Re-run when the mode flips. */
+  private bakeGround() {
+    this.groundMode = getMapMode();
+    const light = this.groundMode === 'light';
+    const rand = (seed: number) => {
+      let a = seed;
+      return () => {
+        a = (a * 1664525 + 1013904223) >>> 0;
+        return a / 4294967296;
+      };
+    };
     const g = this.groundTex.getContext('2d') as CanvasRenderingContext2D;
+    g.clearRect(0, 0, 640, 340);
     const rr = rand(2024);
     // Island lighting is baked in here (brighter core, darker rim) so each
     // frame needs one textured fill instead of three full-screen gradients.
     const base = g.createRadialGradient(320, 170, 8, 320, 170, 390);
-    base.addColorStop(0, '#112538');
-    base.addColorStop(1, '#09131e');
+    base.addColorStop(0, light ? '#e9f4fc' : '#112538');
+    base.addColorStop(1, light ? '#c5d9ea' : '#09131e');
     g.fillStyle = base;
     g.fillRect(0, 0, 640, 340);
     for (let i = 0; i < 90; i++) {
@@ -246,19 +274,20 @@ export class WorldRenderer {
       const rad = 20 + rr() * 90;
       const tint = rr();
       const grad = g.createRadialGradient(x, y, 0, x, y, rad);
-      const c = tint < 0.4 ? '34,211,238' : tint < 0.75 ? '20,120,110' : '60,90,160';
-      grad.addColorStop(0, `rgba(${c},${0.025 + rr() * 0.04})`);
+      const c = light ? (tint < 0.4 ? '56,189,248' : tint < 0.75 ? '52,211,153' : '167,139,250') : tint < 0.4 ? '34,211,238' : tint < 0.75 ? '20,120,110' : '60,90,160';
+      const amp = light ? 1.7 : 1;
+      grad.addColorStop(0, `rgba(${c},${(0.025 + rr() * 0.04) * amp})`);
       grad.addColorStop(1, `rgba(${c},0)`);
       g.fillStyle = grad;
       g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
     }
     for (let i = 0; i < 1400; i++) {
-      g.fillStyle = `rgba(150,200,230,${0.015 + rr() * 0.03})`;
+      g.fillStyle = light ? `rgba(40,100,150,${0.015 + rr() * 0.03})` : `rgba(150,200,230,${0.015 + rr() * 0.03})`;
       g.fillRect(rr() * 640, rr() * 340, 1, 1);
     }
     const rim = g.createRadialGradient(320, 170, 210, 320, 170, 410);
-    rim.addColorStop(0, 'rgba(2,6,12,0)');
-    rim.addColorStop(1, 'rgba(2,6,12,0.55)');
+    rim.addColorStop(0, light ? 'rgba(60,110,160,0)' : 'rgba(2,6,12,0)');
+    rim.addColorStop(1, light ? 'rgba(60,110,160,0.32)' : 'rgba(2,6,12,0.55)');
     g.fillStyle = rim;
     g.fillRect(0, 0, 640, 340);
   }
@@ -267,6 +296,7 @@ export class WorldRenderer {
 
   draw(ctx: CanvasRenderingContext2D, f: Frame) {
     const { vw, vh, dpr, zoom } = f;
+    if (this.groundMode !== getMapMode()) this.bakeGround();
     const halfW = vw / (2 * zoom);
     const halfH = vh / (2 * zoom);
     this.tx0 = f.cx - halfW;
@@ -320,6 +350,26 @@ export class WorldRenderer {
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, vw, vh);
 
+    if (getMapMode() === 'light') {
+      // Daylight: soft clouds drifting past below the floating island.
+      for (const c of this.clouds) {
+        const drift = f.reduced ? 0 : f.anim * c.v;
+        const x = (((c.fx * (vw + c.w * 2) - f.cx * f.zoom * c.d - drift) % (vw + c.w * 2)) + vw + c.w * 2) % (vw + c.w * 2) - c.w;
+        const y = (((c.fy * vh - f.cy * f.zoom * c.d * 0.6) % vh) + vh) % vh;
+        const grad = ctx.createRadialGradient(x, y, 0, x, y, c.w * 0.5);
+        grad.addColorStop(0, `rgba(255,255,255,${c.a})`);
+        grad.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(1, c.h / c.w);
+        ctx.translate(-x, -y);
+        ctx.fillStyle = grad;
+        ctx.fillRect(x - c.w * 0.5, y - c.w * 0.5, c.w, c.w);
+        ctx.restore();
+      }
+      return;
+    }
+
     // Still stars: a twinkle here is a lot of small flickers to watch.
     ctx.fillStyle = 'rgba(170,215,255,0.5)';
     for (const s of this.stars) {
@@ -361,7 +411,7 @@ export class WorldRenderer {
           const k = (i / steps) * SLAB_THICKNESS;
           ctx.save();
           ctx.translate(OBL_X * k, k);
-          ctx.fillStyle = mix('#173047', '#03070c', i / steps);
+          ctx.fillStyle = getMapMode() === 'light' ? mix('#9dbbd4', '#4a6b89', i / steps) : mix('#173047', '#03070c', i / steps);
           ctx.fill(this.slabPath);
           ctx.restore();
         }
@@ -434,12 +484,12 @@ export class WorldRenderer {
     ctx.stroke(this.allZones);
 
     if (zoom > 0.3) {
-      ctx.fillStyle = 'rgba(255,214,102,0.34)';
+      ctx.fillStyle = getMapMode() === 'light' ? 'rgba(217,119,6,0.4)' : 'rgba(255,214,102,0.34)';
       ctx.fill(this.lanePath);
 
       // street lamps
       ctx.globalCompositeOperation = 'lighter';
-      for (const p of f.lowFx ? [] : this.lampPoints) {
+      for (const p of f.lowFx || getMapMode() === 'light' ? [] : this.lampPoints) {
         if (p.x < this.vx0 || p.x > this.vx1 || p.y < this.vy0 || p.y > this.vy1) continue;
         const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 22);
         g.addColorStop(0, 'rgba(160,225,255,0.22)');
@@ -563,7 +613,7 @@ export class WorldRenderer {
       roofFill = mix(roofFill, v.shares.length === 1 ? v.shares[0].color : (v.topColor ?? v.shares[0].color), a);
       blended = true;
     }
-    ctx.fillStyle = detail ? mix(roofFill, '#0b121b', 0.55) : roofFill;
+    ctx.fillStyle = detail ? mix(roofFill, getMapMode() === 'light' ? '#7f9bb5' : '#0b121b', 0.55) : roofFill;
     ctx.fill(v.path);
 
     if (!detail) {
@@ -593,7 +643,7 @@ export class WorldRenderer {
 
     // unexplored veil
     if (!v.discovered && !detail) {
-      ctx.fillStyle = 'rgba(3,9,16,0.46)';
+      ctx.fillStyle = getMapMode() === 'light' ? 'rgba(70,100,135,0.36)' : 'rgba(3,9,16,0.46)';
       ctx.fill(v.path);
     }
 
@@ -646,6 +696,7 @@ export class WorldRenderer {
       ctx.stroke(v.path);
     }
 
+    if (!v.discovered && !detail && zoom >= 0.22 && !f.lowFx) this.drawUnknownMarker(ctx, z, f.anim, px);
     if (citadel && !detail && !f.lowFx && zoom >= 0.45) this.drawBeacon(ctx, v, tier.accent, emph);
     if (v.mineCount > 0 && !detail && zoom >= 0.9) this.drawPennant(ctx, z, f.meColor);
 
@@ -757,6 +808,32 @@ export class WorldRenderer {
     ctx.restore();
   }
 
+  /** A bobbing gold "?" over ground you have not walked yet: a small reason to go and look. */
+  private drawUnknownMarker(ctx: CanvasRenderingContext2D, z: Zone, anim: number, px: number) {
+    const s = Math.max(1, 1.15 * px * 9);
+    const bob = Math.sin(anim * 2.2 + z.index) * 2.5 * s * 0.35;
+    const x = z.box.x + z.box.w - Math.min(26, z.box.w * 0.22) * Math.max(1, px * 2);
+    const y = z.box.y + Math.min(30, z.box.h * 0.25) * Math.max(1, px * 2) + bob;
+    const r = 7.5 * Math.max(1, px * 1.6);
+    ctx.save();
+    ctx.shadowColor = rgba(PALETTE.gold, 0.9);
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = 'rgba(4,10,18,0.82)';
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = Math.max(1, r * 0.16);
+    ctx.strokeStyle = PALETTE.gold;
+    ctx.stroke();
+    ctx.fillStyle = '#fde68a';
+    ctx.font = `700 ${r * 1.3}px ${FONT_DISPLAY}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('?', x, y + r * 0.06);
+    ctx.restore();
+  }
+
   private drawPennant(ctx: CanvasRenderingContext2D, z: Zone, color: string) {
     const x = z.box.x + z.box.w - 14;
     const y = z.box.y + 16;
@@ -801,9 +878,16 @@ export class WorldRenderer {
         if (cell.ownerId) {
           ctx.globalAlpha = 0.82;
           ctx.fillStyle = cell.ownerColor;
+          if (f.meId && cell.ownerId === f.meId && !f.reduced) {
+            // your own cells breathe a little, in a slow diagonal wave
+            const wave = 0.5 + 0.5 * Math.sin(f.anim * 1.6 - (row + col) * 0.55);
+            ctx.fillRect(x + gap, y + gap, v.cw - gap * 2, v.ch - gap * 2);
+            ctx.globalAlpha = 0.1 + 0.28 * wave;
+            ctx.fillStyle = '#ffffff';
+          }
         } else {
           ctx.globalAlpha = 1;
-          ctx.fillStyle = (row + col) & 1 ? '#28313d' : '#2c3643';
+          ctx.fillStyle = getMapMode() === 'light' ? ((row + col) & 1 ? '#c3d2e0' : '#cddae6') : (row + col) & 1 ? '#28313d' : '#2c3643';
         }
         ctx.fillRect(x + gap, y + gap, v.cw - gap * 2, v.ch - gap * 2);
       }
@@ -1318,7 +1402,8 @@ export class WorldRenderer {
     ctx.save();
     ctx.translate(ox, oy);
     ctx.scale(s, s);
-    ctx.fillStyle = '#0a1522';
+    const miniBg = getMapMode() === 'light' ? '#dceaf6' : '#0a1522';
+    ctx.fillStyle = miniBg;
     ctx.fill(this.slabPath);
     ctx.lineWidth = 1.4 / s;
     ctx.strokeStyle = rgba(PALETTE.cyan, 0.5);
@@ -1327,8 +1412,8 @@ export class WorldRenderer {
     for (const idx of f.order) {
       const v = f.views[idx];
       const base = baseRoof(v.zone.kind, v.zone.tier);
-      const color = v.topColor && v.fraction > 0 ? mix(base, v.topColor, 0.35 + 0.65 * v.fraction) : mix(base, '#0a1522', 0.15);
-      ctx.fillStyle = v.discovered ? color : mix(color, '#050b12', 0.55);
+      const color = v.topColor && v.fraction > 0 ? mix(base, v.topColor, 0.35 + 0.65 * v.fraction) : mix(base, miniBg, 0.15);
+      ctx.fillStyle = v.discovered ? color : mix(color, getMapMode() === 'light' ? '#8fa9c2' : '#050b12', 0.55);
       ctx.fill(v.path);
       if (v.contested) {
         ctx.lineWidth = 1.4 / s;

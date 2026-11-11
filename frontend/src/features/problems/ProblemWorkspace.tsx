@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTheme } from '../../lib/theme';
+import { markDailyCleared } from '../../lib/daily';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import confetti from 'canvas-confetti';
 import { useAuth } from '../../auth/useAuth';
@@ -126,6 +128,7 @@ export function ProblemWorkspace(props: WorkspaceProps) {
 }
 
 function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: WorkspaceProps & { problem: ProblemDetail }) {
+  const { isLight } = useTheme();
   const { user, token, isDemo, flavorTextEnabled } = useAuth();
   const { stats, refresh: refreshStats } = usePlayerStats();
   const fineKeyboard = useMediaQuery('(pointer: fine)');
@@ -230,6 +233,7 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
     catalog.markStatus(problem.id, accepted ? 'AC' : 'ATTEMPTED');
     const streak = recordVerdict(accepted);
     if (accepted) {
+      markDailyCleared(userId, problem.id, catalog.problems);
       if (mountedRef.current) {
         sfx.play('win');
         confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
@@ -457,7 +461,7 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
                 // Monaco would otherwise use Ctrl/Cmd+Enter to insert a line.
                 editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => submitRef.current());
               }}
-              theme="vs-dark"
+              theme={isLight ? 'vs' : 'vs-dark'}
               options={{ fontSize: 14, minimap: { enabled: false }, scrollBeyondLastLine: false, padding: { top: 12 }, automaticLayout: true }}
             />
           </div>
@@ -528,7 +532,7 @@ function ProblemSession({ problem, catalog, push, recordVerdict, onNext }: Works
                 <LevelBadge level={stats.level.level} size={46} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-3">
-                    <p className="font-mono text-2xl font-bold tabular-nums text-white">
+                    <p className="font-mono text-2xl font-bold tabular-nums text-slate-50">
                       +<AnimatedNumber value={score.totalScore * 10} /> <span className="text-sm text-amber-300">XP</span>
                     </p>
                     <p className="text-[0.7rem] font-semibold text-slate-400">

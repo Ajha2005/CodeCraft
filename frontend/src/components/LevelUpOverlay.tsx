@@ -28,7 +28,7 @@ export function LevelUpOverlay() {
   if (!levelUp) return null;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm animate-fade-in-up" onClick={dismissLevelUp} role="dialog" aria-label="Level up">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center scrim-75 p-4 backdrop-blur-sm animate-fade-in-up" onClick={dismissLevelUp} role="dialog" aria-label="Level up">
       <div className="relative flex max-w-sm flex-col items-center text-center">
         <div
           className="pointer-events-none absolute left-1/2 top-[7.5rem] h-[34rem] w-[34rem] -translate-x-1/2 -translate-y-1/2 opacity-60 animate-spin-slow"
@@ -39,7 +39,7 @@ export function LevelUpOverlay() {
         </div>
         <p className="font-display relative mt-6 text-5xl font-bold uppercase tracking-[0.2em] text-amber-200 drop-shadow-[0_0_24px_rgba(251,191,36,0.8)]">Level up!</p>
         <p className="relative mt-2 text-lg text-slate-200">
-          Level {levelUp.from} <span className="mx-1 text-amber-300">→</span> <span className="font-bold text-white">Level {levelUp.to}</span>
+          Level {levelUp.from} <span className="mx-1 text-amber-300">→</span> <span className="font-bold text-slate-50">Level {levelUp.to}</span>
         </p>
         <p className="font-display relative mt-1 text-sm font-bold uppercase tracking-[0.3em] text-cyan-300">New heights reached</p>
         <button type="button" className="btn-primary relative mt-7 h-11 rounded-lg px-8 text-sm" onClick={dismissLevelUp}>

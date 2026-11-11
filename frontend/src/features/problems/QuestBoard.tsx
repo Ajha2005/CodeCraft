@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/useAuth';
 import { usePlayerStats } from '../../lib/playerStatsContext';
 import { useMediaQuery } from '../../lib/useMediaQuery';
@@ -7,6 +8,7 @@ import { EMPTY_PROBLEM_LIST, PROBLEM_HOVER_REMATCH, PROBLEM_HOVER_UNSOLVED, pick
 import { AnimatedNumber } from '../../components/ui/AnimatedNumber';
 import { Icon } from '../../components/ui/Icon';
 import { Pips } from '../../components/ui/Pips';
+import { DailyQuestCard } from '../../components/DailyQuestCard';
 import { ProgressRing } from '../../components/ui/ProgressRing';
 import { DifficultyBadge } from './DifficultyBadge';
 import { DIFFICULTIES, difficultyMeta, padId } from './difficulty';
@@ -164,7 +166,7 @@ export function QuestBoard({ catalog, active, onOpen }: QuestBoardProps) {
           <div className="relative col-start-2 row-start-1 shrink-0 md:row-span-2 md:self-center">
             <ProgressRing pct={solvedPct} size={compact ? 80 : 132} stroke={compact ? 7 : 10} color="#22d3ee">
               <div className="text-center leading-none">
-                <p className={`font-mono font-bold tabular-nums text-white ${compact ? 'text-lg' : 'text-3xl'}`}>
+                <p className={`font-mono font-bold tabular-nums text-slate-50 ${compact ? 'text-lg' : 'text-3xl'}`}>
                   <AnimatedNumber value={progress.solved} />
                 </p>
                 <p className="mt-1 text-[0.62rem] font-semibold uppercase tracking-wide text-slate-400">of {problems.length}</p>
@@ -172,6 +174,26 @@ export function QuestBoard({ catalog, active, onOpen }: QuestBoardProps) {
             </ProgressRing>
           </div>
         </header>
+
+        {/* ----------------------------------------- daily quest + the Warpath */}
+        <div className="mb-6 grid gap-3 lg:grid-cols-[1fr_auto]">
+          <DailyQuestCard catalog={catalog} />
+          <Link
+            to="/sheet"
+            onClick={() => sfx.play('click')}
+            className="hud-panel hud-panel-quiet group flex items-center gap-3 p-4 transition-colors hover:border-cyan-400/50 animate-fade-in-up lg:w-72"
+          >
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-cyan-400/40 bg-cyan-400/10 text-cyan-300">
+              <Icon name="route" className="h-5 w-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="hud-label block !text-cyan-300">New to DSA?</span>
+              <span className="font-display block text-xl font-bold leading-tight tracking-wide text-slate-50">Walk the Warpath</span>
+              <span className="block text-[0.74rem] leading-snug text-slate-400">The ordered sheet: arrays, trees, graphs.</span>
+            </span>
+            <Icon name="arrowRight" className="h-4 w-4 shrink-0 text-slate-500 transition-all group-hover:translate-x-0.5 group-hover:text-cyan-300" />
+          </Link>
+        </div>
 
         {/* --------------------------------------------------------- filters */}
         <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-3">
@@ -241,7 +263,7 @@ export function QuestBoard({ catalog, active, onOpen }: QuestBoardProps) {
                           borderColor: meta ? `${meta.accent}99` : '#e2e8f0',
                           background: meta ? `${meta.accent}1f` : 'linear-gradient(135deg,#f1f5f9,#cbd5e1)',
                         }
-                      : { color: '#94a3b8', borderColor: 'rgba(71,85,105,0.7)', background: 'rgba(15,23,42,0.5)' }
+                      : { color: 'var(--color-slate-400)', borderColor: 'color-mix(in srgb, var(--color-slate-600) 70%, transparent)', background: 'color-mix(in srgb, var(--color-slate-900) 50%, transparent)' }
                   }
                 >
                   {meta && <Icon name={meta.icon} className="h-4 w-4" />}

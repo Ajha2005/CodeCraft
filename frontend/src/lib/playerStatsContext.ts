@@ -22,6 +22,10 @@ export interface PlayerStats {
   campaign: CampaignSummary | null;
   /** Distinct zones walked into on the map. */
   explored: number;
+  /** Progress on the Warpath (the DSA sheet): fronts and realms fully cleared, core quests solved. */
+  sheet: { frontsDone: number; realmsDone: number; sheetSolved: number };
+  /** Daily Quests cleared (kept on this device). */
+  dailies: number;
 }
 
 export interface LevelUpEvent {

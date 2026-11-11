@@ -431,7 +431,12 @@ export class MapEngine {
       this.fx.burst(cx, cy, color, c.byMe ? 34 : 20, c.byMe ? 260 : 190);
       this.fx.ring(cx, cy, color, c.byMe ? 150 : 110, 1, 3.5);
       this.fx.ring(cx, cy, '#ffffff', c.byMe ? 90 : 60, 0.7, 2);
-      if (c.byMe) this.fx.text(cx, cy - 8, '+1 CELL', '#ffffff', 18);
+      if (c.byMe) {
+        this.fx.text(cx, cy - 8, '+1 CELL', '#ffffff', 18);
+        this.fx.beam(cx, cy, color, 280);
+        this.fx.fountain(cx, cy, color, 30);
+        this.fx.ring(cx, cy, '#fde68a', 210, 1.3, 2, 20);
+      }
     }
     if (change.captured.length > 0) {
       const near = change.captured.some((c) => {

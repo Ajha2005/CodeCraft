@@ -19,6 +19,8 @@ import { useToasts } from '../lib/useToasts';
 import { rankTitle, rankUpToast, nearMissNudge } from '../lib/flavorText';
 import { formatXp, levelFromScore } from '../lib/progression';
 import { achievementInputFrom, computeAchievements, readExploredCount } from '../lib/achievements';
+import { readDailyTotal } from '../lib/daily';
+import { usePlayerStats } from '../lib/playerStatsContext';
 import { nextStreakStage, streakRisk, streakStage } from '../lib/streak';
 import { useTerritoryCells } from '../features/map/hooks/useTerritoryCells';
 import DemoScoring from './DemoScoring';
@@ -211,6 +213,7 @@ function PlayerScoring() {
 
   const totalScore = scoreData?.totalScore ?? 0;
   const now = useNow();
+  const { stats } = usePlayerStats();
   const risk = streakRisk(streak?.current ?? 0, progress?.qualifyingCount ?? 0, now);
   const { cellsByTerritory } = useTerritoryCells();
   // the newest solve's cell is shown straight away; any other row opens on click
@@ -242,9 +245,12 @@ function PlayerScoring() {
           rank,
           daily: progress,
           explored: user ? readExploredCount(user.userId) : 0,
+          frontsCleared: stats.sheet.frontsDone,
+          realmsCleared: stats.sheet.realmsDone,
+          dailiesCleared: user ? readDailyTotal(user.userId) : 0,
         }),
       ),
-    [scoreData, streak, territories, tierMix, rank, progress, user],
+    [scoreData, streak, territories, tierMix, rank, progress, user, stats.sheet],
   );
   const unlockedCount = achievements.filter((a) => a.unlocked).length;
 

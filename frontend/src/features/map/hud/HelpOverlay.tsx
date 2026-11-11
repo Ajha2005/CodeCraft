@@ -21,12 +21,12 @@ const TIERS: Tier[] = ['OUTPOST', 'SETTLEMENT', 'STRONGHOLD', 'CITADEL'];
 
 export function HelpOverlay({ onClose }: { onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[80] flex items-center justify-center scrim-65 p-4 backdrop-blur-sm" onClick={onClose}>
       <div className="hud-panel max-h-full w-full max-w-2xl overflow-y-auto p-5 animate-pop-in" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Map controls">
         <div className="mb-3 flex items-center gap-2">
           <Icon name="help" className="h-5 w-5 text-cyan-300" />
           <h2 className="font-display flex-1 text-xl font-bold uppercase tracking-[0.18em] text-slate-50">Field manual</h2>
-          <button type="button" onClick={onClose} aria-label="Close help" className="rounded p-1 text-slate-400 hover:text-white">
+          <button type="button" onClick={onClose} aria-label="Close help" className="rounded p-1 text-slate-400 hover:text-slate-50">
             <Icon name="x" className="h-5 w-5" />
           </button>
         </div>

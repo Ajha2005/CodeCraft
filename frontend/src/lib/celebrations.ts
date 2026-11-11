@@ -12,6 +12,8 @@ import { tierOf } from './tiers';
 
 export type Celebration =
   | { id: string; kind: 'achievement'; achievement: Achievement }
+  /** The very first accepted solve: reveals the player's own colour. */
+  | { id: string; kind: 'first-solve'; cell: AwardedCell | null }
   | { id: string; kind: 'first-cell'; tier: Tier; cell: AwardedCell | null }
   | { id: string; kind: 'tier-first'; tier: Tier; cell: AwardedCell | null }
   | { id: string; kind: 'majority'; zone: MajorityZone }
@@ -41,6 +43,7 @@ export function currentKeys(snap: Snapshot): Seen {
       .map((a) => a.id),
   );
   const moments = new Set<string>();
+  if (snap.achievementInput.solves > 0) moments.add('solve:first');
   if (snap.cellsHeld > 0) moments.add('cell:first');
   for (const t of TIERS) if ((snap.cellsByTier[t] ?? 0) > 0) moments.add(`tier:${t}`);
   for (const z of snap.majorityZones) moments.add(`majority:${z.territoryId}`);
@@ -59,9 +62,21 @@ export function detectCelebrations(
   seen: Seen,
   /** The cell the solve that triggered this refresh just earned, when known. */
   justWon: AwardedCell | null,
+  /** Demo players have no colour of their own, so they get no colour reveal. */
+  options: { colorReveal?: boolean } = {},
 ): { events: Celebration[]; remember: Seen } {
   const events: Celebration[] = [];
   const remember: Seen = { achievements: new Set(), moments: new Set() };
+
+  // --- the first solve: here is your colour ---------------------------------
+  // It comes first, and it stands in for the "First Blood" achievement card,
+  // which would only say the same thing again.
+  const firstSolve =
+    options.colorReveal !== false && prev.achievementInput.solves === 0 && next.achievementInput.solves > 0 && !seen.moments.has('solve:first');
+  if (firstSolve) {
+    events.push({ id: 'solve:first', kind: 'first-solve', cell: justWon });
+    remember.moments.add('solve:first');
+  }
 
   // --- cells ---------------------------------------------------------------
   const firstCellNow = prev.cellsHeld === 0 && next.cellsHeld > 0 && !seen.moments.has('cell:first');
@@ -96,6 +111,10 @@ export function detectCelebrations(
   // --- achievements --------------------------------------------------------
   for (const a of computeAchievements(next.achievementInput)) {
     if (!a.unlocked || seen.achievements.has(a.id)) continue;
+    if (firstSolve && a.id === 'first-blood') {
+      remember.achievements.add(a.id);
+      continue;
+    }
     events.push({ id: `achievement:${a.id}`, kind: 'achievement', achievement: a });
     remember.achievements.add(a.id);
   }

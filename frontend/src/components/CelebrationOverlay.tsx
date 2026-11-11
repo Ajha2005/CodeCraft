@@ -7,6 +7,7 @@ import type { Celebration } from '../lib/celebrations';
 import { usePlayerStats } from '../lib/playerStatsContext';
 import { sfx } from '../lib/sfx';
 import { TIER_META } from '../lib/tiers';
+import { colorIdentity } from '../lib/colorName';
 import { CellMiniMap } from './ui/CellMiniMap';
 import { Icon, type IconName } from './ui/Icon';
 import { StreakFlame } from './ui/StreakFlame';
@@ -26,8 +27,20 @@ interface Look {
   confetti: string[];
 }
 
-function lookOf(c: Celebration, flavor: boolean): Look {
+function lookOf(c: Celebration, flavor: boolean, myColor: string): Look {
   switch (c.kind) {
+    case 'first-solve': {
+      const id = colorIdentity(myColor);
+      return {
+        eyebrow: 'First blood · your colour',
+        title: id.name,
+        body: 'Every cell you claim lights up in this colour on the map, on the leaderboard and in duels. No other player has it.',
+        color: id.hex,
+        icon: 'flag',
+        sound: 'levelup',
+        confetti: [id.hex, '#ffffff', '#fbbf24'],
+      };
+    }
     case 'achievement':
       return {
         eyebrow: 'Achievement unlocked',
@@ -104,7 +117,7 @@ export function CelebrationOverlay() {
   const { celebration, celebrationsWaiting, dismissCelebration, levelUp } = usePlayerStats();
   const { user, flavorTextEnabled } = useAuth();
   const active = levelUp ? null : celebration;
-  const look = active ? lookOf(active, flavorTextEnabled) : null;
+  const look = active ? lookOf(active, flavorTextEnabled, user?.color ?? '#22d3ee') : null;
   const activeId = active?.id ?? null;
   const confettiColors = look?.confetti;
   const sound = look?.sound;
@@ -125,10 +138,11 @@ export function CelebrationOverlay() {
   if (!active || !look) return null;
 
   const awarded: AwardedCell | null = active.kind === 'first-cell' || active.kind === 'tier-first' ? active.cell : null;
+  const isColor = active.kind === 'first-solve';
 
   return (
     <div
-      className="fixed inset-0 z-[190] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-fade-in-up"
+      className="fixed inset-0 z-[190] flex items-center justify-center scrim p-4 backdrop-blur-sm animate-fade-in-up"
       onClick={dismissCelebration}
       role="dialog"
       aria-label={`${look.eyebrow}: ${look.title}`}
@@ -149,7 +163,15 @@ export function CelebrationOverlay() {
         />
 
         <div style={{ animation: 'level-burst 0.8s cubic-bezier(0.34,1.56,0.64,1) both' }}>
-          {active.kind === 'streak' ? (
+          {isColor ? (
+            <div className="relative h-[148px] w-[148px]" style={{ filter: `drop-shadow(0 0 30px ${look.color}cc)` }}>
+              <div className="hex absolute inset-0" style={{ background: `linear-gradient(160deg, #ffffff, ${look.color} 38%, ${look.color})` }} />
+              <div className="hex absolute inset-[7px]" style={{ background: `radial-gradient(circle at 35% 28%, ${look.color}, ${look.color}cc 55%, ${look.color}88)` }} />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Icon name="flag" filled className="h-14 w-14 text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.35)]" />
+              </div>
+            </div>
+          ) : active.kind === 'streak' ? (
             <div className="flex h-[132px] w-[132px] items-center justify-center">
               <StreakFlame days={active.days} size={120} />
             </div>
@@ -170,6 +192,14 @@ export function CelebrationOverlay() {
           {look.title}
         </h2>
         <p className="relative mt-2 text-[0.95rem] leading-snug text-slate-300">{look.body}</p>
+
+        {isColor && (
+          <div className="relative mt-4 flex items-center gap-3 rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-2.5">
+            <span className="h-6 w-6 rounded-md" style={{ background: look.color, boxShadow: `0 0 14px ${look.color}` }} />
+            <span className="font-mono text-sm font-bold uppercase tracking-wider text-slate-100">{look.color}</span>
+            <span className="hud-label !text-[0.6rem]">Yours alone</span>
+          </div>
+        )}
 
         {awarded && <CellPicture cell={awarded} color={user?.color ?? look.color} />}
 

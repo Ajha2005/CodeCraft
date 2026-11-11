@@ -13,6 +13,11 @@ export interface AchievementInput {
   rank: number | null;
   dailyCapReached: boolean;
   explored: number;
+  /** Fronts / realms of the Warpath (the DSA sheet) fully cleared. */
+  frontsCleared: number;
+  realmsCleared: number;
+  /** Daily Quests cleared (kept on this device). */
+  dailiesCleared: number;
 }
 
 export interface Achievement {
@@ -40,6 +45,11 @@ export function computeAchievements(i: AchievementInput): Achievement[] {
     { id: 'full-cap', name: 'Full Throttle', description: 'Hit the daily solve cap.', icon: 'target', color: '#2dd4bf', progress: i.dailyCapReached ? 1 : 0, target: 1 },
     { id: 'explorer', name: 'Explorer', description: 'Walk into 10 different zones.', icon: 'compass', color: '#38bdf8', progress: i.explored, target: 10 },
     { id: 'cartographer', name: 'Cartographer', description: 'Explore every zone on campus.', icon: 'map', color: '#60a5fa', progress: i.explored, target: 46 },
+    { id: 'first-front', name: 'Front Cleared', description: 'Clear every core quest in one front of the Warpath.', icon: 'route', color: '#34d399', progress: i.frontsCleared, target: 1 },
+    { id: 'campaigner', name: 'Campaigner', description: 'Clear 5 fronts of the Warpath.', icon: 'compass', color: '#2dd4bf', progress: i.frontsCleared, target: 5 },
+    { id: 'realm-taker', name: 'Realm Taker', description: 'Clear a whole realm of the Warpath.', icon: 'gem', color: '#a78bfa', progress: i.realmsCleared, target: 1 },
+    { id: 'warlord', name: 'Warlord', description: 'Clear every realm of the Warpath.', icon: 'trophy', color: '#f472b6', progress: i.realmsCleared, target: 5 },
+    { id: 'daily-driver', name: 'Daily Driver', description: 'Clear 3 Daily Quests.', icon: 'gift', color: '#38bdf8', progress: i.dailiesCleared, target: 3 },
   ];
   return defs.map((d) => ({ ...d, progress: Math.min(d.progress, d.target), unlocked: d.progress >= d.target }));
 }
@@ -54,6 +64,9 @@ export function achievementInputFrom(parts: {
   rank: number | null;
   daily: { qualifyingCount: number; cap: number } | null;
   explored: number;
+  frontsCleared?: number;
+  realmsCleared?: number;
+  dailiesCleared?: number;
 }): AchievementInput {
   return {
     solves: parts.solves,
@@ -64,6 +77,9 @@ export function achievementInputFrom(parts: {
     rank: parts.rank,
     dailyCapReached: !!parts.daily && parts.daily.qualifyingCount >= parts.daily.cap,
     explored: parts.explored,
+    frontsCleared: parts.frontsCleared ?? 0,
+    realmsCleared: parts.realmsCleared ?? 0,
+    dailiesCleared: parts.dailiesCleared ?? 0,
   };
 }
 

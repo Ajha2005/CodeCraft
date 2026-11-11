@@ -1,5 +1,5 @@
 import { mix } from './color';
-import { PALETTE, TIER_STYLE, type Tier, type ZoneKind } from './theme';
+import { PALETTE, TIER_STYLE, getMapMode, type Tier, type ZoneKind } from './theme';
 import type { ZoneView } from './scene';
 import type { Pt } from './geometry';
 
@@ -24,6 +24,7 @@ const TIER_TINT = [0.05, 0.1, 0.15, 0.2] as const;
 
 /** Base roof color for an *unclaimed* zone of this kind and tier. */
 export function baseRoof(kind: ZoneKind, tier: Tier = 'OUTPOST'): string {
+  if (getMapMode() === 'light') return lightRoof(kind, tier);
   switch (kind) {
     case 'field':
       return '#15402c';
@@ -45,6 +46,34 @@ export function baseRoof(kind: ZoneKind, tier: Tier = 'OUTPOST'): string {
       return tierTint('#2d3945', tier, 0.7);
     case 'construction':
       return tierTint('#33302b', tier, 0.5);
+    default:
+      return tierTint(PALETTE.stone, tier, 1);
+  }
+}
+
+/** Daytime roofs: sunlit stone, bright lawns, clear water. */
+function lightRoof(kind: ZoneKind, tier: Tier): string {
+  switch (kind) {
+    case 'field':
+      return '#7fcf9c';
+    case 'track':
+      return '#d8a38a';
+    case 'court':
+      return '#7fb4e0';
+    case 'water':
+      return '#5db6dc';
+    case 'forest':
+      return '#5fae80';
+    case 'parking':
+      return tierTint('#b9c6d3', tier, 0.5);
+    case 'plaza':
+      return tierTint('#d9e2ec', tier, 0.7);
+    case 'gate':
+      return tierTint('#c9d5e1', tier, 0.7);
+    case 'medical':
+      return tierTint('#e3ebf3', tier, 0.7);
+    case 'construction':
+      return tierTint('#e0d6c2', tier, 0.5);
     default:
       return tierTint(PALETTE.stone, tier, 1);
   }

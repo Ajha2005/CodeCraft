@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTheme } from '../../lib/theme';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import type { Socket } from 'socket.io-client';
@@ -103,6 +104,7 @@ function FighterCard({
 }
 
 export default function ContestRoomPage() {
+  const { isLight } = useTheme();
   const { id } = useParams<{ id: string }>();
   const { user, token } = useAuth();
   const navigate = useNavigate();
@@ -449,7 +451,7 @@ export default function ContestRoomPage() {
               <FighterCard userId={self.id} name={self.name} color={self.color} you result={selfResult} align="left" cell={myCell} />
 
               <div className="hud-panel flex flex-col items-center justify-center px-6 py-3" style={urgent ? { borderColor: 'rgba(251,113,133,0.7)', boxShadow: '0 0 36px -10px rgba(244,63,94,0.7)' } : undefined}>
-                <ProgressRing pct={timeFrac} size={118} stroke={7} color={timerColor} track="rgba(51,65,85,0.5)">
+                <ProgressRing pct={timeFrac} size={118} stroke={7} color={timerColor} track="var(--cc-track)">
                   <span className={`font-mono text-3xl font-bold tabular-nums ${urgent ? 'animate-pulse text-rose-300' : 'text-slate-50'}`}>{formatClock(remainingSeconds)}</span>
                 </ProgressRing>
                 <p className="hud-label mt-1 !text-[0.6rem]">{remainingSeconds === 0 ? 'Time’s up' : 'Time left'}</p>
@@ -480,7 +482,7 @@ export default function ContestRoomPage() {
                 <h3 className="hud-label mb-2 mt-5 text-cyan-300">Examples</h3>
                 <div className="space-y-2">
                   {contest.problem.examples.map((ex, i) => (
-                    <div key={i} className="overflow-hidden rounded-lg border border-slate-700/70 bg-black/40 text-sm">
+                    <div key={i} className="overflow-hidden rounded-lg border border-slate-700/70 code-well text-sm">
                       <div className="grid grid-cols-[4.5rem_1fr] border-b border-slate-800">
                         <span className="hud-label !text-[0.62rem] px-3 py-2 text-slate-500">Input</span>
                         <span className="block overflow-x-auto py-2 pr-3 font-mono text-[0.82rem] text-slate-200">{JSON.stringify(ex.input)}</span>
@@ -522,7 +524,7 @@ export default function ContestRoomPage() {
                     language={language === 'c++' ? 'cpp' : language}
                     value={code}
                     onChange={(value) => setCode(value || '')}
-                    theme="vs-dark"
+                    theme={isLight ? 'vs' : 'vs-dark'}
                     options={{ fontSize: 14, minimap: { enabled: false }, scrollBeyondLastLine: false, padding: { top: 12 } }}
                   />
                 </div>

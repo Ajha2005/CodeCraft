@@ -10,14 +10,14 @@ interface ProgressRingProps {
   className?: string;
 }
 
-export function ProgressRing({ pct, size = 96, stroke = 8, color = '#fbbf24', track = 'rgba(51,65,85,0.6)', children, className }: ProgressRingProps) {
+export function ProgressRing({ pct, size = 96, stroke = 8, color = '#fbbf24', track = 'var(--cc-track)', children, className }: ProgressRingProps) {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const p = Math.max(0, Math.min(1, pct));
   return (
     <div className={`relative shrink-0 ${className ?? ''}`} style={{ width: size, height: size }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={track} strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" style={{ stroke: track }} strokeWidth={stroke} />
         <circle
           cx={size / 2}
           cy={size / 2}

@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react'
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { LOGIN_GREETINGS, pickDaily } from '../lib/flavorText'
 import { FlavorToggle } from '../components/FlavorToggle'
+import { ThemeToggle } from '../components/ThemeToggle'
 import { useAuth } from './useAuth'
 import { rememberReturnTo, takeReturnTo } from './returnTo'
 
@@ -86,7 +87,8 @@ function LoginPage() {
 
   return (
     <div className="h-dvh hud-grid-bg flex flex-col overflow-hidden relative">
-      <nav className="relative z-20 flex items-center justify-end px-6 md:px-10 py-4">
+      <nav className="relative z-20 flex items-center justify-end gap-2 px-6 md:px-10 py-4">
+        <ThemeToggle />
         <FlavorToggle />
       </nav>
 
@@ -133,7 +135,7 @@ function LoginPage() {
             style={{
               fontFamily: "'Rajdhani', sans-serif",
               fontWeight: 700,
-              color: '#f1f5f9',
+              color: 'var(--color-slate-100)',
               fontSize: 'clamp(2.5rem, 10vw, 6rem)',
             }}
           >
@@ -167,7 +169,7 @@ function LoginPage() {
 
           <button
             onClick={handleGoogleLogin}
-            className="flex items-center justify-center gap-3 rounded-full px-8 py-3.5 text-sm font-semibold bg-slate-100 text-slate-900 hover:bg-white transition-all hover:scale-[1.03] active:scale-[0.98] animate-glow-pulse mx-auto mb-6"
+            className="flex items-center justify-center gap-3 btn-google rounded-full px-8 py-3.5 text-sm font-semibold bg-slate-100 text-slate-900 hover:bg-white transition-all hover:scale-[1.03] active:scale-[0.98] animate-glow-pulse mx-auto mb-6"
           >
             <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
               <path

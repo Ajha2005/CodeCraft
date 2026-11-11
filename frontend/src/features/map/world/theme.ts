@@ -95,7 +95,7 @@ export function kindOf(svgPathId: string): ZoneKind {
 /** Kinds that sit *in* the ground (no tall walls): fields, water, forest... */
 export const FLAT_KINDS: ReadonlySet<ZoneKind> = new Set<ZoneKind>(['field', 'track', 'court', 'parking', 'forest', 'water', 'plaza', 'gate']);
 
-export const PALETTE = {
+const DARK_PALETTE = {
   void: '#03060b',
   voidGlow: '#07121f',
   ground: '#0b1522',
@@ -119,7 +119,52 @@ export const PALETTE = {
   text: '#e8f1f8',
   textDim: '#9fb4c6',
   ink: '#04080d',
-} as const;
+};
+
+type Palette = typeof DARK_PALETTE;
+
+/** The same world in daylight: pale sky, sunlit paving, cooler grass and water. */
+const LIGHT_PALETTE: Palette = {
+  void: '#9cc4e4',
+  voidGlow: '#e4f2fc',
+  ground: '#d6e6f3',
+  groundLight: '#e6f1fa',
+  grid: '#7fb2d4',
+  asphalt: '#b9c9d8',
+  sidewalk: '#dbe6f0',
+  curb: '#a9bccf',
+  stone: '#b4c3d3',
+  stoneLight: '#cbd7e3',
+  cyan: '#0891b2',
+  teal: '#0d9488',
+  gold: '#e59a0b',
+  danger: '#ea580c',
+  you: '#0891b2',
+  water: '#4aa8cf',
+  waterLight: '#8fd3ee',
+  grass: '#6fbf8d',
+  grassLight: '#8fd5a8',
+  forest: '#4d9f72',
+  text: '#10243a',
+  textDim: '#456079',
+  ink: '#f4f8fc',
+};
+
+export type MapMode = 'dark' | 'light';
+
+/** Live palette. Mutated in place by `setMapMode` so every importer sees the current mode. */
+export const PALETTE: Palette = { ...DARK_PALETTE };
+
+let mapMode: MapMode = 'dark';
+
+export function getMapMode(): MapMode {
+  return mapMode;
+}
+
+export function setMapMode(mode: MapMode) {
+  mapMode = mode;
+  Object.assign(PALETTE, mode === 'light' ? LIGHT_PALETTE : DARK_PALETTE);
+}
 
 export const FONT_DISPLAY = '"Rajdhani", "Segoe UI", system-ui, sans-serif';
 export const FONT_MONO = 'ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace';

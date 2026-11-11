@@ -2,9 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useAuth } from '../auth/useAuth';
 import { fetchCampaignSummary, fetchDailyProgress, fetchUserRank, fetchUserScores, fetchUserTerritories } from '../api/client';
 import { fetchStreak } from './api';
+import { fetchStatuses } from '../features/problems/api';
+import { clearedCounts } from '../features/sheet/sheetData';
+import { readDailyTotal } from './daily';
 import { achievementInputFrom, readExploredCount } from './achievements';
 import { currentKeys, detectCelebrations, type Celebration, type Seen, type Snapshot } from './celebrations';
-import { getDemoState } from './demoStore';
+import { demoStatuses, getDemoState } from './demoStore';
 import { levelFromScore } from './progression';
 import { PlayerStatsContext, type LevelUpEvent, type PlayerStats } from './playerStatsContext';
 import { tierOf } from './tiers';
@@ -21,6 +24,8 @@ const EMPTY: PlayerStats = {
   territories: [],
   campaign: null,
   explored: 0,
+  sheet: { frontsDone: 0, realmsDone: 0, sheetSolved: 0 },
+  dailies: 0,
 };
 
 /** More than this at once is a wall of pop-ups, not a celebration. */
@@ -79,6 +84,9 @@ function snapshotOf(stats: PlayerStats): Snapshot {
       rank: stats.rank,
       daily: stats.daily,
       explored: stats.explored,
+      frontsCleared: stats.sheet.frontsDone,
+      realmsCleared: stats.sheet.realmsDone,
+      dailiesCleared: stats.dailies,
     }),
     cellsHeld: stats.campaign?.cellsHeld ?? 0,
     cellsByTier,
@@ -98,7 +106,19 @@ function demoStats(): PlayerStats {
     level: levelFromScore(totalScore),
     solves: solves.length,
     hardestWeight: Math.max(0, ...solves.map((s) => s.difficultyWeight)),
+    sheet: sheetFromStatuses(demoStatuses(getDemoState())),
+    dailies: readDailyTotal('demo'),
   };
+}
+
+/** Warpath progress from a problem-status map. */
+function sheetFromStatuses(status: Record<number, string>) {
+  const cleared = new Set(
+    Object.entries(status)
+      .filter(([, s]) => s === 'AC')
+      .map(([id]) => Number(id)),
+  );
+  return clearedCounts(cleared);
 }
 
 /**
@@ -111,7 +131,7 @@ function demoStats(): PlayerStats {
  * refresh is compared with the one before it (see lib/celebrations).
  */
 export function PlayerStatsProvider({ children }: { children: ReactNode }) {
-  const { user, isDemo } = useAuth();
+  const { user, token, isDemo } = useAuth();
   const userId = user?.userId ?? null;
   const [stats, setStats] = useState<PlayerStats>(EMPTY);
   const [levelUp, setLevelUp] = useState<LevelUpEvent | null>(null);
@@ -119,7 +139,7 @@ export function PlayerStatsProvider({ children }: { children: ReactNode }) {
   // The last complete snapshot, to compare the next one against.
   const last = useRef<{ userId: string; snap: Snapshot } | null>(null);
 
-  const celebrate = useCallback((uid: string, next: Snapshot, justWon: Parameters<typeof detectCelebrations>[3]) => {
+  const celebrate = useCallback((uid: string, next: Snapshot, justWon: Parameters<typeof detectCelebrations>[3], demo: boolean) => {
     const storedAchievements = readList(achievementsKey(uid));
     const storedMoments = readList(momentsKey(uid));
     const seen: Seen = { achievements: new Set(storedAchievements ?? []), moments: new Set(storedMoments ?? []) };
@@ -132,7 +152,7 @@ export function PlayerStatsProvider({ children }: { children: ReactNode }) {
       writeList(achievementsKey(uid), new Set([...seen.achievements, ...now.achievements]));
       writeList(momentsKey(uid), new Set([...seen.moments, ...now.moments]));
     } else {
-      const { events, remember } = detectCelebrations(prev, next, seen, justWon);
+      const { events, remember } = detectCelebrations(prev, next, seen, justWon, { colorReveal: !demo });
       if (remember.achievements.size > 0) writeList(achievementsKey(uid), new Set([...seen.achievements, ...remember.achievements]));
       if (remember.moments.size > 0) writeList(momentsKey(uid), new Set([...seen.moments, ...remember.moments]));
       if (events.length > 0) {
@@ -153,17 +173,18 @@ export function PlayerStatsProvider({ children }: { children: ReactNode }) {
       if (isDemo) {
         const next = demoStats();
         setStats(next);
-        celebrate(userId, snapshotOf(next), justWon);
+        celebrate(userId, snapshotOf(next), justWon, true);
         return;
       }
 
-      const [scores, rank, streak, daily, territories, campaign] = await Promise.allSettled([
+      const [scores, rank, streak, daily, territories, campaign, statuses] = await Promise.allSettled([
         fetchUserScores(userId),
         fetchUserRank(userId),
         fetchStreak(userId),
         fetchDailyProgress(userId),
         fetchUserTerritories(userId),
         fetchCampaignSummary(userId),
+        fetchStatuses(userId, token),
       ]);
 
       const scoreData = scores.status === 'fulfilled' ? scores.value : null;
@@ -182,6 +203,8 @@ export function PlayerStatsProvider({ children }: { children: ReactNode }) {
         territories: territories.status === 'fulfilled' ? territories.value : [],
         campaign: campaign.status === 'fulfilled' ? campaign.value : null,
         explored: readExploredCount(userId),
+        sheet: statuses.status === 'fulfilled' ? sheetFromStatuses(statuses.value) : EMPTY.sheet,
+        dailies: readDailyTotal(userId),
       };
       setStats(next);
 
@@ -194,9 +217,9 @@ export function PlayerStatsProvider({ children }: { children: ReactNode }) {
       // Only compare complete pictures: a request that failed would look like
       // something was lost (or, worse, gained back and celebrated twice).
       const complete = [scores, rank, streak, daily, territories, campaign].every((r) => r.status === 'fulfilled');
-      if (complete) celebrate(userId, snapshotOf(next), justWon);
+      if (complete) celebrate(userId, snapshotOf(next), justWon, false);
     },
-    [userId, isDemo, celebrate],
+    [userId, token, isDemo, celebrate],
   );
 
   useEffect(() => {

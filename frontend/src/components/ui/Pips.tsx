@@ -17,7 +17,7 @@ export function Pips({ filled, total, color = '#22d3ee', className }: PipsProps)
             className="h-2 flex-1 rounded-sm transition-all duration-500"
             style={{
               transitionDelay: `${i * 60}ms`,
-              background: on ? color : 'rgba(51,65,85,0.55)',
+              background: on ? color : 'var(--cc-track-soft)',
               boxShadow: on ? `0 0 10px ${color}99` : undefined,
               transform: on ? 'skewX(-18deg)' : 'skewX(-18deg) scaleY(0.7)',
             }}

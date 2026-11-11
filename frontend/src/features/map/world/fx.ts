@@ -17,6 +17,17 @@ interface Particle {
   glow: boolean;
   drag: number;
   grow: number;
+  /** Downward pull, world units per second squared (0 = none). */
+  gravity?: number;
+}
+
+interface Beam {
+  x: number;
+  y: number;
+  height: number;
+  life: number;
+  max: number;
+  color: string;
 }
 
 interface Ring {
@@ -50,15 +61,17 @@ export class Fx {
   private particles: Particle[] = [];
   private rings: Ring[] = [];
   private texts: FloatText[] = [];
+  private beams: Beam[] = [];
 
   get active() {
-    return this.particles.length + this.rings.length + this.texts.length > 0;
+    return this.particles.length + this.rings.length + this.texts.length + this.beams.length > 0;
   }
 
   clear() {
     this.particles.length = 0;
     this.rings.length = 0;
     this.texts.length = 0;
+    this.beams.length = 0;
   }
 
   private add(p: Particle) {
@@ -106,6 +119,35 @@ export class Fx {
     for (let i = 0; i < count; i++) this.spark(x, y, color, speed);
   }
 
+  /** A column of light that shoots up from a captured cell and fades. */
+  beam(x: number, y: number, color: string, height = 260, max = 1.3) {
+    if (this.reduced) return;
+    this.beams.push({ x, y, height, life: 0, max, color });
+  }
+
+  /** Sparks thrown upward that arc back down, like coins from a chest. */
+  fountain(x: number, y: number, color: string, count = 26) {
+    if (this.reduced) return;
+    for (let i = 0; i < count; i++) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.1;
+      const s = 150 + Math.random() * 190;
+      this.add({
+        x,
+        y,
+        vx: Math.cos(a) * s * 0.6,
+        vy: Math.sin(a) * s,
+        life: 0,
+        max: 0.9 + Math.random() * 0.7,
+        size: 2 + Math.random() * 2.4,
+        color: Math.random() < 0.35 ? '#fde68a' : color,
+        glow: true,
+        drag: 0.6,
+        grow: 0,
+        gravity: 340,
+      });
+    }
+  }
+
   ring(x: number, y: number, color: string, r1 = 120, max = 0.9, width = 3, r0 = 6) {
     this.rings.push({ x, y, r0, r1, life: 0, max, color, width, squash: 0.62 });
   }
@@ -126,8 +168,13 @@ export class Fx {
       const damp = Math.exp(-p.drag * dt);
       p.vx *= damp;
       p.vy *= damp;
+      if (p.gravity) p.vy += p.gravity * dt;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
+    }
+    for (let i = this.beams.length - 1; i >= 0; i--) {
+      this.beams[i].life += dt;
+      if (this.beams[i].life >= this.beams[i].max) this.beams.splice(i, 1);
     }
     for (let i = this.rings.length - 1; i >= 0; i--) {
       this.rings[i].life += dt;
@@ -142,6 +189,21 @@ export class Fx {
   /** Draws in world space. `zoom` keeps sizes readable when zoomed out. */
   draw(ctx: CanvasRenderingContext2D, zoom: number) {
     const sizeScale = Math.max(1, 0.9 / zoom);
+
+    for (const b of this.beams) {
+      const t = b.life / b.max;
+      const rise = 1 - Math.pow(1 - Math.min(1, t * 2.4), 3);
+      const h = b.height * rise;
+      const a = t < 0.25 ? 1 : 1 - (t - 0.25) / 0.75;
+      const w = (16 * (1 - t * 0.55)) * sizeScale;
+      const g = ctx.createLinearGradient(0, b.y, 0, b.y - h);
+      g.addColorStop(0, rgba(b.color, 0.85 * a));
+      g.addColorStop(1, rgba(b.color, 0));
+      ctx.fillStyle = g;
+      ctx.fillRect(b.x - w / 2, b.y - h, w, h);
+      ctx.fillStyle = rgba('#ffffff', 0.7 * a);
+      ctx.fillRect(b.x - w * 0.12, b.y - h * 0.85, w * 0.24, h * 0.85);
+    }
 
     for (const r of this.rings) {
       const t = r.life / r.max;

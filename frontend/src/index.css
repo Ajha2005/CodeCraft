@@ -590,11 +590,11 @@ code {
 @keyframes cell-lit {
   0%,
   100% {
-    box-shadow: 0 0 0 2px #fff, 0 0 10px 2px var(--lit);
+    box-shadow: 0 0 0 2px var(--cc-lit-ring), 0 0 10px 2px var(--lit);
     transform: scale(1);
   }
   50% {
-    box-shadow: 0 0 0 2px #fff, 0 0 18px 6px var(--lit);
+    box-shadow: 0 0 0 2px var(--cc-lit-ring), 0 0 18px 6px var(--lit);
     transform: scale(1.12);
   }
 }
@@ -741,4 +741,214 @@ code {
   .animate-slide-down {
     animation-duration: 0.01ms !important;
   }
+}
+
+
+/* ==========================================================================
+   Theme layer
+   Dark is the default and is the look the app has always had. The helper
+   classes below carry the dark values (unchanged) and the
+   `html[data-theme='light']` block re-skins the same markup for daylight:
+   Tailwind's palette variables are remapped (slate runs light -> dark
+   instead of dark -> light, and the bright "neon" accent text colours are
+   deepened so they stay readable on a pale background), and the handful of
+   hand-written surfaces get their own light styling.
+   ========================================================================== */
+
+:root {
+  --cc-track: rgba(51, 65, 85, 0.6);
+  --cc-track-soft: rgba(51, 65, 85, 0.55);
+  --cc-cell-free: #1e2733;
+  --cc-lit-ring: #fff;
+}
+
+/* Modal backdrops: dark glass in dark mode, frosted white in light mode. */
+.scrim {
+  background: rgba(0, 0, 0, 0.7);
+}
+.scrim-65 {
+  background: rgba(0, 0, 0, 0.65);
+}
+.scrim-75 {
+  background: rgba(0, 0, 0, 0.75);
+}
+/* Code / example wells sit a shade darker than the panel around them. */
+.code-well {
+  background: rgba(0, 0, 0, 0.4);
+}
+.demo-banner {
+  background: #1c1608;
+}
+
+html[data-theme='dark'] {
+  background: #071019;
+}
+
+html[data-theme='light'] {
+  --text: #4d6580;
+  --text-h: #0a1528;
+  --bg: #e8f1f9;
+  --border: #c3d1e0;
+  --code-bg: #e3edf6;
+  --accent: #0891b2;
+  --accent-bg: rgba(8, 145, 178, 0.1);
+  --accent-border: rgba(8, 145, 178, 0.5);
+  --shadow: rgba(30, 64, 100, 0.14) 0 10px 15px -3px, rgba(30, 64, 100, 0.08) 0 4px 6px -2px;
+
+  --cc-ink: #f4f8fc;
+  --cc-panel: rgba(255, 255, 255, 0.86);
+  --cc-track: rgba(100, 125, 155, 0.28);
+  --cc-track-soft: rgba(100, 125, 155, 0.3);
+  --cc-cell-free: #c5d3e1;
+  --cc-lit-ring: #0f172a;
+
+  background: #e8f1f9;
+
+  /* ---- neutrals: the scale is flipped, so every text-/bg-/border-slate-* class re-skins itself ---- */
+  --color-slate-50: #0a1528;
+  --color-slate-100: #122036;
+  --color-slate-200: #1f3150;
+  --color-slate-300: #334a68;
+  --color-slate-400: #4a6280;
+  --color-slate-500: #5f768f;
+  --color-slate-600: #8ea3b9;
+  --color-slate-700: #bccbdb;
+  --color-slate-800: #d6e1ec;
+  --color-slate-900: #f1f6fb;
+  --color-slate-950: #ffffff;
+
+  /* ---- accents: deeper shades so coloured text still reads on a pale page ---- */
+  --color-cyan-200: #0e5f7a;
+  --color-cyan-300: #0e7490;
+  --color-cyan-400: #0891b2;
+  --color-cyan-500: #0891b2;
+  --color-cyan-600: #0e7490;
+  --color-teal-300: #0f766e;
+  --color-teal-500: #0d9488;
+  --color-teal-600: #0f766e;
+  --color-emerald-300: #047857;
+  --color-emerald-400: #059669;
+  --color-emerald-500: #059669;
+  --color-amber-100: #78350f;
+  --color-amber-200: #92400e;
+  --color-amber-300: #b45309;
+  --color-amber-400: #d97706;
+  --color-amber-500: #d97706;
+  --color-amber-600: #b45309;
+  --color-orange-200: #9a3412;
+  --color-orange-300: #c2410c;
+  --color-orange-400: #ea580c;
+  --color-orange-500: #ea580c;
+  --color-rose-300: #be123c;
+  --color-rose-400: #e11d48;
+  --color-rose-500: #e11d48;
+  --color-rose-600: #be123c;
+  --color-rose-950: #ffe4e6;
+  --color-red-400: #dc2626;
+  --color-red-800: #fecaca;
+  --color-red-950: #fee2e2;
+  --color-emerald-950: #d1fae5;
+  --color-amber-950: #fef3c7;
+}
+
+html[data-theme='light'] .scrim {
+  background: rgba(226, 237, 247, 0.8);
+}
+html[data-theme='light'] .scrim-65 {
+  background: rgba(226, 237, 247, 0.78);
+}
+html[data-theme='light'] .scrim-75 {
+  background: rgba(226, 237, 247, 0.84);
+}
+html[data-theme='light'] .code-well {
+  background: rgba(15, 40, 80, 0.05);
+}
+html[data-theme='light'] .demo-banner {
+  background: #fff4d6;
+}
+
+/* The page backdrop: a pale sky with the same drifting hatch, in light ink. */
+html[data-theme='light'] .hud-grid-bg {
+  background-color: #e6f0f9;
+  background-image:
+    radial-gradient(ellipse at 15% -10%, rgba(34, 211, 238, 0.32), transparent 55%),
+    radial-gradient(ellipse at 95% 105%, rgba(167, 139, 250, 0.22), transparent 52%),
+    radial-gradient(ellipse at 60% 40%, rgba(251, 191, 36, 0.1), transparent 55%);
+}
+html[data-theme='light'] .hud-grid-bg::before {
+  background-image: repeating-linear-gradient(135deg, rgba(14, 90, 140, 0.05) 0, rgba(14, 90, 140, 0.05) 1px, transparent 1px, transparent 12px);
+}
+
+html[data-theme='light'] .hud-panel {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(240, 247, 253, 0.95));
+  border-color: rgba(8, 145, 178, 0.32);
+  box-shadow:
+    0 18px 38px -22px rgba(25, 70, 115, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+html[data-theme='light'] .hud-panel::before,
+html[data-theme='light'] .hud-panel::after {
+  border-color: #0891b2;
+}
+html[data-theme='light'] .hud-panel-quiet {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(238, 246, 252, 0.9));
+  border-color: rgba(60, 110, 150, 0.22);
+  box-shadow: 0 10px 22px -16px rgba(25, 70, 115, 0.4);
+}
+html[data-theme='light'] .hud-label {
+  color: var(--color-slate-400);
+}
+html[data-theme='light'] .keycap {
+  color: #1f3150;
+  background: linear-gradient(180deg, #ffffff, #e4edf6);
+  border-color: rgba(60, 100, 140, 0.35);
+  box-shadow: 0 2px 0 rgba(60, 100, 140, 0.25);
+}
+html[data-theme='light'] .btn-primary .keycap {
+  color: #04101a;
+  background: rgba(4, 16, 26, 0.14);
+  border-color: rgba(4, 16, 26, 0.4);
+  box-shadow: none;
+}
+html[data-theme='light'] .btn-ghost {
+  color: var(--color-slate-400);
+  border-color: rgba(60, 100, 140, 0.3);
+  background: rgba(255, 255, 255, 0.6);
+}
+html[data-theme='light'] .btn-ghost:hover:not(:disabled) {
+  color: #0a1528;
+  border-color: rgba(8, 145, 178, 0.6);
+  background: rgba(8, 145, 178, 0.08);
+}
+html[data-theme='light'] .xp-track {
+  background: rgba(100, 125, 155, 0.18);
+  box-shadow: inset 0 1px 2px rgba(30, 60, 100, 0.2);
+  border-color: rgba(100, 125, 155, 0.35);
+}
+html[data-theme='light'] .btn-google {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #c3d1e0;
+  box-shadow: 0 6px 18px -10px rgba(25, 70, 115, 0.5);
+}
+html[data-theme='light'] code {
+  color: var(--text-h);
+}
+html[data-theme='light'] .scanlines::after {
+  background: repeating-linear-gradient(0deg, rgba(14, 90, 140, 0.035) 0, rgba(14, 90, 140, 0.035) 1px, transparent 1px, transparent 3px);
+  mix-blend-mode: multiply;
+}
+
+/* The map's frame: deep space at night, open sky by day. */
+.map-host {
+  background: #03060b;
+}
+.map-vignette {
+  background: radial-gradient(ellipse at 50% 45%, transparent 52%, rgba(2, 6, 12, 0.62) 100%);
+}
+html[data-theme='light'] .map-host {
+  background: #cfe3f3;
+}
+html[data-theme='light'] .map-vignette {
+  background: radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(90, 140, 185, 0.38) 100%);
 }
