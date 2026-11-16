@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { LOGIN_GREETINGS, pickDaily } from '../lib/flavorText'
 import { FlavorToggle } from '../components/FlavorToggle'
@@ -12,6 +13,22 @@ interface TopCommander {
   userId: string
   name: string
   score: number
+}
+
+interface CaptureCell {
+  id: number
+  active: boolean
+  delay: number
+  duration: number
+}
+
+function makeCaptureGrid(cols: number, rows: number): CaptureCell[] {
+  return Array.from({ length: cols * rows }, (_, i) => ({
+    id: i,
+    active: Math.random() < 0.18,
+    delay: Math.random() * 5,
+    duration: 3.5 + Math.random() * 3,
+  }))
 }
 
 function LoginPage() {
@@ -29,6 +46,8 @@ function LoginPage() {
   const [topCommander, setTopCommander] = useState<TopCommander | null>(null)
   const [problemCount, setProblemCount] = useState<number | null>(null)
   const [zoneCount, setZoneCount] = useState<number | null>(null)
+
+  const captureGrid = useMemo(() => makeCaptureGrid(14, 8), [])
 
   useEffect(() => {
     fetch(`${API_BASE}/leaderboard/college?limit=1`)
@@ -67,7 +86,7 @@ function LoginPage() {
   if (user) return <Navigate to={takeReturnTo()} replace />
 
   return (
-    <div className="h-dvh hud-backdrop flex flex-col overflow-hidden relative">
+    <div className="h-dvh hud-backdrop hud-hatch flex flex-col overflow-hidden relative">
       <nav className="relative z-20 flex items-center justify-end gap-2 px-6 md:px-10 py-4">
         <ThemeToggle />
         <FlavorToggle />
@@ -77,9 +96,28 @@ function LoginPage() {
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
           <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[1000px] h-[1000px] rounded-full bg-cyan-500/10 blur-3xl" />
 
-          {/* Soft colour washes that drift slowly: no pattern, nothing to count. */}
-          <div className="absolute -left-40 top-10 h-[34rem] w-[34rem] rounded-full bg-cyan-400/10 blur-3xl animate-float" />
-          <div className="absolute -right-32 bottom-0 h-[30rem] w-[30rem] rounded-full bg-violet-500/10 blur-3xl animate-float" style={{ animationDelay: '-1.7s' }} />
+          <div className="absolute inset-0 opacity-70">
+            <div
+              className="grid h-full w-full"
+              style={{ gridTemplateColumns: 'repeat(14, 1fr)', gridTemplateRows: 'repeat(8, 1fr)' }}
+            >
+              {captureGrid.map((cell) => (
+                <div key={cell.id} className="border border-cyan-500/[0.06]">
+                  {cell.active && (
+                    <div
+                      className="h-full w-full animate-cell-capture bg-cyan-400/20"
+                      style={
+                        {
+                          animationDelay: `${cell.delay}s`,
+                          animationDuration: `${cell.duration}s`,
+                        } as CSSProperties
+                      }
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
 
           <div className="absolute inset-x-0 h-40 bg-gradient-to-b from-transparent via-cyan-400/[0.06] to-transparent animate-scan-sweep" />
         </div>

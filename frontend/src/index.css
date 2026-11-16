@@ -928,3 +928,16 @@ html[data-theme='light'] .map-host {
 html[data-theme='light'] .map-vignette {
   background: radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(90, 140, 185, 0.38) 100%);
 }
+
+/* The login page keeps its original drifting hatch behind the capture cells. */
+.hud-hatch::before {
+  content: '';
+  position: absolute;
+  inset: -120px;
+  background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0, rgba(255, 255, 255, 0.02) 1px, transparent 1px, transparent 12px);
+  animation: drift 12s linear infinite;
+  pointer-events: none;
+}
+html[data-theme='light'] .hud-hatch::before {
+  background-image: repeating-linear-gradient(135deg, rgba(14, 90, 140, 0.05) 0, rgba(14, 90, 140, 0.05) 1px, transparent 1px, transparent 12px);
+}
