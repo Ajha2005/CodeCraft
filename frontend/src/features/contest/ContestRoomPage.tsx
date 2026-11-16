@@ -283,7 +283,7 @@ export default function ContestRoomPage() {
 
   if (loading) {
     return (
-      <div className="hud-grid-bg flex min-h-[calc(100dvh-var(--nav-h))] flex-1 items-center justify-center">
+      <div className="hud-backdrop flex min-h-[calc(100dvh-var(--nav-h))] flex-1 items-center justify-center">
         <div className="relative z-10 flex flex-col items-center gap-4">
           <div className="relative h-14 w-14">
             <div className="hex absolute inset-0 animate-spin-slow bg-gradient-to-b from-orange-400/80 to-rose-600/30" />
@@ -298,7 +298,7 @@ export default function ContestRoomPage() {
 
   if (loadError || !contest) {
     return (
-      <div className="hud-grid-bg flex min-h-[calc(100dvh-var(--nav-h))] flex-1 flex-col items-center justify-center gap-4">
+      <div className="hud-backdrop flex min-h-[calc(100dvh-var(--nav-h))] flex-1 flex-col items-center justify-center gap-4">
         <p className="relative z-10 text-rose-400">{loadError || 'Something went wrong.'}</p>
         <Link to="/contests" className="relative z-10 text-sm text-cyan-400 hover:underline">
           ← Back to Contests
@@ -336,7 +336,7 @@ export default function ContestRoomPage() {
   const lostText = myCell ? `You lost this contest. ${cellText(myCell)} goes to ${winnerName}.` : 'You lost this contest. The cell stays with your rival.';
 
   return (
-    <div className="hud-grid-bg min-h-[calc(100dvh-var(--nav-h))] flex-1">
+    <div className="hud-backdrop min-h-[calc(100dvh-var(--nav-h))] flex-1">
       <div className="relative z-10 mx-auto max-w-[88rem] px-4 py-5 text-left md:px-8 md:py-8">
         <ToastStack toasts={toasts} dismiss={dismiss} placement="top-right" />
 

@@ -3,7 +3,7 @@ import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './useAuth'
 
 function Centered({ children }: { children: ReactNode }) {
-  return <div className="hud-grid-bg flex min-h-dvh flex-1 items-center justify-center px-6 text-center">{children}</div>
+  return <div className="hud-backdrop flex min-h-dvh flex-1 items-center justify-center px-6 text-center">{children}</div>
 }
 
 function ProtectedRoute({ children }: { children: ReactNode }) {

@@ -203,7 +203,7 @@ code {
   animation: cell-capture 4s ease-in-out infinite;
 }
 
-.hud-grid-bg {
+.hud-backdrop {
   position: relative;
   overflow: hidden;
   background-color: #071019;
@@ -212,21 +212,12 @@ code {
     radial-gradient(ellipse at 90% 110%, rgba(20, 184, 166, 0.12), transparent 50%);
 }
 
-.hud-grid-bg::before {
-  content: '';
-  position: absolute;
-  inset: -120px;
-  background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0, rgba(255, 255, 255, 0.02) 1px, transparent 1px, transparent 12px);
-  animation: drift 12s linear infinite;
-  pointer-events: none;
-}
 /* ==========================================================================
    Game UI kit
    Shared building blocks for the HUD-styled pages (map, problems, scoring,
    contests). Component classes live in @layer components so Tailwind
    utilities (rounded-*, p-*, ...) can still override them per use.
-   The login page only uses .hud-grid-bg and the motion primitives above,
-   none of which are changed here.
+   The login page only uses .hud-backdrop and the motion primitives above.
    ========================================================================== */
 
 :root {
@@ -433,14 +424,6 @@ code {
     clip-path: polygon(50% 0, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
   }
 
-  .scanlines::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.025) 0, rgba(255, 255, 255, 0.025) 1px, transparent 1px, transparent 3px);
-    mix-blend-mode: overlay;
-  }
 
   /* `backwards`, not `both`: once finished, no transform may remain, or it
      would become the containing block for position:fixed overlays inside. */
@@ -867,16 +850,13 @@ html[data-theme='light'] .demo-banner {
   background: #fff4d6;
 }
 
-/* The page backdrop: a pale sky with the same drifting hatch, in light ink. */
-html[data-theme='light'] .hud-grid-bg {
+/* The page backdrop: a pale sky with soft colour washes, no pattern. */
+html[data-theme='light'] .hud-backdrop {
   background-color: #e6f0f9;
   background-image:
     radial-gradient(ellipse at 15% -10%, rgba(34, 211, 238, 0.32), transparent 55%),
     radial-gradient(ellipse at 95% 105%, rgba(167, 139, 250, 0.22), transparent 52%),
     radial-gradient(ellipse at 60% 40%, rgba(251, 191, 36, 0.1), transparent 55%);
-}
-html[data-theme='light'] .hud-grid-bg::before {
-  background-image: repeating-linear-gradient(135deg, rgba(14, 90, 140, 0.05) 0, rgba(14, 90, 140, 0.05) 1px, transparent 1px, transparent 12px);
 }
 
 html[data-theme='light'] .hud-panel {
@@ -933,10 +913,6 @@ html[data-theme='light'] .btn-google {
 }
 html[data-theme='light'] code {
   color: var(--text-h);
-}
-html[data-theme='light'] .scanlines::after {
-  background: repeating-linear-gradient(0deg, rgba(14, 90, 140, 0.035) 0, rgba(14, 90, 140, 0.035) 1px, transparent 1px, transparent 3px);
-  mix-blend-mode: multiply;
 }
 
 /* The map's frame: deep space at night, open sky by day. */

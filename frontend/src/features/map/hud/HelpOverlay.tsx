@@ -31,7 +31,7 @@ export function HelpOverlay({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        <div className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
+        <div className="flex flex-col gap-3">
           <div>
             <p className="hud-label mb-1 text-cyan-300">Move</p>
             <ul className="divide-y divide-slate-800">
@@ -71,19 +71,19 @@ export function HelpOverlay({ onClose }: { onClose: () => void }) {
 
         <div className="mt-4 border-t border-slate-800 pt-3">
           <p className="hud-label mb-2 text-cyan-300">Territory tiers</p>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <ul className="divide-y divide-slate-800">
             {TIERS.map((t) => (
-              <div key={t} className="rounded-lg border border-slate-700/70 bg-slate-900/50 p-2">
-                <div className="flex items-center gap-1.5" style={{ color: TIER_META[t].accent }}>
+              <li key={t} className="flex items-center gap-3 py-1.5">
+                <span className="flex w-32 shrink-0 items-center gap-1.5" style={{ color: TIER_META[t].accent }}>
                   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
                     <path d={TIER_META[t].icon} />
                   </svg>
                   <span className="font-display text-sm font-bold uppercase tracking-wide">{TIER_META[t].label}</span>
-                </div>
-                <p className="mt-1 text-[0.68rem] leading-snug text-slate-400">{TIER_META[t].blurb}</p>
-              </div>
+                </span>
+                <span className="text-[0.72rem] leading-snug text-slate-400">{TIER_META[t].blurb}</span>
+              </li>
             ))}
-          </div>
+          </ul>
           <p className="mt-3 text-xs leading-relaxed text-slate-400">
             Taller blocks are higher tiers. <span className="font-semibold text-orange-300">Orange dashes</span> mark contested zones, a
             <span className="font-semibold text-slate-200"> flag</span> means you hold ground there, and zones you haven’t visited yet sit under

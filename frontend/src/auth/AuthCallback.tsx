@@ -25,7 +25,7 @@ function AuthCallback() {
   }, [searchParams, login, navigate])
 
   return (
-    <div className="hud-grid-bg flex min-h-dvh items-center justify-center">
+    <div className="hud-backdrop flex min-h-dvh items-center justify-center">
       <p className="font-display relative z-10 text-sm font-bold uppercase tracking-[0.3em] text-cyan-300">Signing you in…</p>
     </div>
   )

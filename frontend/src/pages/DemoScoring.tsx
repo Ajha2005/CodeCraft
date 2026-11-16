@@ -21,10 +21,10 @@ export default function DemoScoring() {
   const level = levelFromScore(total);
 
   return (
-    <div className="hud-grid-bg min-h-[calc(100dvh-var(--nav-h))] flex-1">
+    <div className="hud-backdrop min-h-[calc(100dvh-var(--nav-h))] flex-1">
       <div className="relative z-10 mx-auto max-w-4xl px-4 py-6 md:px-8 md:py-10">
         <header className="hud-panel relative mb-6 overflow-hidden p-5 md:p-7 animate-fade-in-up">
-          <div className="relative grid items-center gap-6 md:grid-cols-[auto_1fr]">
+          <div className="relative flex flex-col items-center gap-6 md:flex-row md:gap-8">
             <ProgressRing pct={level.pct} size={132} stroke={9} color="#fbbf24" className="mx-auto md:mx-0">
               <LevelBadge level={level.level} size={84} />
             </ProgressRing>
@@ -46,14 +46,14 @@ export default function DemoScoring() {
           </div>
         </header>
 
-        <div className="mb-8 grid grid-cols-2 gap-3">
-          <div className="hud-panel p-4 animate-fade-in-up">
+        <div className="hud-panel mb-8 flex divide-x divide-slate-800/70 overflow-hidden">
+          <div className="flex-1 px-5 py-4 animate-fade-in-up">
             <p className="hud-label !text-[0.64rem]">Performance score</p>
             <p className="mt-1.5 font-mono text-3xl font-bold tabular-nums text-emerald-300">
               <AnimatedNumber value={total} decimals={1} />
             </p>
           </div>
-          <div className="hud-panel p-4 animate-fade-in-up" style={{ animationDelay: '60ms' }}>
+          <div className="flex-1 px-5 py-4 animate-fade-in-up" style={{ animationDelay: '60ms' }}>
             <p className="hud-label !text-[0.64rem]">Problems cleared</p>
             <p className="mt-1.5 font-mono text-3xl font-bold tabular-nums text-slate-50">
               <AnimatedNumber value={solves.length} />

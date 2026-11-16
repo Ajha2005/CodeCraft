@@ -121,7 +121,7 @@ export function QuestBoard({ catalog, active, onOpen }: QuestBoardProps) {
   const solvedPct = problems.length > 0 ? Math.min(1, progress.solved / problems.length) : 0;
 
   return (
-    <div className="hud-grid-bg min-h-[calc(100dvh-var(--nav-h))] flex-1">
+    <div className="hud-backdrop min-h-[calc(100dvh-var(--nav-h))] flex-1">
       <div className="relative z-10 mx-auto max-w-6xl px-4 py-6 text-left md:px-8 md:py-10">
         {/* ------------------------------------------------------------ hero */}
         <header className="hud-panel mb-6 grid grid-cols-[1fr_auto] items-center gap-x-5 gap-y-4 overflow-hidden p-5 md:p-7 animate-fade-in-up">
@@ -176,22 +176,18 @@ export function QuestBoard({ catalog, active, onOpen }: QuestBoardProps) {
         </header>
 
         {/* ----------------------------------------- daily quest + the Warpath */}
-        <div className="mb-6 grid gap-3 lg:grid-cols-[1fr_auto]">
+        <div className="mb-6">
           <DailyQuestCard catalog={catalog} />
           <Link
             to="/sheet"
             onClick={() => sfx.play('click')}
-            className="hud-panel hud-panel-quiet group flex items-center gap-3 p-4 transition-colors hover:border-cyan-400/50 animate-fade-in-up lg:w-72"
+            className="group mt-2 flex items-center gap-2 px-1 text-sm text-slate-400 transition-colors hover:text-slate-100"
           >
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-cyan-400/40 bg-cyan-400/10 text-cyan-300">
-              <Icon name="route" className="h-5 w-5" />
+            <Icon name="route" className="h-4 w-4 text-cyan-400" />
+            <span>
+              <strong className="font-semibold text-cyan-300">New to DSA?</strong> Walk the Warpath, the ordered sheet from arrays to trees to graphs.
             </span>
-            <span className="min-w-0 flex-1">
-              <span className="hud-label block !text-cyan-300">New to DSA?</span>
-              <span className="font-display block text-xl font-bold leading-tight tracking-wide text-slate-50">Walk the Warpath</span>
-              <span className="block text-[0.74rem] leading-snug text-slate-400">The ordered sheet: arrays, trees, graphs.</span>
-            </span>
-            <Icon name="arrowRight" className="h-4 w-4 shrink-0 text-slate-500 transition-all group-hover:translate-x-0.5 group-hover:text-cyan-300" />
+            <Icon name="arrowRight" className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5" />
           </Link>
         </div>
 
@@ -321,9 +317,9 @@ export function QuestBoard({ catalog, active, onOpen }: QuestBoardProps) {
           )}
 
           {loading && (
-            <div className="mb-6 grid gap-3 sm:grid-cols-2">
-              {Array.from({ length: 6 }, (_, i) => (
-                <div key={i} className="h-24 animate-pulse rounded-xl border border-slate-800 bg-slate-900/50" />
+            <div className="hud-panel hud-panel-quiet mb-6 divide-y divide-slate-800/70 overflow-hidden">
+              {Array.from({ length: 8 }, (_, i) => (
+                <div key={i} className="h-14 animate-pulse bg-slate-900/40" />
               ))}
             </div>
           )}
@@ -342,7 +338,7 @@ export function QuestBoard({ catalog, active, onOpen }: QuestBoardProps) {
             </div>
           )}
 
-          <div className="mb-8 grid gap-3 sm:grid-cols-2">
+          <div className="hud-panel hud-panel-quiet mb-8 divide-y divide-slate-800/70 overflow-hidden">
             {visible.map((p, i) => {
               const st = status[p.id];
               const meta = difficultyMeta(p.difficultyLevel);
@@ -363,30 +359,26 @@ export function QuestBoard({ catalog, active, onOpen }: QuestBoardProps) {
                     onOpen(p.id);
                   }}
                   title={hoverTitle}
-                  style={{ animationDelay: `${Math.min(i, 12) * 40}ms`, ['--accent' as string]: meta.accent }}
-                  className={`group relative overflow-hidden rounded-xl border bg-slate-900/60 p-4 pl-5 text-left transition-all duration-200 hover:-translate-y-0.5 animate-fade-in-up ${
-                    st === 'AC' ? 'border-emerald-500/40 hover:border-emerald-400/70' : 'border-slate-800 hover:border-[color:var(--accent)]'
-                  }`}
+                  style={{ animationDelay: `${Math.min(i, 12) * 30}ms`, boxShadow: `inset 3px 0 0 ${meta.accent}` }}
+                  className="group flex w-full items-center gap-3 py-3.5 pl-5 pr-4 text-left transition-colors hover:bg-slate-800/30 animate-fade-in-up sm:gap-5"
                 >
-                  <span className="absolute inset-y-0 left-0 w-1" style={{ background: meta.accent, opacity: 0.7 }} />
+                  <span className="w-11 shrink-0 font-mono text-[0.7rem] font-bold text-slate-500">{padId(p.id)}</span>
+                  <span className="min-w-0 flex-1 text-[0.95rem] font-semibold leading-snug text-slate-100 group-hover:text-cyan-200">{p.title}</span>
                   {st === 'AC' && (
-                    <span className="absolute right-3 top-3 flex items-center gap-1 font-display text-[0.64rem] font-bold uppercase tracking-[0.14em] text-emerald-300">
+                    <span className="flex shrink-0 items-center gap-1 font-display text-[0.64rem] font-bold uppercase tracking-[0.14em] text-emerald-300">
                       <Icon name="check" className="h-3 w-3" />
-                      Cleared
+                      <span className="max-sm:sr-only">Cleared</span>
                     </span>
                   )}
                   {st === 'ATTEMPTED' && (
-                    <span className="absolute right-3 top-3 flex items-center gap-1 font-display text-[0.64rem] font-bold uppercase tracking-[0.14em] text-amber-300">
+                    <span className="flex shrink-0 items-center gap-1 font-display text-[0.64rem] font-bold uppercase tracking-[0.14em] text-amber-300">
                       <Icon name="swords" className="h-3 w-3" />
-                      Retry
+                      <span className="max-sm:sr-only">Retry</span>
                     </span>
                   )}
-
-                  <p className="font-mono text-[0.66rem] font-bold text-slate-500">{padId(p.id)}</p>
-                  <p className={`mt-0.5 text-[0.95rem] font-semibold leading-snug text-slate-100 ${st ? 'pr-20' : 'pr-2'}`}>{p.title}</p>
-                  <div className="mt-3">
+                  <span className="shrink-0">
                     <DifficultyBadge level={p.difficultyLevel} />
-                  </div>
+                  </span>
                 </button>
               );
             })}

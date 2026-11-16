@@ -140,16 +140,15 @@ export function ChallengeModal({ zoneName, tier, cellLabel, rival, stakes, busy,
         )}
 
         <p className="hud-label mb-2 mt-4">Match length</p>
-        <div className="mb-5 grid grid-cols-3 gap-2">
+        <div className="mb-5 flex overflow-hidden rounded-lg border border-slate-700" role="group" aria-label="Match length">
           {DURATION_OPTIONS.map((opt) => (
             <button
               key={opt.seconds}
               type="button"
+              aria-pressed={duration === opt.seconds}
               onClick={() => setDuration(opt.seconds)}
-              className={`rounded-lg border py-2 text-sm font-bold transition-all ${
-                duration === opt.seconds
-                  ? 'border-orange-400/70 bg-orange-500/20 text-orange-200 shadow-[0_0_16px_-4px_rgba(249,115,22,0.7)]'
-                  : 'border-slate-700 text-slate-400 hover:border-slate-500'
+              className={`flex-1 border-slate-700 py-2 text-sm font-bold transition-colors [&:not(:first-child)]:border-l ${
+                duration === opt.seconds ? 'bg-orange-500/20 text-orange-200' : 'text-slate-400 hover:bg-slate-800/50'
               }`}
             >
               {opt.label}

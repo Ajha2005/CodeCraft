@@ -89,7 +89,7 @@ export function ProblemWorkspace(props: WorkspaceProps) {
   }, [props.id, attempt]);
 
   return (
-    <div className="hud-grid-bg min-h-[calc(100dvh-var(--nav-h))] flex-1">
+    <div className="hud-backdrop min-h-[calc(100dvh-var(--nav-h))] flex-1">
       <div className="relative z-10 mx-auto max-w-[88rem] px-4 py-6 text-left md:px-8 md:py-8">
         <button
           type="button"

@@ -569,7 +569,7 @@ export function MapFullScreen() {
 
       {/* loading + error cover */}
       {!ready && (
-        <div className="hud-grid-bg absolute inset-0 z-30 flex flex-col items-center justify-center gap-5 text-slate-300">
+        <div className="hud-backdrop absolute inset-0 z-30 flex flex-col items-center justify-center gap-5 text-slate-300">
           {loadError ? (
             <>
               <Icon name="skull" className="h-10 w-10 text-rose-400" />

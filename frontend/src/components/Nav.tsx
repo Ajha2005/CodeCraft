@@ -81,13 +81,13 @@ export function Nav() {
                   to={link.to}
                   title={link.label}
                   onClick={() => sfx.play('click')}
-                  className={`group relative flex items-center gap-2 rounded-lg px-2.5 py-2 text-[0.8rem] font-bold uppercase tracking-[0.14em] transition-all min-[1560px]:px-3.5 ${
+                  className={`group relative flex flex-col items-center gap-0.5 rounded-lg px-2 py-1.5 text-[0.58rem] font-bold uppercase tracking-[0.08em] transition-all min-[1560px]:flex-row min-[1560px]:gap-2 min-[1560px]:px-3 min-[1560px]:py-2 min-[1560px]:text-[0.8rem] min-[1560px]:tracking-[0.14em] ${
                     active ? 'bg-cyan-400/10 text-cyan-300' : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-100'
                   }`}
                 >
                   <Icon name={link.icon} className={`h-4 w-4 transition-transform group-hover:scale-110 ${active ? 'drop-shadow-[0_0_6px_rgba(34,211,238,0.8)]' : ''}`} />
-                  {/* Labels only where the bar has room for them next to the profile chip; icons alone before that. */}
-                  <span className="sr-only min-[1560px]:not-sr-only">{link.label}</span>
+                  {/* Always labelled: small under the icon on narrower bars, inline beside it on wide ones. */}
+                  <span>{link.label}</span>
                   {badge && (
                     <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[0.62rem] font-bold text-white shadow-[0_0_10px_rgba(244,63,94,0.8)] animate-glow-pulse min-[1560px]:static">
                       {incoming}

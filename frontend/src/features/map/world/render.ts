@@ -419,29 +419,11 @@ export class WorldRenderer {
       }
     }
 
-    // top face: one cached texture (lighting baked in) + tactical grid
+    // top face: one cached texture (lighting baked in)
     ctx.save();
     ctx.clip(this.slabPath);
     ctx.drawImage(this.groundTex, -SLAB_MARGIN, -SLAB_MARGIN, W + SLAB_MARGIN * 2, H + SLAB_MARGIN * 2);
 
-    const gridAlpha = 0.05 + 0.05 * Math.min(1, zoom * 1.2);
-    const step = 80;
-    ctx.lineWidth = 1 / zoom;
-    ctx.beginPath();
-    const gx0 = Math.floor(Math.max(-SLAB_MARGIN, this.vx0) / step) * step;
-    const gx1 = Math.min(W + SLAB_MARGIN, this.vx1);
-    const gy0 = Math.floor(Math.max(-SLAB_MARGIN, this.vy0) / step) * step;
-    const gy1 = Math.min(H + SLAB_MARGIN, this.vy1);
-    for (let x = gx0; x <= gx1; x += step) {
-      ctx.moveTo(x, gy0);
-      ctx.lineTo(x, gy1);
-    }
-    for (let y = gy0; y <= gy1; y += step) {
-      ctx.moveTo(gx0, y);
-      ctx.lineTo(gx1, y);
-    }
-    ctx.strokeStyle = rgba(PALETTE.cyan, gridAlpha);
-    ctx.stroke();
     ctx.restore();
 
     // glowing rim, as layered strokes rather than a blur

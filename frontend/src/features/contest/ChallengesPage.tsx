@@ -142,7 +142,7 @@ export default function ChallengesPage() {
   }
 
   return (
-    <div className="hud-grid-bg min-h-[calc(100dvh-var(--nav-h))] flex-1">
+    <div className="hud-backdrop min-h-[calc(100dvh-var(--nav-h))] flex-1">
       <div className="relative z-10 mx-auto max-w-4xl px-4 py-6 text-left md:px-8 md:py-10">
         <ToastStack toasts={toasts} dismiss={dismiss} placement="top-right" />
 

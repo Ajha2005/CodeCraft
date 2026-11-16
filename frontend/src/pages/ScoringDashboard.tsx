@@ -56,8 +56,8 @@ function StatTile({
   className?: string;
 }) {
   return (
-    <div className={`hud-panel relative overflow-hidden p-4 animate-fade-in-up ${className}`} style={{ animationDelay: `${delay}ms` }}>
-      <span className="absolute inset-x-0 top-0 h-[2px]" style={{ background: `linear-gradient(90deg, transparent, ${accent}, transparent)` }} />
+    <div className={`relative min-w-0 flex-1 px-5 py-4 animate-fade-in-up ${className}`} style={{ animationDelay: `${delay}ms` }}>
+      <span className="absolute inset-y-4 left-0 w-[3px] rounded-full" style={{ background: accent }} />
       <p className="hud-label !text-[0.64rem]">{label}</p>
       <div className="mt-1.5 font-mono text-3xl font-bold tabular-nums text-slate-50">{children}</div>
       {sub && <div className="mt-1.5 text-xs text-slate-400">{sub}</div>}
@@ -256,7 +256,7 @@ function PlayerScoring() {
 
   if (loading) {
     return (
-      <div className="hud-grid-bg flex min-h-[calc(100dvh-var(--nav-h))] flex-1 items-center justify-center">
+      <div className="hud-backdrop flex min-h-[calc(100dvh-var(--nav-h))] flex-1 items-center justify-center">
         <div className="relative z-10 flex flex-col items-center gap-4">
           <div className="relative h-14 w-14">
             <div className="hex absolute inset-0 animate-spin-slow bg-gradient-to-b from-cyan-400/80 to-teal-600/30" />
@@ -269,7 +269,7 @@ function PlayerScoring() {
   }
   if (error) {
     return (
-      <div className="hud-grid-bg flex min-h-[calc(100dvh-var(--nav-h))] flex-1 items-center justify-center">
+      <div className="hud-backdrop flex min-h-[calc(100dvh-var(--nav-h))] flex-1 items-center justify-center">
         <p className="relative z-10 text-rose-400">Error: {error}</p>
       </div>
     );
@@ -278,14 +278,14 @@ function PlayerScoring() {
   const name = user?.name?.trim() || user?.email?.split('@')[0] || 'Commander';
 
   return (
-    <div className="hud-grid-bg min-h-[calc(100dvh-var(--nav-h))] flex-1">
+    <div className="hud-backdrop min-h-[calc(100dvh-var(--nav-h))] flex-1">
       <div className="relative z-10 mx-auto max-w-6xl px-4 py-6 md:px-8 md:py-10">
         <ToastStack toasts={toasts} dismiss={dismiss} placement="top-right" />
 
         {/* ------------------------------------------------------ hero */}
         <header className="hud-panel relative mb-6 overflow-hidden p-5 md:p-7 animate-fade-in-up">
           <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-amber-400/10 blur-3xl" />
-          <div className="relative grid items-center gap-6 md:grid-cols-[auto_1fr]">
+          <div className="relative flex flex-col items-center gap-6 md:flex-row md:gap-8">
             <ProgressRing pct={level.pct} size={148} stroke={9} color="#fbbf24" className="mx-auto md:mx-0">
               <LevelBadge level={level.level} size={96} />
             </ProgressRing>
@@ -337,7 +337,7 @@ function PlayerScoring() {
         </header>
 
         {/* ------------------------------------------------ stat tiles */}
-        <div className="mb-10 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="hud-panel mb-10 flex flex-col divide-y divide-slate-800/70 overflow-hidden sm:flex-row sm:divide-x sm:divide-y-0">
           <StatTile label="Performance score" accent="#34d399" delay={100}>
             <span className="text-emerald-300">
               <AnimatedNumber value={totalScore} decimals={1} />
@@ -347,7 +347,6 @@ function PlayerScoring() {
             <AnimatedNumber value={scoreData?.scores.length ?? 0} />
           </StatTile>
           <StatTile
-            className="col-span-2 sm:col-span-1"
             label="Zones held"
             accent="#fbbf24"
             delay={220}
@@ -402,7 +401,7 @@ function PlayerScoring() {
               </Link>
             </div>
           ) : (
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="hud-panel hud-panel-quiet divide-y divide-slate-800/70 overflow-hidden">
               {territories.map((t, i) => {
                 const meta = TIER_META[tierOf(t.territory.tier)];
                 return (
@@ -410,7 +409,7 @@ function PlayerScoring() {
                     key={t.id}
                     to={`/map?territory=${t.territory.id}`}
                     title="Show on map"
-                    className="group hud-panel hud-panel-quiet relative flex items-center gap-3 overflow-hidden py-2.5 pl-4 pr-3 transition-colors hover:border-cyan-400/40 animate-fade-in-up"
+                    className="group relative flex items-center gap-3 overflow-hidden py-3 pl-5 pr-4 transition-colors hover:bg-slate-800/30 animate-fade-in-up"
                     style={{ animationDelay: `${Math.min(i, 10) * 35}ms` }}
                   >
                     <span className="absolute inset-y-0 left-0 w-1" style={{ background: meta.accent, opacity: 0.8 }} />
@@ -436,12 +435,12 @@ function PlayerScoring() {
           >
             Achievements
           </SectionTitle>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="hud-panel hud-panel-quiet divide-y divide-slate-800/70 overflow-hidden">
             {achievements.map((a, i) => (
               <div
                 key={a.id}
-                className="hud-panel hud-panel-quiet flex items-center gap-3 p-2.5 animate-fade-in-up"
-                style={{ animationDelay: `${Math.min(i, 12) * 30}ms`, borderColor: a.unlocked ? `${a.color}55` : undefined }}
+                className="flex items-center gap-3 px-4 py-2.5 animate-fade-in-up"
+                style={{ animationDelay: `${Math.min(i, 12) * 30}ms`, boxShadow: a.unlocked ? `inset 3px 0 0 ${a.color}` : undefined }}
                 title={a.description}
               >
                 <div className="relative h-11 w-11 shrink-0">
@@ -452,17 +451,18 @@ function PlayerScoring() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className={`font-display truncate text-sm font-bold uppercase tracking-wide ${a.unlocked ? 'text-slate-50' : 'text-slate-500'}`}>{a.name}</p>
-                  {a.unlocked ? (
-                    <p className="truncate text-[0.7rem] text-slate-500">{a.description}</p>
-                  ) : (
-                    <div className="mt-1 flex items-center gap-2">
-                      <XPBar pct={a.progress / a.target} tone="cyan" height={4} className="flex-1" />
-                      <span className="font-mono text-[0.62rem] font-bold tabular-nums text-slate-500">
-                        {a.progress}/{a.target}
-                      </span>
-                    </div>
-                  )}
+                  <p className="truncate text-[0.72rem] text-slate-500">{a.description}</p>
                 </div>
+                {a.unlocked ? (
+                  <Icon name="check" className="h-4 w-4 shrink-0" style={{ color: a.color }} />
+                ) : (
+                  <div className="flex w-28 shrink-0 items-center gap-2 max-sm:w-20">
+                    <XPBar pct={a.progress / a.target} tone="cyan" height={4} className="flex-1" />
+                    <span className="w-9 text-right font-mono text-[0.62rem] font-bold tabular-nums text-slate-500">
+                      {a.progress}/{a.target}
+                    </span>
+                  </div>
+                )}
               </div>
             ))}
           </div>

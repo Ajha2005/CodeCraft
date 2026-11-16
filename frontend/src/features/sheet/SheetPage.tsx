@@ -61,13 +61,10 @@ function QuestRow({
         to={problemLink(problem.id)}
         state={FROM_BOARD}
         onClick={() => sfx.play('click')}
-        className={`group relative flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-all hover:-translate-y-px sm:gap-4 sm:px-4 ${
-          cleared
-            ? 'border-emerald-500/30 bg-emerald-500/[0.06] hover:border-emerald-400/60'
-            : isNext
-              ? 'border-cyan-400/60 bg-cyan-400/[0.08] shadow-[0_0_24px_-10px_rgba(34,211,238,0.8)] hover:border-cyan-300'
-              : 'border-slate-800 bg-slate-900/50 hover:border-slate-600'
-        } ${quest.side ? 'border-dashed' : ''}`}
+        className={`group relative flex items-center gap-3 px-3 py-3 transition-colors sm:gap-4 sm:px-4 ${
+          isNext ? 'bg-cyan-400/[0.08]' : 'hover:bg-slate-800/30'
+        } ${quest.side ? 'opacity-90' : ''}`}
+        style={isNext ? { boxShadow: 'inset 3px 0 0 var(--color-cyan-400)' } : cleared ? { boxShadow: 'inset 3px 0 0 var(--color-emerald-500)' } : undefined}
       >
         <span
           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border font-mono text-xs font-bold ${
@@ -219,7 +216,7 @@ function FrontCard({
             {quests.length === 0 ? (
               <p className="py-4 text-center text-sm text-slate-500">Nothing left here. Switch the filter back to “All” to see the cleared quests.</p>
             ) : (
-              <ol className="grid gap-2">
+              <ol className="divide-y divide-slate-800/70 overflow-hidden rounded-lg border border-slate-800/80">
                 {quests.map((q) => {
                   return (
                     <QuestRow
@@ -283,7 +280,7 @@ export default function SheetPage() {
   }
 
   return (
-    <div className="hud-grid-bg min-h-[calc(100dvh-var(--nav-h))] flex-1">
+    <div className="hud-backdrop min-h-[calc(100dvh-var(--nav-h))] flex-1">
       <div className="relative z-10 mx-auto max-w-5xl px-4 py-6 text-left md:px-8 md:py-10">
         {/* ------------------------------------------------------------ hero */}
         <header className="hud-panel mb-5 overflow-hidden p-5 md:p-7 animate-fade-in-up">
@@ -347,13 +344,13 @@ export default function SheetPage() {
             </div>
           </div>
 
-          <dl className="relative mt-5 grid grid-cols-3 gap-2 border-t border-slate-800/80 pt-4 text-center sm:gap-4">
+          <dl className="relative mt-5 flex divide-x divide-slate-800/80 border-t border-slate-800/80 pt-4 text-center">
             {[
               { label: 'Fronts cleared', value: `${prog.frontsDone}/${prog.frontsTotal}` },
               { label: 'Realms cleared', value: `${prog.realmsDone}/${prog.realmsTotal}` },
               { label: 'Sheet XP', value: `${prog.xpEarned.toLocaleString('en-US')}` },
             ].map((s) => (
-              <div key={s.label}>
+              <div key={s.label} className="flex-1">
                 <dd className="font-mono text-xl font-bold tabular-nums text-slate-50 sm:text-2xl">{s.value}</dd>
                 <dt className="hud-label !text-[0.6rem]">{s.label}</dt>
               </div>
@@ -374,7 +371,7 @@ export default function SheetPage() {
             </span>
           </button>
           {howShown && (
-            <ol className="grid gap-3 border-t border-slate-800/80 px-4 pb-4 pt-4 sm:grid-cols-3">
+            <ol className="space-y-4 border-t border-slate-800/80 px-4 pb-4 pt-4">
               {[
                 { icon: 'book', title: 'Read the briefing', body: 'Each front opens with a short note on the idea and the pattern to spot. Read it before you code.' },
                 { icon: 'flag', title: 'Go in order', body: 'Core quests run easy to hard, one new idea at a time. Do them top to bottom. Side quests are extra reps if you want them.' },
@@ -450,7 +447,7 @@ export default function SheetPage() {
             </div>
           )}
           {loading && (
-            <div className="grid gap-3">
+            <div className="space-y-3">
               {Array.from({ length: 3 }, (_, i) => (
                 <div key={i} className="h-28 animate-pulse rounded-xl border border-slate-800 bg-slate-900/50" />
               ))}

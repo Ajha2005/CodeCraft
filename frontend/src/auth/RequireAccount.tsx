@@ -9,7 +9,7 @@ export function RequireAccount({ feature, children }: { feature: string; childre
   if (!isDemo) return <>{children}</>
 
   return (
-    <div className="hud-grid-bg flex min-h-[calc(100dvh-var(--nav-h))] flex-1 items-center justify-center px-4">
+    <div className="hud-backdrop flex min-h-[calc(100dvh-var(--nav-h))] flex-1 items-center justify-center px-4">
       <div className="hud-panel relative z-10 max-w-md p-7 text-center animate-pop-in">
         <Icon name="lock" className="mx-auto h-9 w-9 text-amber-300" />
         <h1 className="font-display mt-3 text-2xl font-bold uppercase tracking-wide text-slate-50">{feature} need an account</h1>
