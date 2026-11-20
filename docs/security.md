@@ -12,6 +12,10 @@
 | Anti-abuse | Daily-limit enforcement, flag-based cheating detection, per-user rate limits on challenges and submissions. |
 | Audit logs | All admin actions, bans, flag resolutions, and territory transfers are logged with actor, timestamp, and reason. |
 
+## Hardening log
+
+- **Removed the unauthenticated `/judge/*` development endpoints.** `POST /judge/run`, `/judge/test-one` and `/judge/test-all` forwarded raw request bodies to Piston with no login, no DTO validation and no rate limit, bypassing the daily limit, the queue and authentication that normal submissions go through. Nothing in the client or scripts used them, so the controller was deleted. `JudgeService` is unchanged and is reached only through the authenticated `POST /submissions` queue path, the contest submission path, and the rate-limited `POST /demo/submissions`. Verified: all three routes now return 404.
+
 Anti-cheating is explicitly treated as defense-in-depth: no single control (paste-blocking, typing model, or diffing) is claimed to be individually sufficient or foolproof.
 
 ## Testing Strategy
