@@ -5,11 +5,13 @@
 | Component | Where | Notes |
 |---|---|---|
 | Frontend | Vercel | Auto-builds from main branch, root dir = frontend |
-| Backend (NestJS) | AWS EC2 (Ubuntu) | Runs via pm2, proxied through Nginx |
+| Backend (NestJS) | AWS EC2 (Ubuntu) | Runs via pm2, proxied through Nginx. Config comes from `/etc/codecraft/backend.env` (see "Configuration" below) |
 | Piston (code execution) | Same AWS EC2, Docker | Port 2000, needs Python + gcc packages installed |
-| PostgreSQL | Supabase | Free tier |
-| Redis | Redis Cloud (redis.io) | Free tier: 30MB storage limit, no command-count cap. Previously Upstash (500k commands/month cap - hit this limit, switched providers) |
-| Domain/SSL | TBD - was DuckDNS, blocked by some Indian ISPs; needs a real cheap domain | Nginx + Certbot |
+| PostgreSQL | AWS RDS (`codecraft-db`, ap-south-1) | Database `codecraft`, user `postgres`. TLS with `sslmode=verify-full` and the RDS CA bundle. Previously Supabase |
+| Redis | AWS ElastiCache (`codecraft-redis`, ap-south-1) | Plain `redis://host:6379` inside the VPC (no password, no TLS). Previously Redis Cloud (that hostname stopped resolving) and before that Upstash (500k commands/month cap) |
+| Domain/SSL | `codecraft-thapar.duckdns.org` (DuckDNS - blocked by some Indian ISPs; a real cheap domain is still wanted) | Nginx + Certbot |
+
+RDS and ElastiCache are only reachable from inside the VPC. Their security groups must allow the EC2 instance's security group on port 5432 (RDS) and 6379 (ElastiCache).
 
 ## If the AWS server dies / needs recreating
 
@@ -80,20 +82,51 @@ git clone https://github.com/Ajha2005/CodeCraft.git
 cd CodeCraft && git checkout main
 cd backend && npm install
 
-### 8. Create .env (see template below), then:
+### 8. Create the env file (see template below), then:
+sudo mkdir -p /etc/codecraft
+sudo nano /etc/codecraft/backend.env      # then: sudo chmod 600 /etc/codecraft/backend.env
+curl -o ~/rds-global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
 npx prisma migrate deploy
 npm run seed
 npx tsx prisma/generate-grid.ts
 
+(If `prisma` or `tsx` complain that `DATABASE_URL` is missing, export it into the shell first, quoted, as shown under "Configuration" below.)
+
 ### 9. Start with pm2
-pm2 start npm --name codecraft-backend -- run start:dev
-pm2 save
-pm2 startup
-pm2 save
+Production runs the compiled build, not `start:dev`:
+
+    cd ~/CodeCraft/backend && npm run build
+    NODE_ENV=production pm2 start dist/src/main.js --name codecraft-backend \
+      --node-args="--env-file=/etc/codecraft/backend.env --max-old-space-size=256" \
+      -o /var/log/codecraft/backend.out.log -e /var/log/codecraft/backend.err.log
+    pm2 save
+    pm2 startup
+    pm2 save
+
+(create `/var/log/codecraft` and make it writable by `ubuntu` first.)
+
+## Configuration
+
+The backend reads its settings from `/etc/codecraft/backend.env`, loaded by `node --env-file=`. Three things have caused outages, so read these before changing anything:
+
+1. **Variables pm2 already holds win over the file.** `--env-file` never overrides a variable that is already in the process environment, and pm2 stores the environment it was started with. Editing the file and running a plain `pm2 restart` can therefore leave the OLD value in use. Always check what the running process actually uses:
+
+       tr '\0' '\n' < /proc/$(pm2 pid codecraft-backend)/environ | grep '^DATABASE_URL=' | sed -E 's#(://[^:]+):[^@]*@#\1:****@#'
+
+2. **To change a value:** edit the file, export just that variable into your shell, then restart with `--update-env` and save:
+
+       export DATABASE_URL="$(sudo grep '^DATABASE_URL=' /etc/codecraft/backend.env | cut -d= -f2-)"
+       pm2 restart codecraft-backend --update-env && pm2 save
+
+   Keep the quotes around `$(...)`. URLs contain `&`, and an unquoted one (for example from `. /etc/codecraft/backend.env`, or `export X=$(...)` without quotes) makes the shell cut the value at the `&` and run the rest as a background command. That silently drops `sslrootcert` from `DATABASE_URL`.
+
+3. **Never paste terminal output that contains a connection string.** Mask the password first (the `sed` in the command above does that), and rotate it if it was exposed.
+
+Both external services are configured here and nowhere else. If you move the database or Redis, update the file, then do step 2, then verify with the commands in "Health check" below.
 
 ## .env template (backend)
-DATABASE_URL=          Supabase -> Connect -> Session pooler. NOT Transaction pooler (migrations fail). NOT Direct connection (IPv6-only, unreachable from most VPS).
-REDIS_URL=             Redis Cloud dashboard -> Data Access or Configuration tab -> use the plain redis://default:PASSWORD@host:port URL, NOT the redis-cli command shown alongside it
+DATABASE_URL=          postgresql://postgres:PASSWORD@codecraft-db.<id>.ap-south-1.rds.amazonaws.com:5432/codecraft?sslmode=verify-full&sslrootcert=/home/ubuntu/rds-global-bundle.pem   (RDS rejects / ' " @ in the master password; use letters and numbers so it needs no URL-encoding)
+REDIS_URL=             redis://<primary-endpoint>.cache.amazonaws.com:6379   (ElastiCache primary endpoint, no scheme prefix other than redis://. Use rediss:// only if in-transit encryption is turned on for the cache. BullMQ wants maxmemory-policy noeviction on the cache's parameter group)
 JWT_SECRET=            generate with: openssl rand -base64 32
 JWT_EXPIRES_IN=1d
 GOOGLE_CLIENT_ID=      Google Cloud Console -> Credentials
@@ -124,6 +157,36 @@ If it says NOT ENOUGH, the grid needs a smaller cell size (`generate-grid.ts` no
 - src/main.ts - CORS origin list must include the Vercel frontend URL, not just localhost
 - frontend/vercel.json - required for React Router routes (like /auth/callback) to not 404 on Vercel
 - package.json was missing point-in-svg-polygon despite code using it - npm install point-in-svg-polygon if generate-grid.ts fails
+
+## Health check
+
+Which endpoints break tells you which dependency is down:
+
+| Symptom | Likely cause |
+|---|---|
+| `/problems`, `/territories/cells` return 500 | Postgres unreachable or wrong credentials. Logs show Prisma `P1000` (auth failed) or `P1001` (cannot reach) |
+| `/leaderboard/college` hangs or 500s, submissions never finish | Redis unreachable. Logs show `getaddrinfo ENOTFOUND` or `ECONNREFUSED` for the Redis host |
+| Submissions stay `PENDING`, Redis fine | Piston down: `docker ps`, `curl localhost:2000/api/v2/runtimes` (should list python and gcc) |
+| `/` and `/auth/google` work but data endpoints fail | The app is up, a backing service is not. Start with the two rows above |
+
+Quick checks on the server (all passwords masked):
+
+    pm2 logs codecraft-backend --err --lines 60 --nostream | grep -iE "P1000|P1001|ENOTFOUND|ECONN|NOAUTH|WRONGPASS" | tail
+    tr '\0' '\n' < /proc/$(pm2 pid codecraft-backend)/environ | grep -E '^(DATABASE_URL|REDIS_URL)=' | sed -E 's#(://[^:]*):[^@]*@#\1:****@#'
+    redis-cli -u "$(tr '\0' '\n' < /proc/$(pm2 pid codecraft-backend)/environ | grep '^REDIS_URL=' | cut -d= -f2-)" ping
+    psql "$(tr '\0' '\n' < /proc/$(pm2 pid codecraft-backend)/environ | grep '^DATABASE_URL=' | cut -d= -f2-)" -c 'select 1'
+
+An end-to-end test that needs no login: POST a correct solution to `/demo/submissions` and poll `/demo/submissions/<id>` until it reports `AC`. It saves nothing.
+
+## Rebuilding the leaderboard
+
+The college leaderboard lives in Redis (`leaderboard:college`, a sorted set) but the scores come from Postgres: a player's score is the sum of their `performance_scores.totalScore`. If Redis is new or was wiped, reload it from the database (read-only on Postgres):
+
+    psql "$DATABASE_URL" -At -F' ' -c 'select s."userId", sum(p."totalScore") from performance_scores p join submissions s on s.id = p."submissionId" group by s."userId"' \
+      | awk '{print "ZADD leaderboard:college "$2" "$1}' \
+      | redis-cli -h <elasticache-primary-endpoint> -p 6379
+
+Per-territory leaderboards are not written by the current code, so there is nothing to rebuild for them. Submissions that were queued while Redis was down are lost and stay `PENDING` in the database; those players must resubmit.
 
 ## Useful commands for troubleshooting
 pm2 list

@@ -115,7 +115,7 @@ flowchart LR
 | Cache / Queue | Redis + BullMQ (`ioredis`) | Submission queueing, daily-limit counters, leaderboard caching |
 | Code Execution | [Piston](https://github.com/engineer-man/piston) (self-hosted, Dockerized) | Lightweight, sandboxed, network-isolated multi-language execution — swapped in after Judge0 proved unstable in dev |
 | Auth | JWT + Passport (local + Google OAuth20) | Stateless sessions, domain-restricted signup (`@thapar.edu`) enforced on both auth paths |
-| Deployment | Vercel (frontend) · AWS EC2 + Docker + Nginx + pm2 (backend/Piston) · Supabase (Postgres) · Redis Cloud | See [`DEPLOYMENT.md`](./DEPLOYMENT.md) |
+| Deployment | Vercel (frontend) · AWS EC2 + Docker + Nginx + pm2 (backend/Piston) · AWS RDS (Postgres) · AWS ElastiCache (Redis) | See [`DEPLOYMENT.md`](./DEPLOYMENT.md) |
 | Docs | MkDocs Material, auto-deployed to GitHub Pages | See [Documentation Site](#documentation-site) |
 
 ## Architecture
@@ -317,8 +317,8 @@ CodeCraft/
 ### Prerequisites
 
 - Node.js ≥ 20
-- PostgreSQL (local instance or a hosted URL, e.g. Supabase)
-- Redis (local instance or a hosted URL, e.g. Redis Cloud)
+- PostgreSQL (local instance or a hosted URL, e.g. AWS RDS)
+- Redis (local instance or a hosted URL, e.g. AWS ElastiCache)
 - Docker (to run Piston locally)
 
 ### 1. Clone & install
@@ -354,8 +354,8 @@ curl -X POST http://localhost:2000/api/v2/packages \
 
 | Variable | Notes |
 |---|---|
-| `DATABASE_URL` | Postgres connection string (session pooler if using Supabase — not the transaction pooler) |
-| `REDIS_URL` | `redis://default:PASSWORD@host:port` |
+| `DATABASE_URL` | Postgres connection string. For RDS add `?sslmode=verify-full&sslrootcert=/path/to/rds-global-bundle.pem` |
+| `REDIS_URL` | `redis://host:port` (add `default:PASSWORD@` before the host if the server needs a password; use `rediss://` for TLS) |
 | `JWT_SECRET` | `openssl rand -base64 32` |
 | `JWT_EXPIRES_IN` | e.g. `1d` |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | From Google Cloud Console → Credentials |
@@ -421,10 +421,10 @@ Frontend: `http://localhost:5173` · Backend: `http://localhost:3000`
 | Frontend | Vercel (root dir `frontend`, auto-deploys `main`) |
 | Backend | AWS EC2 (Ubuntu), via pm2 behind Nginx |
 | Piston | Same EC2 instance, Docker |
-| PostgreSQL | Supabase |
-| Redis | Redis Cloud |
+| PostgreSQL | AWS RDS |
+| Redis | AWS ElastiCache |
 
-Full runbook (server recreation, Nginx config, SSL, known gotchas) lives in [`DEPLOYMENT.md`](./DEPLOYMENT.md).
+On the server the backend's settings live in `/etc/codecraft/backend.env`, not in `backend/.env`. Full runbook (server recreation, Nginx config, SSL, how to change config safely, health checks, known gotchas) lives in [`DEPLOYMENT.md`](./DEPLOYMENT.md).
 
 ## Documentation Site
 
